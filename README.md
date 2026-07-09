@@ -10,6 +10,7 @@ Each game lives in its own self-contained folder with its own solution/project, 
 | --- | --- | --- |
 | `AutoduelTrainer/` | Autoduel (Origin Systems, 1985) | net9.0-windows |
 | `BardsTale1Trainer/` | The Bard's Tale: Tales of the Unknown, Vol. I (1987) | net8.0-windows |
+| `DragonWarsTrainer/` | Dragon Wars (Interplay, 1989) | net8.0-windows |
 | `KeefTrainer/` | Keef the Thief (EA / Naughty Dog, 1989) | net9.0-windows |
 | `LordsOfTheRealmTrainer/` | Lords of the Realm | net9.0-windows |
 | `MightAndMagic1Trainer/` | Might & Magic Book One (1986) | net8.0-windows |
@@ -22,7 +23,7 @@ Each game lives in its own self-contained folder with its own solution/project, 
 
 ### Shared library
 
-`GameTrainers.Common/` is a small shared library holding the game-agnostic plumbing that used to be copied between trainers: the process/guest-memory access layer (`GameTrainers.Common.Memory`) and the hand-rolled MVVM base types (`GameTrainers.Common.Mvvm`). The three MM1-family trainers — `MightAndMagic1Trainer`, `BardsTale1Trainer`, and `PoolOfRadianceTrainer` — reference it instead of duplicating that code; each keeps only its own game-specific locators and scanners. The remaining trainers are still self-contained.
+`GameTrainers.Common/` is a small shared library holding the game-agnostic plumbing that used to be copied between trainers: the process/guest-memory access layer (`GameTrainers.Common.Memory`) and the hand-rolled MVVM base types (`GameTrainers.Common.Mvvm`). The MM1-family trainers — `MightAndMagic1Trainer`, `BardsTale1Trainer`, and `PoolOfRadianceTrainer` — reference it instead of duplicating that code, as does `DragonWarsTrainer`; each keeps only its own game-specific locators and scanners. The remaining trainers are still self-contained.
 
 ## Prerequisites
 
@@ -46,7 +47,7 @@ cd PoolOfRadianceTrainer
 
 Every trainer uses `.\Run.ps1`. Most scripts share the core flags (`-Configuration`, `-Clean`, `-NoRun`); the exceptions are listed below. Notable per-trainer variations:
 
-- **`-Test`** (run the headless verification harness) is only on `BardsTale1Trainer`, `MightAndMagic1Trainer`, and `PoolOfRadianceTrainer`.
+- **`-Test`** (run the headless verification harness) is only on `BardsTale1Trainer`, `DragonWarsTrainer`, `MightAndMagic1Trainer`, and `PoolOfRadianceTrainer`.
 - **`ShogunTrainer`** adds `-Publish` to produce a self-contained single-file exe.
 - **`LordsOfTheRealmTrainer`** uses `-NoBuild` instead of `-NoRun` — it skips the build step and launches the existing binary directly.
 - **`KeefTrainer`** has no run script — build/run directly: `dotnet run --project KeefTrainer`.
