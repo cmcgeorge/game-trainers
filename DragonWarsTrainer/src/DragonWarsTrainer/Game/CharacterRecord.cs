@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace DragonWarsTrainer.Game;
 
 /// <summary>
@@ -42,31 +40,8 @@ public sealed class CharacterRecord
     // --- name (Dragon Wars high-bit string encoding) -------------------------
     public string Name
     {
-        get
-        {
-            var sb = new StringBuilder(RosterFormat.NameLength);
-            for (int i = 0; i < RosterFormat.NameLength; i++)
-            {
-                byte b = Bytes[RosterFormat.OffName + i];
-                if (b == 0) break;                       // padding: end of string
-                sb.Append((char)(b & 0x7F));
-                if ((b & 0x80) == 0) break;              // last character has its high bit clear
-            }
-            return sb.ToString();
-        }
-        set
-        {
-            string s = value ?? "";
-            if (s.Length > RosterFormat.NameLength) s = s[..RosterFormat.NameLength];
-            for (int i = 0; i < RosterFormat.NameLength; i++)
-            {
-                if (i >= s.Length) { Bytes[RosterFormat.OffName + i] = 0; continue; }
-                byte b = (byte)(s[i] & 0x7F);
-                // Every character but the last carries its high bit set.
-                if (i < s.Length - 1) b |= 0x80;
-                Bytes[RosterFormat.OffName + i] = b;
-            }
-        }
+        get => DragonWarsText.Decode(Bytes, RosterFormat.OffName, RosterFormat.NameLength);
+        set => DragonWarsText.Encode(Bytes, RosterFormat.OffName, RosterFormat.NameLength, value);
     }
 
     // --- attributes (current + base) -----------------------------------------
@@ -125,6 +100,23 @@ public sealed class CharacterRecord
     public int DefenseValue { get => U8(RosterFormat.OffDefenseValue); set => U8(RosterFormat.OffDefenseValue, value); }
     public int ArmorClass { get => U8(RosterFormat.OffArmorClass); set => U8(RosterFormat.OffArmorClass, value); }
     public int Flags { get => U8(RosterFormat.OffFlags); set => U8(RosterFormat.OffFlags, value); }
+
+    // --- inventory (12 fixed-size item slots at the tail of the record) -------
+    /// <summary>Returns a live, mutable view over item slot <paramref name="index"/> (0..11).</summary>
+    public ItemSlot GetItem(int index) =>
+        new(Bytes, InventoryFormat.OffInventory + index * InventoryFormat.SlotSize);
+
+    /// <summary>Count of non-empty item slots.</summary>
+    public int ItemCount
+    {
+        get
+        {
+            int n = 0;
+            for (int i = 0; i < InventoryFormat.SlotCount; i++)
+                if (!GetItem(i).IsEmpty) n++;
+            return n;
+        }
+    }
 
     // --- derived -------------------------------------------------------------
     public string GenderName => RosterFormat.GenderName(Gender);

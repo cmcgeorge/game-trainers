@@ -28,4 +28,9 @@ public partial class MainWindow : Window
     private void LearnSpells_Click(object sender, RoutedEventArgs e) => Vm(sender)?.LearnAllSpells();
     private void MaxMoney_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxMoney();
     private void MaxEverything_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxEverything();
+
+    // The Clear button lives inside the inventory item template, so its DataContext is the
+    // ItemSlotViewModel for that row.
+    private void ClearItem_Click(object sender, RoutedEventArgs e) =>
+        ((sender as FrameworkElement)?.DataContext as ItemSlotViewModel)?.Clear();
 }

@@ -1,7 +1,7 @@
 <Window x:Class="DragonWarsTrainer.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Dragon Wars Trainer" Height="680" Width="920"
+        Title="Dragon Wars Trainer" Height="720" Width="960"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <Style TargetType="TextBox">
@@ -20,6 +20,11 @@
             <Setter Property="VerticalAlignment" Value="Center"/>
             <Setter Property="Margin" Value="4,0,4,0"/>
             <Setter Property="MinWidth" Value="60"/>
+        </Style>
+        <Style x:Key="RefHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="2,6,2,2"/>
         </Style>
     </Window.Resources>
 
@@ -57,150 +62,391 @@
             <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
         </Border>
 
-        <!-- Main content -->
-        <Grid Margin="6">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
+        <!-- Tabs -->
+        <TabControl Margin="6">
+            <!-- ======================= PARTY ======================= -->
+            <TabItem Header="Party">
+                <Grid Margin="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-            <!-- Party list -->
-            <GroupBox Grid.Column="0" Header="Party">
-                <ListBox ItemsSource="{Binding Party}" SelectedItem="{Binding SelectedCharacter}"
-                         DisplayMemberPath="ListLabel"/>
-            </GroupBox>
+                    <GroupBox Grid.Column="0" Header="Party">
+                        <ListBox ItemsSource="{Binding Party}" SelectedItem="{Binding SelectedCharacter}"
+                                 DisplayMemberPath="ListLabel"/>
+                    </GroupBox>
 
-            <!-- Character detail -->
-            <GroupBox Grid.Column="1" Header="Character" Margin="6,0,0,0"
-                      DataContext="{Binding SelectedCharacter}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="6">
-                        <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="14" Margin="0,0,0,2"/>
-                        <TextBlock Text="{Binding Summary}" Foreground="#555" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                    <GroupBox Grid.Column="1" Header="Character" Margin="6,0,0,0"
+                              DataContext="{Binding SelectedCharacter}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="6">
+                                <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="14" Margin="0,0,0,2"/>
+                                <TextBlock Text="{Binding Summary}" Foreground="#555" TextWrapping="Wrap" Margin="0,0,0,8"/>
 
-                        <!-- Identity -->
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="140"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="120"/>
-                            </Grid.ColumnDefinitions>
-                            <Grid.RowDefinitions>
-                                <RowDefinition/>
-                                <RowDefinition/>
-                                <RowDefinition/>
-                            </Grid.RowDefinitions>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="140"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="120"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition/>
+                                        <RowDefinition/>
+                                        <RowDefinition/>
+                                    </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Name" Style="{StaticResource FieldLabel}"/>
-                            <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}"/>
-                            <TextBlock Grid.Row="0" Grid.Column="2" Text="Gender" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox  Grid.Row="0" Grid.Column="3" Margin="2" ItemsSource="{Binding GenderOptions}"
-                                       SelectedIndex="{Binding GenderIndex}"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Name" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Gender" Style="{StaticResource FieldLabel}"/>
+                                    <ComboBox  Grid.Row="0" Grid.Column="3" Margin="2" ItemsSource="{Binding GenderOptions}"
+                                               SelectedIndex="{Binding GenderIndex}"/>
 
-                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Level" Style="{StaticResource FieldLabel}"/>
-                            <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Level}"/>
-                            <TextBlock Grid.Row="1" Grid.Column="2" Text="Experience" Style="{StaticResource FieldLabel}"/>
-                            <TextBox   Grid.Row="1" Grid.Column="3" Text="{Binding Experience}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Level" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Level}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="Experience" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox   Grid.Row="1" Grid.Column="3" Text="{Binding Experience}"/>
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Gold" Style="{StaticResource FieldLabel}"/>
-                            <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Gold}"/>
-                        </Grid>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Gold" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Gold}"/>
+                                </Grid>
 
-                        <!-- Vitals -->
-                        <GroupBox Header="Vitals" Margin="0,8,0,0">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="90"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="90"/>
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition/>
-                                    <RowDefinition/>
-                                    <RowDefinition/>
-                                </Grid.RowDefinitions>
+                                <GroupBox Header="Vitals" Margin="0,8,0,0">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="90"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/>
+                                            <RowDefinition/>
+                                            <RowDefinition/>
+                                        </Grid.RowDefinitions>
 
-                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Health" Style="{StaticResource FieldLabel}"/>
-                                <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding HealthCurrent}"/>
-                                <TextBlock Grid.Row="0" Grid.Column="2" Text="/ Max" Style="{StaticResource FieldLabel}"/>
-                                <TextBox   Grid.Row="0" Grid.Column="3" Text="{Binding HealthMax}"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Health" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding HealthCurrent}"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="2" Text="/ Max" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="0" Grid.Column="3" Text="{Binding HealthMax}"/>
 
-                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Stun" Style="{StaticResource FieldLabel}"/>
-                                <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding StunCurrent}"/>
-                                <TextBlock Grid.Row="1" Grid.Column="2" Text="/ Max" Style="{StaticResource FieldLabel}"/>
-                                <TextBox   Grid.Row="1" Grid.Column="3" Text="{Binding StunMax}"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Stun" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding StunCurrent}"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="2" Text="/ Max" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="3" Text="{Binding StunMax}"/>
 
-                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Power" Style="{StaticResource FieldLabel}"/>
-                                <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding PowerCurrent}"/>
-                                <TextBlock Grid.Row="2" Grid.Column="2" Text="/ Max" Style="{StaticResource FieldLabel}"/>
-                                <TextBox   Grid.Row="2" Grid.Column="3" Text="{Binding PowerMax}"/>
-                            </Grid>
-                        </GroupBox>
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Power" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding PowerCurrent}"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="2" Text="/ Max" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="2" Grid.Column="3" Text="{Binding PowerMax}"/>
+                                    </Grid>
+                                </GroupBox>
 
-                        <!-- Combat -->
-                        <GroupBox Header="Combat" Margin="0,8,0,0">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="AV" Style="{StaticResource FieldLabel}"/>
-                                <TextBox Width="60" Text="{Binding ArmorValue}"/>
-                                <TextBlock Text="DV" Style="{StaticResource FieldLabel}"/>
-                                <TextBox Width="60" Text="{Binding DefenseValue}"/>
-                                <TextBlock Text="AC" Style="{StaticResource FieldLabel}"/>
-                                <TextBox Width="60" Text="{Binding ArmorClass}"/>
+                                <GroupBox Header="Combat" Margin="0,8,0,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="AV" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox Width="60" Text="{Binding ArmorValue}"/>
+                                        <TextBlock Text="DV" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox Width="60" Text="{Binding DefenseValue}"/>
+                                        <TextBlock Text="AC" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox Width="60" Text="{Binding ArmorClass}"/>
+                                    </StackPanel>
+                                </GroupBox>
+
+                                <GroupBox Header="Attributes" Margin="0,8,0,0">
+                                    <ItemsControl ItemsSource="{Binding Attributes}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Margin="4">
+                                                    <TextBlock Text="{Binding Name}" Width="40" VerticalAlignment="Center"/>
+                                                    <TextBox Width="60" Text="{Binding Value}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </GroupBox>
+
+                                <GroupBox Header="Skills" Margin="0,8,0,0">
+                                    <ItemsControl ItemsSource="{Binding Skills}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Margin="4,2" Width="200">
+                                                    <TextBlock Text="{Binding Name}" Width="120" VerticalAlignment="Center"/>
+                                                    <TextBox Width="55" Text="{Binding Value}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </GroupBox>
+
+                                <WrapPanel Margin="0,8,0,0">
+                                    <Button Content="Full Heal" Click="FullHeal_Click"/>
+                                    <Button Content="Max Attributes" Click="MaxAttributes_Click"/>
+                                    <Button Content="Max Skills" Click="MaxSkills_Click"/>
+                                    <Button Content="Learn All Spells" Click="LearnSpells_Click"/>
+                                    <Button Content="Max Money" Click="MaxMoney_Click"/>
+                                    <Button Content="Max Everything" Click="MaxEverything_Click"/>
+                                </WrapPanel>
                             </StackPanel>
-                        </GroupBox>
+                        </ScrollViewer>
+                    </GroupBox>
+                </Grid>
+            </TabItem>
 
-                        <!-- Attributes -->
-                        <GroupBox Header="Attributes" Margin="0,8,0,0">
-                            <ItemsControl ItemsSource="{Binding Attributes}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
+            <!-- ======================= INVENTORY ======================= -->
+            <TabItem Header="Inventory">
+                <GroupBox Header="Carried Items" Margin="6"
+                          DataContext="{Binding SelectedCharacter}">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Foreground="#555" TextWrapping="Wrap" Margin="2,2,2,6"
+                                   Text="Twelve item slots per character. Tick Equip to wear/wield an item, edit charges, rename, or Clear a slot. Item field layout is transcribed from the dragonjars reimplementation and pending live-game confirmation — verify a change in-game before trusting it."/>
+                        <TextBlock DockPanel.Dock="Top" Margin="2,0,2,6" FontWeight="Bold"
+                                   Text="{Binding Title}"/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Items}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" Margin="4">
-                                            <TextBlock Text="{Binding Name}" Width="40" VerticalAlignment="Center"/>
-                                            <TextBox Width="60" Text="{Binding Value}"/>
+                                        <Border BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="2,3">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="28"/>
+                                                    <ColumnDefinition Width="150"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="60"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding SlotLabel}" VerticalAlignment="Center" Foreground="#888"/>
+                                                <TextBox   Grid.Column="1" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
+                                                <CheckBox  Grid.Column="2" Content="Equip" IsChecked="{Binding Equipped}"
+                                                           VerticalAlignment="Center" Margin="6,0"/>
+                                                <TextBlock Grid.Column="3" Text="Chg" Style="{StaticResource FieldLabel}" MinWidth="0"/>
+                                                <TextBox   Grid.Column="4" Text="{Binding Charges}"/>
+                                                <TextBlock Grid.Column="5" Text="{Binding Detail}" Foreground="#555"
+                                                           VerticalAlignment="Center" Margin="8,0" TextTrimming="CharacterEllipsis"/>
+                                                <Button    Grid.Column="6" Content="Clear" Click="ClearItem_Click"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </GroupBox>
+            </TabItem>
+
+            <!-- ======================= REFERENCES ======================= -->
+            <TabItem Header="References">
+                <TabControl Margin="6" DataContext="{Binding Reference}">
+                    <!-- Spells -->
+                    <TabItem Header="Spells">
+                        <ListBox ItemsSource="{Binding Spells}" HorizontalContentAlignment="Stretch"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.HeaderTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Name}" Style="{StaticResource RefHeader}"/>
+                                        </DataTemplate>
+                                    </GroupStyle.HeaderTemplate>
+                                </GroupStyle>
+                            </ListBox.GroupStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="160"/>
+                                            <ColumnDefinition Width="50"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Cost}" Foreground="#777"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Effect}" TextWrapping="Wrap" Foreground="#444"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </TabItem>
+
+                    <!-- Skills -->
+                    <TabItem Header="Skills">
+                        <ListBox ItemsSource="{Binding Skills}" HorizontalContentAlignment="Stretch"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="150"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Description}" TextWrapping="Wrap" Foreground="#444"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </TabItem>
+
+                    <!-- Items -->
+                    <TabItem Header="Items">
+                        <ListBox ItemsSource="{Binding Items}" HorizontalContentAlignment="Stretch"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.HeaderTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Name}" Style="{StaticResource RefHeader}"/>
+                                        </DataTemplate>
+                                    </GroupStyle.HeaderTemplate>
+                                </GroupStyle>
+                            </ListBox.GroupStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="170"/>
+                                            <ColumnDefinition Width="60"/>
+                                            <ColumnDefinition Width="70"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Price}" Foreground="#777"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Stats}" Foreground="#777"/>
+                                        <TextBlock Grid.Column="3" Text="{Binding Notes}" TextWrapping="Wrap" Foreground="#444"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </TabItem>
+
+                    <!-- Monsters -->
+                    <TabItem Header="Monsters">
+                        <ListBox ItemsSource="{Binding Monsters}" HorizontalContentAlignment="Stretch"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,2">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Width="150"/>
+                                            <TextBlock Text="{Binding Attributes}" Foreground="#777"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <TextBlock Text="HP " Foreground="#999"/>
+                                            <TextBlock Text="{Binding Hp}" Width="60" Foreground="#555"/>
+                                            <TextBlock Text="AV " Foreground="#999"/>
+                                            <TextBlock Text="{Binding Av}" Width="50" Foreground="#555"/>
+                                            <TextBlock Text="Speed " Foreground="#999"/>
+                                            <TextBlock Text="{Binding Speed}" Width="50" Foreground="#555"/>
+                                            <TextBlock Text="XP " Foreground="#999"/>
+                                            <TextBlock Text="{Binding Xp}" Width="60" Foreground="#555"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Notes}" TextWrapping="Wrap" Foreground="#444"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </TabItem>
+
+                    <!-- Strategy -->
+                    <TabItem Header="Strategy">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Strategy}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="4,4,4,10">
+                                            <TextBlock Text="{Binding Title}" Style="{StaticResource RefHeader}"/>
+                                            <TextBlock Text="{Binding Body}" TextWrapping="Wrap" Foreground="#444"/>
                                         </StackPanel>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </GroupBox>
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
 
-                        <!-- Skills -->
-                        <GroupBox Header="Skills" Margin="0,8,0,0">
-                            <ItemsControl ItemsSource="{Binding Skills}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
+            <!-- ======================= MAPS ======================= -->
+            <TabItem Header="Maps">
+                <Grid Margin="6" DataContext="{Binding Maps}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="260"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Area / location picker -->
+                    <GroupBox Grid.Column="0" Header="Areas">
+                        <DockPanel>
+                            <ComboBox DockPanel.Dock="Top" ItemsSource="{Binding Areas}"
+                                      SelectedItem="{Binding SelectedArea}" DisplayMemberPath="Header" Margin="2"/>
+                            <ListBox ItemsSource="{Binding Locations}" SelectedItem="{Binding SelectedLocation}">
+                                <ListBox.ItemTemplate>
                                     <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" Margin="4,2" Width="200">
-                                            <TextBlock Text="{Binding Name}" Width="120" VerticalAlignment="Center"/>
-                                            <TextBox Width="55" Text="{Binding Value}"/>
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Coord}" Width="70" Foreground="#777"/>
+                                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Notes}" TextWrapping="Wrap" Foreground="#666" Margin="70,0,0,0"/>
                                         </StackPanel>
                                     </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </GroupBox>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </GroupBox>
 
-                        <!-- Per-character actions -->
-                        <WrapPanel Margin="0,8,0,0">
-                            <Button Content="Full Heal" Click="FullHeal_Click"/>
-                            <Button Content="Max Attributes" Click="MaxAttributes_Click"/>
-                            <Button Content="Max Skills" Click="MaxSkills_Click"/>
-                            <Button Content="Learn All Spells" Click="LearnSpells_Click"/>
-                            <Button Content="Max Money" Click="MaxMoney_Click"/>
-                            <Button Content="Max Everything" Click="MaxEverything_Click"/>
-                        </WrapPanel>
-                    </StackPanel>
-                </ScrollViewer>
-            </GroupBox>
-        </Grid>
+                    <!-- Live position + teleport -->
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Margin="6,0,0,0">
+                        <StackPanel>
+                            <GroupBox Header="Selected area">
+                                <StackPanel Margin="4">
+                                    <TextBlock Text="{Binding SelectedArea.Header}" FontWeight="Bold" FontSize="13"/>
+                                    <TextBlock Text="{Binding SelectedArea.Notes}" TextWrapping="Wrap" Foreground="#555" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Locate the party" Margin="0,8,0,0">
+                                <StackPanel Margin="4">
+                                    <TextBlock TextWrapping="Wrap" Foreground="#555"
+                                               Text="The live position lives in memory that moves each session, so locate it once: click Find, take a single step in-game, then click Narrow. Repeat Narrow (stepping each time) until it locks on one address."/>
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <Button Content="Find" Command="{Binding FindCommand}"/>
+                                        <Button Content="Narrow" Command="{Binding NarrowCommand}"/>
+                                        <Button Content="Reset" Command="{Binding ResetCommand}"/>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding SearchState}" Foreground="#777" Margin="2,6,0,0"/>
+                                    <TextBlock Text="{Binding LivePosition}" FontWeight="Bold" Margin="2,2,0,0"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Teleport" Margin="0,8,0,0">
+                                <StackPanel Margin="4">
+                                    <TextBlock TextWrapping="Wrap" Foreground="#555"
+                                               Text="Pick a location on the left (or type a target), then Teleport. Only moves within the map you are currently on — walk to the target map first. Do it while exploring, never mid-combat."/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <TextBlock Text="Target X" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox Width="60" Text="{Binding TargetX}"/>
+                                        <TextBlock Text="Y" Style="{StaticResource FieldLabel}" MinWidth="0"/>
+                                        <TextBox Width="60" Text="{Binding TargetY}"/>
+                                        <Button Content="Teleport" Command="{Binding TeleportCommand}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+        </TabControl>
     </DockPanel>
 </Window>

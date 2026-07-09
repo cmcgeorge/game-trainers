@@ -37,6 +37,9 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public ObservableCollection<ProcessEntry> Processes { get; } = new();
     public ObservableCollection<CharacterViewModel> Party { get; } = new();
 
+    public ReferenceViewModel Reference { get; } = new();
+    public MapsViewModel Maps { get; }
+
     private ProcessEntry? _selectedProcess;
     public ProcessEntry? SelectedProcess { get => _selectedProcess; set { SetField(ref _selectedProcess, value); RaiseCommands(); } }
 
@@ -96,6 +99,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         MaxMoneyPartyCommand = new RelayCommand(_ => ForEachParty(c => c.MaxMoney()), _ => Party.Count > 0);
         LearnSpellsPartyCommand = new RelayCommand(_ => ForEachParty(c => c.LearnAllSpells()), _ => Party.Count > 0);
 
+        Maps = new MapsViewModel(() => _mem);
+
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _poll.Tick += (_, _) => PollTick();
 
@@ -153,6 +158,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         _mem = null;
         Party.Clear();
         SelectedCharacter = null;
+        Maps.OnDetached();
         _freezeHealth = false; OnPropertyChanged(nameof(FreezeHealth));
         _freezeStun = false; OnPropertyChanged(nameof(FreezeStun));
         _freezePower = false; OnPropertyChanged(nameof(FreezePower));
@@ -215,6 +221,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             c.ApplyFreeze();
             if (RosterLocator.Reread(_mem, c.Address, _pollBuf)) c.RefreshLiveSummary(_pollBuf);
         }
+        Maps.Tick();
     }
 
     // --- ICharacterHost ------------------------------------------------------

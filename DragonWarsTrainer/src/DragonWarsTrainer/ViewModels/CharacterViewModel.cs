@@ -19,6 +19,7 @@ public sealed class CharacterViewModel : ObservableObject
 
     public ObservableCollection<NamedValueViewModel> Attributes { get; } = new();
     public ObservableCollection<NamedValueViewModel> Skills { get; } = new();
+    public ObservableCollection<ItemSlotViewModel> Items { get; } = new();
 
     public string[] GenderOptions => RosterFormat.Genders;
 
@@ -53,7 +54,12 @@ public sealed class CharacterViewModel : ObservableObject
                 () => Record.GetSkill(idx),
                 v => { Record.SetSkill(idx, v); Poke(RosterFormat.OffSkills + idx, 1); }));
         }
+
+        for (int i = 0; i < InventoryFormat.SlotCount; i++)
+            Items.Add(new ItemSlotViewModel(i, Record.GetItem(i), (off, len) => Poke(off, len)));
     }
+
+    public int ItemCount => Record.ItemCount;
 
     // --- identity / summary --------------------------------------------------
     public string Name
@@ -211,6 +217,8 @@ public sealed class CharacterViewModel : ObservableObject
     public void RefreshLiveSummary(byte[] fresh)
     {
         Array.Copy(fresh, 0, Record.Bytes, 0, RosterFormat.RecordSize);
+        foreach (var it in Items) it.Refresh();
+        OnPropertyChanged(nameof(ItemCount));
         RaiseDerived();
     }
 
