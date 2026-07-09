@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>MM1Trainer</AssemblyName>
+    <RootNamespace>MightAndMagic1Trainer</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Embedded so the Window/taskbar icon can load it via a pack URI. -->
+    <Resource Include="Assets\app.ico" />
+    <!-- Bundled map reference images, loaded by the Maps tab via pack URIs. -->
+    <Resource Include="Assets\Maps\*.png" />
+  </ItemGroup>
+
+</Project>

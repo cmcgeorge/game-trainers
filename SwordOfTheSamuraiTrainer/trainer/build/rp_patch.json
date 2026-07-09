@@ -1,0 +1,1 @@
+[{"off":"0x160C9","orig":"8B 46 0A 2B D2 F7 36 A0 3D","new":"B8 D0 07 90 90 90 90 90 90","note":"FUN_23bb_00ba: force player army (COMM+0x64) = 0x07D0 (2000); mov ax,0x07D0 + nops, AX flows into mov es:[bx+0x64],ax"}]

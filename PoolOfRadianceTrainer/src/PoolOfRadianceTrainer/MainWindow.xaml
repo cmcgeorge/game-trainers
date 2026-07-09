@@ -1,0 +1,761 @@
+<Window x:Class="PoolOfRadianceTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:PoolOfRadianceTrainer.ViewModels"
+        Title="Pool of Radiance — Live Trainer" Height="820" Width="1240" WindowState="Maximized"
+        Background="{StaticResource Bg}" FontFamily="Segoe UI" FontSize="12">
+
+    <DockPanel LastChildFill="True">
+
+        <!-- ===== Top toolbar ===== -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}"
+                BorderThickness="0,0,0,1" Padding="10,8">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Process:" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                    <ComboBox ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                              SelectedItem="{Binding SelectedProcess}" Width="290" Margin="0,0,6,0"/>
+                    <Button Content="⟳ Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                    <Button Content="🔌 Attach" Command="{Binding AttachCommand}"/>
+                    <Button Content="⏏ Detach" Command="{Binding DetachCommand}"/>
+                    <Button Content="🔎 Re-scan" Command="{Binding ScanCommand}"/>
+                    <Rectangle Width="1" Fill="{StaticResource Line}" Margin="6,2"/>
+                    <CheckBox Content="🛡 God mode (freeze party HP)" IsChecked="{Binding GodMode}"/>
+                    <CheckBox Content="🧊 Freeze party (HP + status)" IsChecked="{Binding FreezeAll}"
+                              ToolTip="Keeps every party member at full HP and pins status to Okay each tick — no held, poisoned, unconscious, petrified or dead."/>
+                    <CheckBox Content="🔒 Freeze spells (party)" IsChecked="{Binding FreezeSpells}"
+                              ToolTip="Re-stamps each caster's memorized spells every tick, so casting never uses them up. Turn it on right after memorizing/resting — it snapshots the current spells at that moment."/>
+                    <Button Content="✚ Heal party" Command="{Binding HealPartyCommand}"/>
+                    <Button Content="★ Max EVERYTHING (party)" Command="{Binding MaxEverythingPartyCommand}"/>
+                </StackPanel>
+                <TextBlock Text="{Binding HotkeyStatus}" Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== Bottom status bar ===== -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}"
+                BorderThickness="0,1,0,0" Padding="10,6">
+            <TextBlock Text="{Binding Status}" Foreground="{StaticResource FgDim}" TextTrimming="CharacterEllipsis"/>
+        </Border>
+
+        <!-- ===== Main split ===== -->
+        <Grid Margin="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: party list + party tools -->
+            <Border Grid.Column="0" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}"
+                    BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,8,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="PARTY" Style="{StaticResource Section}" Margin="0,0,0,4"/>
+                    <StackPanel DockPanel.Dock="Bottom">
+                        <TextBlock Text="Party-wide" Style="{StaticResource Section}"/>
+                        <WrapPanel>
+                            <Button Content="Max stats" Command="{Binding MaxPartyCommand}"/>
+                            <Button Content="Max money" Command="{Binding MaxMoneyPartyCommand}"/>
+                            <Button Content="🎨 Random icons" Command="{Binding RandomizeIconColorsPartyCommand}"
+                                    ToolTip="Give every party member's combat icon a random color palette."/>
+                        </WrapPanel>
+                        <TextBlock Text="Ctrl+F1 god · Ctrl+F2 heal · Ctrl+F3 max — work even while the game has focus."
+                                   Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+                    </StackPanel>
+                    <ListBox ItemsSource="{Binding Party}" SelectedItem="{Binding SelectedCharacter}" Margin="0,0,0,8">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding ListLabel}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding Summary}" Style="{StaticResource Hint}"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- Right: tabs -->
+            <TabControl Grid.Column="1" Background="Transparent" BorderThickness="0">
+
+                <!-- ===== Character tab ===== -->
+                <TabItem Header="🧙 Character">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" DataContext="{Binding SelectedCharacter}">
+                            <StackPanel>
+                                <TextBlock Text="Select a character on the left, or attach and scan."
+                                           Style="{StaticResource Hint}"
+                                           Visibility="{Binding Converter={x:Static vm:NullToVisibility.CollapsedIfNotNull}}"/>
+                                <StackPanel Visibility="{Binding Converter={x:Static vm:NullToVisibility.CollapsedIfNull}}">
+                                    <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold"
+                                               Foreground="{StaticResource Accent}"/>
+                                    <TextBlock Text="{Binding Summary}" Style="{StaticResource Hint}" Margin="0,2,0,0"/>
+
+                                    <!-- Identity -->
+                                    <TextBlock Text="Identity" Style="{StaticResource Section}"/>
+                                    <WrapPanel>
+                                        <StackPanel Margin="0,0,14,6" Width="150">
+                                            <TextBlock Text="Name"/>
+                                            <TextBox Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,14,6" Width="120">
+                                            <TextBlock Text="Race"/>
+                                            <ComboBox ItemsSource="{Binding RaceOptions}" SelectedIndex="{Binding RaceIndex}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,14,6" Width="150">
+                                            <TextBlock Text="Class"/>
+                                            <ComboBox ItemsSource="{Binding ClassOptions}" SelectedIndex="{Binding ClassIndex}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,14,6" Width="130">
+                                            <TextBlock Text="Alignment"/>
+                                            <ComboBox ItemsSource="{Binding AlignmentOptions}" SelectedIndex="{Binding AlignmentIndex}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,14,6" Width="90">
+                                            <TextBlock Text="Gender"/>
+                                            <ComboBox ItemsSource="{Binding GenderOptions}" SelectedIndex="{Binding GenderIndex}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,14,6" Width="70">
+                                            <TextBlock Text="Age"/>
+                                            <TextBox Text="{Binding Age}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,14,6" Width="130">
+                                            <TextBlock Text="Status"/>
+                                            <ComboBox ItemsSource="{Binding StatusOptions}" SelectedIndex="{Binding StatusIndex}"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+
+                                    <!-- Abilities -->
+                                    <TextBlock Text="Ability scores" Style="{StaticResource Section}"/>
+                                    <WrapPanel>
+                                        <ItemsControl ItemsSource="{Binding Stats}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Width="72" Margin="0,0,10,6">
+                                                        <TextBlock Text="{Binding Short}"/>
+                                                        <TextBox Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <StackPanel Width="90" Margin="0,0,10,6">
+                                            <TextBlock Text="STR %" ToolTip="Exceptional strength (18/xx). 100 = 18/00."/>
+                                            <TextBox Text="{Binding StrengthPercent, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Width="80" Margin="0,0,10,6">
+                                            <TextBlock Text="Shown as"/>
+                                            <TextBlock Text="{Binding StrengthDisplay}" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+
+                                    <!-- Combat / HP -->
+                                    <TextBlock Text="Hit points &amp; combat" Style="{StaticResource Section}"/>
+                                    <WrapPanel>
+                                        <StackPanel Width="90" Margin="0,0,10,6">
+                                            <TextBlock Text="HP current"/>
+                                            <TextBox Text="{Binding HpCurrent, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Width="90" Margin="0,0,10,6">
+                                            <TextBlock Text="HP max"/>
+                                            <TextBox Text="{Binding HpMax, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Width="90" Margin="0,0,10,6">
+                                            <TextBlock Text="Armor Class" ToolTip="Lower is better (descending AC)."/>
+                                            <TextBox Text="{Binding ArmorClass, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Width="90" Margin="0,0,10,6">
+                                            <TextBlock Text="THAC0" ToolTip="Lower is better."/>
+                                            <TextBox Text="{Binding Thac0, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Width="140" Margin="0,0,10,6">
+                                            <TextBlock Text="Experience"/>
+                                            <TextBox Text="{Binding Experience, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <CheckBox Content="🧊 Freeze HP" IsChecked="{Binding FreezeHp}" VerticalAlignment="Bottom" Margin="0,0,0,10"/>
+                                        <CheckBox Content="❄ Freeze status" IsChecked="{Binding FreezeStatus}" VerticalAlignment="Bottom" Margin="8,0,0,10"/>
+                                        <CheckBox Content="🔒 Freeze spells" IsChecked="{Binding FreezeSpells}" VerticalAlignment="Bottom" Margin="8,0,0,10"
+                                                  ToolTip="Snapshots this character's memorized spells now and re-stamps them each tick, so casting never uses them up."/>
+                                    </WrapPanel>
+
+                                    <!-- Class levels -->
+                                    <TextBlock Text="Class levels" Style="{StaticResource Section}"/>
+                                    <ItemsControl ItemsSource="{Binding ClassLevels}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Width="78" Margin="0,0,8,6">
+                                                    <TextBlock Text="{Binding Label}"/>
+                                                    <TextBox Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Money -->
+                                    <TextBlock Text="Money &amp; treasure" Style="{StaticResource Section}"/>
+                                    <ItemsControl ItemsSource="{Binding Coins}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Width="90" Margin="0,0,8,6">
+                                                    <TextBlock Text="{Binding Label}"/>
+                                                    <TextBox Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <!-- Per-character quick actions -->
+                                    <TextBlock Text="Quick actions" Style="{StaticResource Section}"/>
+                                    <WrapPanel>
+                                        <Button Content="Max stats" Click="MaxStats_Click"/>
+                                        <Button Content="Full heal" Click="FullHeal_Click"/>
+                                        <Button Content="Max money" Click="MaxMoney_Click"/>
+                                        <Button Content="★ Max everything" Click="MaxEverything_Click"/>
+                                        <Button Content="🎨 Random icon colors" Click="RandomizeIconColors_Click"
+                                                ToolTip="Recolor this character's combat icon with a random palette."/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </TabItem>
+
+                <!-- ===== Raw bytes tab ===== -->
+                <TabItem Header="🔢 Raw Bytes">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12" DataContext="{Binding SelectedCharacter}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top"
+                                       Text="Full 285-byte record. Edit the two hex digits of any byte; known fields are labelled. Values write to the game immediately."
+                                       Style="{StaticResource Hint}" Margin="0,0,0,8"/>
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding RawBytes}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="3"
+                                                    Margin="2" Padding="3" Width="66" ToolTip="{Binding Label}">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding OffsetHex}" FontSize="9" Foreground="{StaticResource FgDim}"/>
+                                                    <TextBox Text="{Binding ValueHex, UpdateSourceTrigger=LostFocus}"
+                                                             FontFamily="Consolas" HorizontalContentAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Label}" FontSize="8" Foreground="{StaticResource AccentDim}"
+                                                               TextTrimming="CharacterEllipsis"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </DockPanel>
+                    </Border>
+                </TabItem>
+
+                <!-- ===== Combat / enemies tab ===== -->
+                <TabItem Header="⚔ Combat">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="320"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <DockPanel Grid.Column="0" Margin="0,0,8,0">
+                                <TextBlock DockPanel.Dock="Top" Text="COMBATANTS / MONSTERS" Style="{StaticResource Section}"/>
+                                <StackPanel DockPanel.Dock="Bottom">
+                                    <Button Content="💀 Kill selected" Command="{Binding KillEnemyCommand}"/>
+                                    <Button Content="☠ Kill ALL enemies" Command="{Binding KillAllEnemiesCommand}"/>
+                                    <TextBlock Text="Monster records only appear while a battle is on screen. 'Kill' sets a record's current HP to 0."
+                                               Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <ListBox ItemsSource="{Binding Enemies}" SelectedItem="{Binding SelectedEnemy}" Margin="0,0,0,8">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding ListLabel}" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding LiveHp, StringFormat=HP {0}}" Style="{StaticResource Hint}"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </DockPanel>
+                            <Border Grid.Column="1" DataContext="{Binding SelectedEnemy}">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+                                        <TextBlock Text="{Binding Summary}" Style="{StaticResource Hint}" Margin="0,2,0,8"/>
+                                        <WrapPanel>
+                                            <StackPanel Width="90" Margin="0,0,10,6">
+                                                <TextBlock Text="HP current"/>
+                                                <TextBox Text="{Binding HpCurrent, UpdateSourceTrigger=LostFocus}"/>
+                                            </StackPanel>
+                                            <StackPanel Width="90" Margin="0,0,10,6">
+                                                <TextBlock Text="HP max"/>
+                                                <TextBox Text="{Binding HpMax, UpdateSourceTrigger=LostFocus}"/>
+                                            </StackPanel>
+                                            <StackPanel Width="90" Margin="0,0,10,6">
+                                                <TextBlock Text="Armor Class"/>
+                                                <TextBox Text="{Binding ArmorClass, UpdateSourceTrigger=LostFocus}"/>
+                                            </StackPanel>
+                                            <StackPanel Width="90" Margin="0,0,10,6">
+                                                <TextBlock Text="Status"/>
+                                                <ComboBox ItemsSource="{Binding StatusOptions}" SelectedIndex="{Binding StatusIndex}"/>
+                                            </StackPanel>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+                    </Border>
+                </TabItem>
+
+                <!-- ===== Memory search tab ===== -->
+                <TabItem Header="🔍 Memory" DataContext="{Binding MemorySearch}">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="360"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                <TextBlock Text="Cheat-Engine-style scan" Style="{StaticResource Section}"/>
+                                <TextBlock Text="For values NOT in the character record — the party's map X/Y &amp; facing, the in-combat clock, encounter counters."
+                                           Style="{StaticResource Hint}" Margin="0,0,0,6"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <TextBlock Text="Width:" Margin="0,0,6,0"/>
+                                    <ComboBox Width="110" ItemsSource="{Binding Widths}" SelectedItem="{Binding Width}"/>
+                                    <TextBlock Text="Value:" Margin="12,0,6,0"/>
+                                    <TextBox Width="90" Text="{Binding ValueText, UpdateSourceTrigger=PropertyChanged}"/>
+                                </StackPanel>
+                                <WrapPanel>
+                                    <Button Content="First-scan = value" Command="{Binding FirstScanValueCommand}"/>
+                                    <Button Content="First-scan Unknown" Command="{Binding FirstScanUnknownCommand}"/>
+                                </WrapPanel>
+                                <WrapPanel>
+                                    <Button Content="= value" Command="{Binding NextEqualCommand}"/>
+                                    <Button Content="≠ Changed" Command="{Binding NextChangedCommand}"/>
+                                    <Button Content="= Unchanged" Command="{Binding NextUnchangedCommand}"/>
+                                    <Button Content="▲ Increased" Command="{Binding NextIncreasedCommand}"/>
+                                    <Button Content="▼ Decreased" Command="{Binding NextDecreasedCommand}"/>
+                                    <Button Content="⏹ Stop" Command="{Binding CancelCommand}"/>
+                                    <Button Content="Reset" Command="{Binding ResetCommand}"/>
+                                </WrapPanel>
+                                <TextBlock Text="{Binding Status}" Style="{StaticResource Hint}" Margin="0,4,0,8"/>
+                                <TextBlock Text="Write selected candidate" Style="{StaticResource Section}"/>
+                                <Button Content="Write value to selected" Command="{Binding WriteSelectedCommand}" HorizontalAlignment="Left"/>
+                                <TextBlock Text="Manual poke" Style="{StaticResource Section}"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Addr(hex):" Margin="0,0,6,0"/>
+                                    <TextBox Width="130" Text="{Binding PokeAddress, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <TextBlock Text="Val:" Margin="8,0,6,0"/>
+                                    <TextBox Width="70" Text="{Binding PokeValue, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Button Content="Poke" Command="{Binding PokeCommand}" Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <DataGrid Grid.Column="1" ItemsSource="{Binding Results}" SelectedItem="{Binding Selected}"
+                                      AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="200"/>
+                                    <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Border>
+                </TabItem>
+
+                <!-- ===== Powers (offline save editor) ===== -->
+                <TabItem Header="🧬 Powers" DataContext="{Binding SaveEditor}">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                <TextBlock Text="Offline save-game editor — assigns persistent 'effect' powers by editing the save's CHRDATAn.SPC files. This does NOT touch the running game: close the game (or reload the save afterward) for changes to take effect. A backup is made automatically before the first change."
+                                           Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Save folder:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBox Width="360" VerticalAlignment="Center"
+                                             Text="{Binding SaveFolder, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Button Content="Browse…" Click="BrowseSaveFolder_Click" Margin="6,0,0,0"/>
+                                    <Button Content="📂 Load" Command="{Binding LoadCommand}" Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Style="{StaticResource Hint}"
+                                       TextWrapping="Wrap" Margin="0,8,0,0"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="280"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Left: party + selected character's current effects -->
+                                <DockPanel Grid.Column="0" Margin="0,0,10,0">
+                                    <TextBlock DockPanel.Dock="Top" Text="CHARACTERS" Style="{StaticResource Section}"/>
+                                    <ListBox DockPanel.Dock="Top" Height="150" ItemsSource="{Binding Characters}"
+                                             SelectedItem="{Binding SelectedCharacter}" DisplayMemberPath="Label"/>
+                                    <TextBlock DockPanel.Dock="Top" Text="Current effects" Style="{StaticResource Section}"/>
+                                    <Button DockPanel.Dock="Bottom" Content="✖ Remove selected effect" Margin="0,6,0,0"
+                                            HorizontalAlignment="Left" Command="{Binding RemoveEffectCommand}"/>
+                                    <ListBox ItemsSource="{Binding SelectedCharacter.Effects}" SelectedItem="{Binding SelectedEffect}">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                                    <TextBlock Style="{StaticResource Hint}">
+                                                        <Run Text="{Binding Hex, Mode=OneWay}"/><Run Text="  ·  "/><Run Text="{Binding DurationText, Mode=OneWay}"/>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </DockPanel>
+
+                                <!-- Right: assignable effects checklist -->
+                                <DockPanel Grid.Column="1">
+                                    <TextBlock DockPanel.Dock="Top" Text="ASSIGN POWERS" Style="{StaticResource Section}"/>
+                                    <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                                        <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <TextBox Width="170" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <CheckBox Content="Beneficial only" IsChecked="{Binding BeneficialOnly}"
+                                                  VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                        <Button Content="Survival set" Command="{Binding CheckSurvivalCommand}" Margin="10,0,0,0"/>
+                                        <Button Content="Clear" Command="{Binding ClearChecksCommand}" Margin="6,0,0,0"/>
+                                    </WrapPanel>
+                                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                                        <Button Content="✚ Apply to selected" Command="{Binding ApplySelectedCommand}"/>
+                                        <Button Content="★ Apply to ALL characters" Command="{Binding ApplyAllCommand}" Margin="6,0,0,0"/>
+                                    </StackPanel>
+                                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding Effects}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox IsChecked="{Binding IsChecked}" Margin="0,1">
+                                                        <TextBlock>
+                                                            <Run Text="{Binding Hex, Mode=OneWay}" Foreground="{StaticResource AccentDim}"/>
+                                                            <Run Text="  "/><Run Text="{Binding Name, Mode=OneWay}"/>
+                                                        </TextBlock>
+                                                    </CheckBox>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </DockPanel>
+                            </Grid>
+                        </DockPanel>
+                    </Border>
+                </TabItem>
+
+                <!-- ===== Inventory (offline save editor: items) ===== -->
+                <TabItem Header="🎒 Inventory" DataContext="{Binding SaveEditor}">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                <TextBlock Text="Offline inventory editor — reads and writes each character's CHRDATAn.ITM file. Identify every carried item, or copy one character's whole inventory onto another. This does NOT touch the running game: close the game (or reload the save afterward) for changes to take effect. A backup is made automatically before the first change. Shares the save loaded on the 🧬 Powers tab."
+                                           Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Save folder:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <TextBox Width="360" VerticalAlignment="Center"
+                                             Text="{Binding SaveFolder, UpdateSourceTrigger=PropertyChanged}"/>
+                                    <Button Content="Browse…" Click="BrowseSaveFolder_Click" Margin="6,0,0,0"/>
+                                    <Button Content="📂 Load" Command="{Binding LoadCommand}" Margin="6,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <!-- Live game (memory) item tools — bound to MainViewModel.LiveInventory -->
+                            <Border DockPanel.Dock="Top" Background="{StaticResource Bg}" BorderBrush="{StaticResource Line}"
+                                    BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8"
+                                    DataContext="{Binding DataContext.LiveInventory, RelativeSource={RelativeSource AncestorType=Window}}">
+                                <StackPanel>
+                                    <TextBlock Text="Live game (memory) — edits the RUNNING game directly, no reload needed. Attach &amp; Scan on the top toolbar first, then Re-scan after picking up or dropping items. Do this out of combat."
+                                               Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <TextBlock Text="Party member:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <ComboBox Width="220" ItemsSource="{Binding Characters}"
+                                                  SelectedItem="{Binding SelectedCharacter}" DisplayMemberPath="Label"/>
+                                        <Button Content="★ ID all items (party, LIVE)" Margin="10,0,0,0"
+                                                Command="{Binding IdentifyAllCommand}"/>
+                                        <Button Content="🔋 Recharge all (party)" Margin="8,0,0,0"
+                                                Command="{Binding RechargeAllCommand}"
+                                                ToolTip="Top every ammunition stack and wand/staff charge in the whole party up to full."/>
+                                        <CheckBox Content="Freeze ammo &amp; charges" Margin="12,0,0,0"
+                                                  VerticalAlignment="Center"
+                                                  IsChecked="{Binding FreezeAmmo}"
+                                                  ToolTip="Keep every rechargeable item (ammo and wand/staff charges) topped up each poll tick so they never deplete."/>
+                                    </StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <DataGrid Grid.Column="0" ItemsSource="{Binding SelectedCharacter.Items}"
+                                                  SelectedItem="{Binding SelectedCharacter.SelectedItem}"
+                                                  AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
+                                                  MaxHeight="180">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Item" Binding="{Binding DisplayName}" Width="*"/>
+                                                <DataGridCheckBoxColumn Header="ID'd" Binding="{Binding Identified, Mode=OneWay}" Width="46"/>
+                                                <DataGridCheckBoxColumn Header="Rdy" Binding="{Binding Readied, Mode=OneWay}" Width="46"/>
+                                                <DataGridTextColumn Header="Qty" Binding="{Binding Count}" Width="46"/>
+                                                <DataGridTextColumn Header="Chrg" Binding="{Binding Charges}" Width="48"/>
+                                                <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="60"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                        <StackPanel Grid.Column="1" Margin="10,0,0,0" Width="240">
+                                            <TextBlock Text="Selected item" Style="{StaticResource Section}"/>
+                                            <Button Content="🔋 Recharge selected" HorizontalAlignment="Left"
+                                                    Command="{Binding RechargeItemCommand}"
+                                                    ToolTip="Set the selected item's count/charges byte to full (wands, ammunition)."/>
+                                            <TextBlock Text="Duplicate onto slot" Style="{StaticResource Section}"/>
+                                            <TextBlock Text="Overwrites the chosen slot's item with a copy of the item selected above."
+                                                       Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+                                            <ComboBox Margin="0,4,0,0" ItemsSource="{Binding SelectedCharacter.Items}"
+                                                      SelectedItem="{Binding SelectedCharacter.DuplicateTarget}"
+                                                      DisplayMemberPath="DisplayName"/>
+                                            <Button Content="⧉ Duplicate → slot" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                                    Command="{Binding DuplicateItemCommand}"/>
+                                        </StackPanel>
+                                    </Grid>
+                                    <TextBlock Text="{Binding Status}" Style="{StaticResource Hint}"
+                                               TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Style="{StaticResource Hint}"
+                                       TextWrapping="Wrap" Margin="0,8,0,0"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="300"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Left: characters + identify / duplicate controls -->
+                                <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                                    <TextBlock Text="CHARACTERS" Style="{StaticResource Section}"/>
+                                    <ListBox Height="150" ItemsSource="{Binding Characters}"
+                                             SelectedItem="{Binding SelectedCharacter}" DisplayMemberPath="ItemLabel"/>
+                                    <TextBlock Text="Identify" Style="{StaticResource Section}"/>
+                                    <Button Content="🔎 ID all items (this character)" HorizontalAlignment="Left"
+                                            Command="{Binding IdentifyItemsSelectedCommand}"/>
+                                    <Button Content="★ ID all items (EVERY character)" HorizontalAlignment="Left"
+                                            Margin="0,4,0,0" Command="{Binding IdentifyItemsAllCommand}"/>
+                                    <TextBlock Text="Duplicate inventory" Style="{StaticResource Section}"/>
+                                    <TextBlock Text="Copies the 'from' character's whole inventory onto the selected character (above), replacing it."
+                                               Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <TextBlock Text="Copy from:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <ComboBox Width="170" ItemsSource="{Binding Characters}"
+                                                  SelectedItem="{Binding DuplicateSource}" DisplayMemberPath="ItemLabel"/>
+                                    </StackPanel>
+                                    <Button Content="⧉ Duplicate → selected character" HorizontalAlignment="Left"
+                                            Margin="0,6,0,0" Command="{Binding DuplicateInventoryCommand}"/>
+                                </StackPanel>
+
+                                <!-- Right: the selected character's items -->
+                                <DockPanel Grid.Column="1">
+                                    <TextBlock DockPanel.Dock="Top" Text="ITEMS (as shown in game)" Style="{StaticResource Section}"/>
+                                    <DataGrid ItemsSource="{Binding SelectedCharacter.Items}" AutoGenerateColumns="False"
+                                              IsReadOnly="True" HeadersVisibility="Column">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Item" Binding="{Binding DisplayName}" Width="*"/>
+                                            <DataGridCheckBoxColumn Header="ID'd" Binding="{Binding Identified}" Width="46"/>
+                                            <DataGridCheckBoxColumn Header="Rdy" Binding="{Binding Readied}" Width="46"/>
+                                            <DataGridTextColumn Header="Qty" Binding="{Binding Count}" Width="46"/>
+                                            <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="60"/>
+                                            <DataGridTextColumn Header="Flags" Binding="{Binding Tags}" Width="160"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </DockPanel>
+                            </Grid>
+                        </DockPanel>
+                    </Border>
+                </TabItem>
+
+                <!-- ===== Monsters reference ===== -->
+                <TabItem Header="🐉 Monsters">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Filter:" Margin="0,0,6,0"/>
+                                <TextBox Width="220" Text="{Binding MonsterFilter, UpdateSourceTrigger=PropertyChanged}"/>
+                                <TextBlock Text="XP-per-kill values are the game's own (Gold Box Companion data-mine)."
+                                           Style="{StaticResource Hint}" Margin="12,0,0,0"/>
+                            </StackPanel>
+                            <DataGrid ItemsSource="{Binding Monsters}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Monster" Binding="{Binding Name}" Width="170"/>
+                                    <DataGridTextColumn Header="XP" Binding="{Binding Xp}" Width="60"/>
+                                    <DataGridTextColumn Header="HP" Binding="{Binding Hp}" Width="60"/>
+                                    <DataGridTextColumn Header="AC" Binding="{Binding Ac}" Width="45"/>
+                                    <DataGridTextColumn Header="THAC0" Binding="{Binding Thac0}" Width="55"/>
+                                    <DataGridTextColumn Header="Damage" Binding="{Binding Damage}" Width="120"/>
+                                    <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Border>
+                </TabItem>
+
+                <!-- ===== Spells reference ===== -->
+                <TabItem Header="✨ Spells">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Filter:" Margin="0,0,6,0"/>
+                                <TextBox Width="220" Text="{Binding SpellFilter, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                            <DataGrid ItemsSource="{Binding Spells}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="School" Binding="{Binding School}" Width="70"/>
+                                    <DataGridTextColumn Header="Lvl" Binding="{Binding Level}" Width="40"/>
+                                    <DataGridTextColumn Header="Spell" Binding="{Binding Name}" Width="180"/>
+                                    <DataGridTextColumn Header="Effect" Binding="{Binding Description}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Border>
+                </TabItem>
+
+                <!-- ===== Rules reference ===== -->
+                <TabItem Header="📖 Rules">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="Classes (training-hall caps)" Style="{StaticResource Section}"/>
+                                <DataGrid ItemsSource="{Binding ClassRef}" AutoGenerateColumns="False" IsReadOnly="True"
+                                          HeadersVisibility="Column" MaxHeight="180">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Class" Binding="{Binding Name}" Width="90"/>
+                                        <DataGridTextColumn Header="HD" Binding="{Binding HitDie}" Width="45"/>
+                                        <DataGridTextColumn Header="Prime" Binding="{Binding PrimeStat}" Width="90"/>
+                                        <DataGridTextColumn Header="Cap" Binding="{Binding GameCap}" Width="45"/>
+                                        <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBlock Text="Races" Style="{StaticResource Section}"/>
+                                <DataGrid ItemsSource="{Binding RaceRef}" AutoGenerateColumns="False" IsReadOnly="True"
+                                          HeadersVisibility="Column" MaxHeight="200">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Race" Binding="{Binding Name}" Width="90"/>
+                                        <DataGridTextColumn Header="Class options" Binding="{Binding ClassOptions}" Width="320"/>
+                                        <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <TextBlock Text="XP to reach each level (Cleric/Mage cap 6, Fighter 8, Thief 9)" Style="{StaticResource Section}"/>
+                                <DataGrid ItemsSource="{Binding XpTable}" AutoGenerateColumns="False" IsReadOnly="True"
+                                          HeadersVisibility="Column" MaxHeight="260">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="60"/>
+                                        <DataGridTextColumn Header="Cleric" Binding="{Binding Cleric}" Width="*"/>
+                                        <DataGridTextColumn Header="Fighter" Binding="{Binding Fighter}" Width="*"/>
+                                        <DataGridTextColumn Header="Mage" Binding="{Binding Mage}" Width="*"/>
+                                        <DataGridTextColumn Header="Thief" Binding="{Binding Thief}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </TabItem>
+
+                <!-- ===== Maps + teleport ===== -->
+                <TabItem Header="🗺 Maps" DataContext="{Binding Maps}">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="320"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Left: area list + manual teleport helper -->
+                            <DockPanel Grid.Column="0" Margin="0,0,10,0">
+                                <TextBlock DockPanel.Dock="Top" Text="AREAS" Style="{StaticResource Section}"/>
+                                <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                                        CornerRadius="4" Padding="8" Margin="0,8,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="Manual teleport" Style="{StaticResource Section}" Margin="0,0,0,2"/>
+                                        <TextBlock Text="Coordinates aren't in the character record. Scan for the party's X (then Y) on the 🔍 Memory tab, paste the addresses here, pick a location above (or type a target), and Teleport. Exploring only — never in combat."
+                                                   Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="70"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="X addr:" VerticalAlignment="Center"/>
+                                            <TextBox Grid.Row="0" Grid.Column="1" Margin="0,0,0,4"
+                                                     Text="{Binding XAddress, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Y addr:" VerticalAlignment="Center"/>
+                                            <TextBox Grid.Row="1" Grid.Column="1"
+                                                     Text="{Binding YAddress, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </Grid>
+                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                            <TextBlock Text="Target X:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBox Width="44" Text="{Binding TargetX, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock Text="Y:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                                            <TextBox Width="44" Text="{Binding TargetY, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <Button Content="🧭 Teleport" Command="{Binding TeleportCommand}" Margin="10,0,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Status}" Style="{StaticResource Hint}"
+                                                   TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                                <ListBox ItemsSource="{Binding Areas}" SelectedItem="{Binding SelectedArea}"
+                                         DisplayMemberPath="Header"/>
+                            </DockPanel>
+
+                            <!-- Right: selected area detail + its keyed locations -->
+                            <DockPanel Grid.Column="1">
+                                <TextBlock DockPanel.Dock="Top" Text="{Binding SelectedArea.Header}"
+                                           FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+                                <TextBlock DockPanel.Dock="Top" Text="{Binding SelectedArea.Notes}"
+                                           Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,2,0,8"/>
+                                <TextBlock DockPanel.Dock="Top" Text="LOCATIONS (select one to set the teleport target)"
+                                           Style="{StaticResource Section}"/>
+                                <DataGrid ItemsSource="{Binding Locations}" SelectedItem="{Binding SelectedLocation}"
+                                          AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="(x, y)" Binding="{Binding Coord}" Width="70"/>
+                                        <DataGridTextColumn Header="Location" Binding="{Binding Name}" Width="240"/>
+                                        <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </Grid>
+                    </Border>
+                </TabItem>
+
+                <!-- ===== Strategy tab ===== -->
+                <TabItem Header="🗺 Strategy">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Guide}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,0,10">
+                                            <TextBlock Text="{Binding Title}" Style="{StaticResource Section}"/>
+                                            <TextBlock Text="{Binding Body}" TextWrapping="Wrap" Foreground="{StaticResource FgDim}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </Border>
+                </TabItem>
+            </TabControl>
+        </Grid>
+    </DockPanel>
+</Window>

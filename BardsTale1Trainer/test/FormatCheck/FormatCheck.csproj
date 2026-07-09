@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>BardsTale1Trainer</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Compile the format/record logic straight from the WPF project (no GUI deps). -->
+    <Compile Include="..\..\src\BardsTale1Trainer\Game\PartyFormat.cs" />
+    <Compile Include="..\..\src\BardsTale1Trainer\Game\CharacterRecord.cs" />
+    <Compile Include="..\..\src\BardsTale1Trainer\Game\ItemBook.cs" />
+    <Compile Include="..\..\src\BardsTale1Trainer\Game\Spellbook.cs" />
+    <Compile Include="..\..\src\BardsTale1Trainer\Game\ClassBook.cs" />
+    <Compile Include="..\..\src\BardsTale1Trainer\Game\MonsterBook.cs" />
+    <Compile Include="..\..\src\BardsTale1Trainer\Game\MapBook.cs" />
+    <Compile Include="..\..\src\BardsTale1Trainer\Game\MapCalibration.cs" />
+    <Compile Include="..\..\src\BardsTale1Trainer\Game\PartySnapshot.cs" />
+    <Compile Include="..\..\src\BardsTale1Trainer\Memory\DumpComparer.cs" />
+  </ItemGroup>
+</Project>

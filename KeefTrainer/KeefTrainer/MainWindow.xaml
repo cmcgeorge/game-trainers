@@ -1,0 +1,160 @@
+<Window x:Class="KeefTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="clr-namespace:KeefTrainer.UI"
+        Title="Keef the Thief — Trainer"
+        Width="960" Height="700" MinWidth="820" MinHeight="560"
+        Background="{StaticResource Bg}"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <DataTemplate x:Key="StatRowTemplate" DataType="{x:Type ui:StatRowViewModel}">
+            <Grid Margin="0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="64"/>
+                    <ColumnDefinition Width="34"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource StatName}" Text="{Binding Name}"/>
+                </StackPanel>
+                <TextBox Grid.Column="1" Style="{StaticResource ValueBox}"
+                         Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
+                         GotKeyboardFocus="ValueBox_GotFocus"
+                         LostKeyboardFocus="ValueBox_LostFocus"
+                         KeyDown="ValueBox_KeyDown"
+                         ToolTip="{Binding Hint}"/>
+                <CheckBox Grid.Column="2" Style="{StaticResource FreezeToggle}" Margin="6,0,0,0"
+                          IsChecked="{Binding IsFrozen}"/>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="GroupTemplate" DataType="{x:Type ui:StatGroup}">
+            <Border Style="{StaticResource GroupPanel}">
+                <StackPanel>
+                    <TextBlock Style="{StaticResource GroupTitle}" Text="{Binding Title}"/>
+                    <ItemsControl ItemsSource="{Binding Rows}" ItemTemplate="{StaticResource StatRowTemplate}"
+                                  Focusable="False"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
+
+    <DockPanel>
+
+        <!-- Header / status bar -->
+        <Border DockPanel.Dock="Top" Background="{StaticResource Panel}"
+                BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,0,0,1" Padding="16,10">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <TextBlock Text="KEEF THE THIEF" FontSize="18" FontWeight="Bold"
+                               Foreground="{StaticResource Gold}" VerticalAlignment="Center"/>
+                    <TextBlock Text="  trainer" FontSize="13" Foreground="{StaticResource TextDim}"
+                               VerticalAlignment="Bottom" Margin="0,0,0,2"/>
+                </StackPanel>
+                <Button DockPanel.Dock="Right" Style="{StaticResource ActionButton}" Margin="12,0,0,0"
+                        Command="{Binding ReattachCommand}" Content="Re-scan" VerticalAlignment="Center"/>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                    <Ellipse Width="10" Height="10" Margin="0,0,8,0" VerticalAlignment="Center">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{StaticResource Danger}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsAttached}" Value="True">
+                                        <Setter Property="Fill" Value="{StaticResource AccentBright}"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Text="{Binding StatusText}" Foreground="{StaticResource TextDim}"
+                               VerticalAlignment="Center" FontSize="12" TextTrimming="CharacterEllipsis"
+                               MaxWidth="480"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Presets -->
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource Panel}"
+                BorderBrush="{StaticResource PanelBorder}" BorderThickness="0,1,0,0" Padding="16,10">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" FontSize="11"
+                           Foreground="{StaticResource TextDim}"
+                           Text="✎ type a value + Enter to write · ❄ freezes it"/>
+                <StackPanel Orientation="Horizontal">
+                    <Button Style="{StaticResource ActionButton}" Command="{Binding GodModeCommand}"
+                            Content="⚡ God Mode" ToolTip="Freeze HP/MP at 999 and all survival meters at 100"/>
+                    <Button Style="{StaticResource ActionButton}" Command="{Binding MaxStatsCommand}"
+                            Content="Max Stats" ToolTip="All attributes and thief skills to 100"/>
+                    <Button Style="{StaticResource ActionButton}" Command="{Binding RefillCommand}"
+                            Content="Refill" ToolTip="HP=Con, MP=Wis, all meters to 100"/>
+                    <Button Style="{StaticResource ActionButton}" Command="{Binding MaxGoldCommand}"
+                            Content="Gold 9999"/>
+                    <Button Style="{StaticResource ActionButton}" Command="{Binding ThiefKitCommand}"
+                            Content="99 Picks &amp; Flints"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- Stat groups -->
+        <Grid>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="16,14,4,2" Focusable="False">
+                <StackPanel>
+                    <Border Background="#33B05050" BorderBrush="{StaticResource Danger}" BorderThickness="1"
+                            CornerRadius="4" Padding="10,6" Margin="0,0,12,12">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <MultiDataTrigger>
+                                        <MultiDataTrigger.Conditions>
+                                            <Condition Binding="{Binding IsAttached}" Value="True"/>
+                                            <Condition Binding="{Binding InGame}" Value="False"/>
+                                        </MultiDataTrigger.Conditions>
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </MultiDataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <TextBlock FontSize="12" Foreground="#FFE8B8B8"
+                                   Text="Attached, but the game state looks uninitialized — start or load a game in Keef the Thief first."/>
+                    </Border>
+
+                    <ItemsControl ItemsSource="{Binding Groups}" ItemTemplate="{StaticResource GroupTemplate}"
+                                  Focusable="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Vertical" MaxHeight="760"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Disabled veil when not attached -->
+            <Border Background="#A014161C">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsAttached}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="🗝" FontSize="42" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBlock Text="Waiting for Keef the Thief…" FontSize="16" HorizontalAlignment="Center"/>
+                    <TextBlock Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource TextDim}"
+                               HorizontalAlignment="Center" TextAlignment="Center"
+                               Text="Launch the game in DOSBox or DOSBox-X (KEEF.BAT).&#10;The trainer attaches automatically."/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+    </DockPanel>
+</Window>

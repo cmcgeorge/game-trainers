@@ -1,0 +1,1500 @@
+<Window x:Class="MightAndMagic1Trainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:MightAndMagic1Trainer.ViewModels"
+        Title="Might &amp; Magic 1 — Live Trainer" Height="760" Width="1180"
+        Icon="Assets/app.ico"
+        Background="{StaticResource Bg}" FontFamily="Segoe UI" FontSize="12">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolVis"/>
+
+        <!-- One spell row for the Spells reference tab: "L1 #3  Bless" + cost, description beneath. -->
+        <DataTemplate x:Key="SpellRow" DataType="{x:Type vm:SpellEntryViewModel}">
+            <Border Background="{StaticResource Panel2}" CornerRadius="4" Padding="8" Margin="0,0,0,5">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding Display}" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Column="1" Text="{Binding CostText}"
+                                   Foreground="{StaticResource Accent}" Margin="12,0,0,0"/>
+                    </Grid>
+                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                               Foreground="{StaticResource FgDim}" Margin="0,2,0,0"/>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- One item row for the Items reference tab: "Long Sword" + type tag, description beneath. -->
+        <DataTemplate x:Key="ItemRow" DataType="{x:Type vm:ItemEntryViewModel}">
+            <Border Background="{StaticResource Panel2}" CornerRadius="4" Padding="8" Margin="0,0,0,5">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Column="1" Text="{Binding CostTag}"
+                                   Foreground="{StaticResource Accent}" Margin="12,0,0,0"/>
+                    </Grid>
+                    <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                               Foreground="{StaticResource FgDim}" Margin="0,2,0,0"/>
+                    <TextBlock Text="{Binding Effect}" TextWrapping="Wrap"
+                               Foreground="{StaticResource Accent}" Margin="0,2,0,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Effect}" Value="">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- One [normal, current] byte-pair editor row (used by both Attributes and Resistances). -->
+        <DataTemplate x:Key="StatPairRow" DataType="{x:Type vm:StatViewModel}">
+            <Grid Margin="0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Name}"/>
+                <Label Grid.Column="1" Content="norm"/>
+                <TextBox Grid.Column="2" Width="60" Margin="4,0,12,0"
+                         Text="{Binding Normal, UpdateSourceTrigger=LostFocus}"/>
+                <Label Grid.Column="3" Content="cur"/>
+                <TextBox Grid.Column="4" Width="60" Margin="4,0,0,0"
+                         Text="{Binding Current, UpdateSourceTrigger=LostFocus}"/>
+            </Grid>
+        </DataTemplate>
+
+        <!-- Per-group header (reused by the Spell Reference levels and the Items categories). -->
+        <Style x:Key="GroupHeader" TargetType="GroupItem">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GroupItem">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13"
+                                       Foreground="{StaticResource Accent}" Margin="0,8,0,4"/>
+                            <ItemsPresenter/>
+                        </StackPanel>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ===== Top: attach bar ===== -->
+        <Border Grid.Row="0" Background="{StaticResource Panel}" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+            <StackPanel>
+                <TextBlock Text="1 · Attach to the running game" Style="{StaticResource Section}" Margin="0,0,0,6"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ComboBox Grid.Column="0" ItemsSource="{Binding Processes}"
+                              SelectedItem="{Binding SelectedProcess}"
+                              Margin="0,0,8,0" Height="28">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Display}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                        <Button Content="↻ Processes" Command="{Binding RefreshProcessesCommand}"/>
+                        <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                        <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                        <Button Content="Re-scan" Command="{Binding RescanCommand}"/>
+                    </StackPanel>
+                </Grid>
+                <Grid Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Roster location:" Foreground="{StaticResource FgDim}"
+                               Margin="0,0,8,0"/>
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding Locations}"
+                              SelectedItem="{Binding SelectedLocation}" Height="26"/>
+                    <Button Grid.Column="2" Content="📂 Browse for Roster.dta… (offline)" Margin="8,0,0,0"
+                            Click="OnLoadRosterClicked"/>
+                    <Button Grid.Column="3" Content="💾 Save roster file" Margin="0,0,0,0"
+                            Command="{Binding SaveRosterFileCommand}"
+                            ToolTipService.ShowOnDisabled="True"
+                            ToolTip="Writes the edited characters back to the loaded Roster.dta. The previous file version is kept beside it as Roster.dta.bak. Only available in offline file mode."/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <!-- ===== Middle: characters + editor ===== -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- character list + global actions -->
+            <Border Grid.Column="0" Background="{StaticResource Panel}" CornerRadius="6" Padding="8" Margin="0,0,8,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="2 · Characters" Style="{StaticResource Section}" Margin="0,0,0,4"/>
+                    <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0"
+                            Padding="0,8,0,0" Margin="0,8,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Apply to whole party" Foreground="{StaticResource FgDim}" Margin="0,0,0,4"/>
+                            <WrapPanel>
+                                <Button Content="Max HP" Command="{Binding MaxHpAllCommand}"/>
+                                <Button Content="Max SP" Command="{Binding MaxSpAllCommand}"/>
+                                <Button Content="Max Stats" Command="{Binding MaxStatsAllCommand}"/>
+                                <Button Content="Max Resists" Command="{Binding MaxResistancesAllCommand}"
+                                        ToolTip="Sets all eight resistances to 100% for every character."/>
+                            </WrapPanel>
+                            <Button Content="★ Max EVERYTHING (party)" Click="OnMaxEverythingPartyClicked"
+                                    IsEnabled="{Binding HasParty}"
+                                    Background="{StaticResource AccentDim}" HorizontalAlignment="Stretch"
+                                    ToolTip="Maxes HP, SP, stats, resistances, gold, gems and food for EVERY character at once. Asks for confirmation first."/>
+                            <CheckBox Content="🧊 Freeze HP — whole party" IsChecked="{Binding FreezeHpAll}"
+                                      Margin="0,6,0,0"/>
+                            <CheckBox Content="🧊 Freeze SP — whole party" IsChecked="{Binding FreezeSpAll}"
+                                      Margin="0,2,0,0"/>
+                            <CheckBox Content="🧊 Cure condition (keep OK) — whole party" IsChecked="{Binding FreezeConditionAll}"
+                                      Margin="0,2,0,0"
+                                      ToolTip="Pins every character's condition to OK, instantly clearing poison, sleep, paralysis, death, etc."/>
+                            <CheckBox Content="🔒 Gold can't drop — whole party" IsChecked="{Binding FreezeGoldAll}"
+                                      Margin="0,2,0,0"
+                                      ToolTip="No-loss: the party can still earn gold, but it never decreases."/>
+                            <CheckBox Content="🔒 Gems can't drop — whole party" IsChecked="{Binding FreezeGemsAll}"
+                                      Margin="0,2,0,0"
+                                      ToolTip="No-loss: the party can still find gems, but they never decrease."/>
+                            <CheckBox Content="🔒 Food can't drop — whole party" IsChecked="{Binding FreezeFoodAll}"
+                                      Margin="0,2,0,0"
+                                      ToolTip="No-loss: the party can still gather food, but it never decreases."/>
+                            <CheckBox Content="🧊 Freeze item charges — whole party" IsChecked="{Binding FreezeChargesAll}"
+                                      Margin="0,2,0,0"
+                                      ToolTip="Pins every character's item charge counts so charged items (wands, rings, etc.) are never used up. Per-item control is on each character's Inventory tab."/>
+                            <Button Content="Re-read party from game" Command="{Binding RefreshAllCommand}"
+                                    HorizontalAlignment="Stretch" Margin="0,6,0,0"/>
+                            <CheckBox Content="↻ Auto re-read party (every ~2s)" IsChecked="{Binding AutoReadParty}"
+                                      Margin="0,6,0,0"
+                                      ToolTip="Periodically re-reads the whole party from the game so the displayed values track in-game changes (gold spent, HP lost, etc.) without clicking. Turn off while editing a field."/>
+                            <WrapPanel Margin="0,6,0,0">
+                                <Button Content="📸 Snapshot…" Click="OnSaveSnapshotClicked"
+                                        ToolTip="Saves the whole party to a snapshot file (roster format) so you can restore it later — an undo for experiments gone wrong."/>
+                                <Button Content="↩ Restore…" Click="OnLoadSnapshotClicked"
+                                        ToolTip="Restores a previously saved snapshot onto the current party, slot by slot. Live characters are written to the game immediately."/>
+                            </WrapPanel>
+                            <TextBlock Margin="0,6,0,0" FontSize="11" Foreground="{StaticResource FgDim}" TextWrapping="Wrap"
+                                       Text="Global hotkeys (work even while the game has focus):&#10;Ctrl+F1 god mode on/off · Ctrl+F2 heal party · Ctrl+F3 max everything"/>
+                        </StackPanel>
+                    </Border>
+                    <ListBox ItemsSource="{Binding Characters}" SelectedItem="{Binding SelectedCharacter}"
+                             Background="Transparent" BorderThickness="0" Foreground="{StaticResource Fg}">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="6,5"/>
+                                <Setter Property="Margin" Value="0,1"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="b" Background="{StaticResource Panel2}" CornerRadius="4"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="b" Property="Background" Value="{StaticResource AccentDim}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:CharacterViewModel}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding Subtitle}" Foreground="{StaticResource FgDim}" FontSize="11"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <!-- editor -->
+            <Border Grid.Column="1" Background="{StaticResource Panel}" CornerRadius="6" Padding="10">
+              <TabControl Background="Transparent" BorderThickness="0">
+                <!-- ============ Characters ============ -->
+                <TabItem Header="Characters">
+                <Grid>
+                    <TextBlock Text="Attach to the game and pick a character, or load Roster.dta to browse offline."
+                               Foreground="{StaticResource FgDim}" HorizontalAlignment="Center"
+                               VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="380" TextAlignment="Center"
+                               Visibility="{Binding HasNoSelection, Converter={StaticResource BoolVis}}"/>
+
+                    <TabControl Background="Transparent" BorderThickness="0"
+                                DataContext="{Binding SelectedCharacter}"
+                                Visibility="{Binding DataContext.HasSelection,
+                                             RelativeSource={RelativeSource AncestorType=Window},
+                                             Converter={StaticResource BoolVis}}">
+                        <!-- ===== Friendly fields tab ===== -->
+                        <TabItem Header="Character">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Section}" Text="Identity"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                                        </Grid.RowDefinitions>
+                                        <Label Grid.Row="0" Grid.Column="0" Content="Name"/>
+                                        <TextBox Grid.Row="0" Grid.Column="1" Width="200" HorizontalAlignment="Left"
+                                                 Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
+                                        <Label Grid.Row="1" Grid.Column="0" Content="Class"/>
+                                        <ComboBox Grid.Row="1" Grid.Column="1" Width="160" HorizontalAlignment="Left"
+                                                  SelectedIndex="{Binding ClassIndex}">
+                                            <ComboBoxItem>(none)</ComboBoxItem>
+                                            <ComboBoxItem>Knight</ComboBoxItem>
+                                            <ComboBoxItem>Paladin</ComboBoxItem>
+                                            <ComboBoxItem>Archer</ComboBoxItem>
+                                            <ComboBoxItem>Cleric</ComboBoxItem>
+                                            <ComboBoxItem>Sorcerer</ComboBoxItem>
+                                            <ComboBoxItem>Robber</ComboBoxItem>
+                                        </ComboBox>
+                                        <Label Grid.Row="2" Grid.Column="0" Content="Sex"/>
+                                        <ComboBox Grid.Row="2" Grid.Column="1" Width="160" HorizontalAlignment="Left"
+                                                  SelectedIndex="{Binding SexIndex}">
+                                            <ComboBoxItem>(none)</ComboBoxItem>
+                                            <ComboBoxItem>Male</ComboBoxItem>
+                                            <ComboBoxItem>Female</ComboBoxItem>
+                                        </ComboBox>
+                                        <Label Grid.Row="3" Grid.Column="0" Content="Age"/>
+                                        <TextBox Grid.Row="3" Grid.Column="1" Width="80" HorizontalAlignment="Left"
+                                                 Text="{Binding Age, UpdateSourceTrigger=LostFocus}"/>
+                                    </Grid>
+
+                                    <TextBlock Style="{StaticResource Section}" Text="Vitals"/>
+                                    <WrapPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="HP current"/>
+                                            <TextBox Width="90" Text="{Binding HpCur, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="HP max"/>
+                                            <TextBox Width="90" Text="{Binding HpMax, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="SP current"/>
+                                            <TextBox Width="90" Text="{Binding SpCur, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="SP max"/>
+                                            <TextBox Width="90" Text="{Binding SpMax, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="Spell level"/>
+                                            <TextBox Width="70" Text="{Binding SpellLevel, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="Armor class"/>
+                                            <TextBox Width="70" Text="{Binding ArmorClass, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                    <WrapPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="Level (current)"/>
+                                            <TextBox Width="80" Text="{Binding LevelCur, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="Level (max)"/>
+                                            <TextBox Width="80" Text="{Binding LevelMax, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="Experience (≈)"/>
+                                            <TextBox Width="120" Text="{Binding Experience, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                        <CheckBox Content="🧊 Freeze HP (auto-refill)" IsChecked="{Binding FreezeHp}"
+                                                  ToolTip="Pins this character's current HP to its max every tick. To freeze the whole party at once, use the party toggle in the Characters sidebar."/>
+                                        <CheckBox Content="🧊 Freeze SP (auto-refill)" IsChecked="{Binding FreezeSp}"
+                                                  ToolTip="Pins this character's current SP to its max every tick. To freeze the whole party at once, use the party toggle in the Characters sidebar."/>
+                                    </StackPanel>
+
+                                    <TextBlock Style="{StaticResource Section}" Text="Wealth &amp; status"/>
+                                    <WrapPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="Gold"/>
+                                            <TextBox Width="120" Text="{Binding Gold, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="Gems"/>
+                                            <TextBox Width="90" Text="{Binding Gems, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="Food"/>
+                                            <TextBox Width="70" Text="{Binding Food, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="Condition (0 = OK)"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBox Width="60" Text="{Binding Condition, UpdateSourceTrigger=LostFocus}"/>
+                                                <TextBlock Text="{Binding ConditionName}" Margin="8,0,0,0"
+                                                           Foreground="{StaticResource FgDim}"/>
+                                                <CheckBox Content="🧊 Keep OK" IsChecked="{Binding FreezeCondition}" Margin="12,0,0,0"
+                                                          VerticalAlignment="Center"
+                                                          ToolTip="Pins this character's condition to 0 (OK) every tick, clearing poison, sleep, paralysis, death, etc. Use the party toggle in the Characters sidebar to apply to everyone."/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                        <CheckBox Content="🔒 Gold can't drop" IsChecked="{Binding FreezeGold}"
+                                                  ToolTip="No-loss: this character can still earn gold, but it never decreases (e.g. spell costs are refunded). Use the party toggle in the Characters sidebar to apply to everyone."/>
+                                        <CheckBox Content="🔒 Gems can't drop" IsChecked="{Binding FreezeGems}" Margin="12,0,0,0"
+                                                  ToolTip="No-loss: gems may still be found, but never decrease."/>
+                                        <CheckBox Content="🔒 Food can't drop" IsChecked="{Binding FreezeFood}" Margin="12,0,0,0"
+                                                  ToolTip="No-loss: food may still be gathered, but never decreases."/>
+                                    </StackPanel>
+
+                                    <TextBlock Style="{StaticResource Section}" Text="Attributes (normal / current)"/>
+                                    <TextBlock Text="‘Normal’ is the permanent value (restored on rest); ‘Current’ is the active value the game uses."
+                                               Foreground="{StaticResource FgDim}" FontSize="11" Margin="0,0,0,4"/>
+                                    <ItemsControl ItemsSource="{Binding Stats}"
+                                                  ItemTemplate="{StaticResource StatPairRow}"/>
+
+                                    <TextBlock Style="{StaticResource Section}" Text="Resistances (normal / current, %)"/>
+                                    <TextBlock Text="Each resistance is a percentage. Every character innately has Fear 70 and Sleep 25; items and spells raise the rest."
+                                               Foreground="{StaticResource FgDim}" FontSize="11" Margin="0,0,0,4"/>
+                                    <ItemsControl ItemsSource="{Binding Resistances}"
+                                                  ItemTemplate="{StaticResource StatPairRow}"/>
+                                    <Button Content="🛡 Max resistances (100%)" HorizontalAlignment="Left" Margin="0,6,0,0"
+                                            Command="{Binding DataContext.MaxResistancesSelectedCommand,
+                                                      RelativeSource={RelativeSource AncestorType=Window}}"
+                                            ToolTip="Sets all eight resistances to 100% for this character."/>
+
+                                    <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0"
+                                            Margin="0,10,0,0" Padding="0,10,0,0">
+                                        <StackPanel>
+                                            <WrapPanel>
+                                                <Button Content="★ Max EVERYTHING (this character)"
+                                                        Background="{StaticResource AccentDim}"
+                                                        Command="{Binding DataContext.MaxEverythingSelectedCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                <Button Content="Write to game"
+                                                        Command="{Binding DataContext.WriteSelectedCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                                <Button Content="Re-read from game"
+                                                        Command="{Binding DataContext.RefreshSelectedCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=Window}}"/>
+                                            </WrapPanel>
+                                            <TextBlock Text="Slot tools" Foreground="{StaticResource FgDim}" Margin="0,6,0,2"/>
+                                            <WrapPanel DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                <ComboBox Width="200" Margin="0,0,6,6"
+                                                          ItemsSource="{Binding Characters}" SelectedItem="{Binding SlotTarget}"
+                                                          IsSynchronizedWithCurrentItem="False"
+                                                          ToolTip="The other roster slot that Copy / Swap act against.">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding Title}"/>
+                                                        </DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                                <Button Content="⧉ Copy onto" Command="{Binding CopyToTargetCommand}"
+                                                        ToolTip="Overwrites the picked character with a copy of this one (a duplicate). The picked character's old record is lost — snapshot first if unsure."/>
+                                                <Button Content="⇄ Swap with" Command="{Binding SwapWithTargetCommand}"
+                                                        ToolTip="Exchanges this character's record with the picked one — reorders the roster."/>
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+
+                        <!-- ===== Inventory tab (items + charges) ===== -->
+                        <TabItem Header="Inventory">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Top">
+                                    <TextBlock Style="{StaticResource Section}" Text="Inventory items &amp; charges"/>
+                                    <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,6"
+                                               Text="Set what item occupies each equipped/backpack slot (pick from the game's full item list — the number is the raw item id, 0 = empty) and how many charges it has left. Type in the dropdown to jump to an item by name. Use Enh. to switch a weapon/armor between its base and +1/+2/+3 versions. Tick Freeze to pin a charge count so the item is never used up."/>
+                                    <CheckBox Content="🧊 Freeze ALL charges (this character)" IsChecked="{Binding FreezeAllCharges}"
+                                              Margin="0,0,0,6"
+                                              ToolTip="Pins every charge count for this character. Use the sidebar toggle to apply to the whole party."/>
+                                    <Grid Margin="0,0,0,2">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="110"/>
+                                            <ColumnDefinition Width="220"/>
+                                            <ColumnDefinition Width="80"/>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Slot" Foreground="{StaticResource FgDim}"/>
+                                        <TextBlock Grid.Column="1" Text="Item" Foreground="{StaticResource FgDim}"/>
+                                        <TextBlock Grid.Column="2" Text="Enh." Foreground="{StaticResource FgDim}"/>
+                                        <TextBlock Grid.Column="3" Text="Charges" Foreground="{StaticResource FgDim}"/>
+                                        <TextBlock Grid.Column="4" Text="Freeze charges" Foreground="{StaticResource FgDim}"/>
+                                    </Grid>
+                                </StackPanel>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,4,4,0">
+                                    <ItemsControl ItemsSource="{Binding Items}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:ItemSlotViewModel}">
+                                                <Grid Margin="0,2">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="110"/>
+                                                        <ColumnDefinition Width="220"/>
+                                                        <ColumnDefinition Width="80"/>
+                                                        <ColumnDefinition Width="90"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"/>
+                                                    <ComboBox Grid.Column="1" Width="200" HorizontalAlignment="Left" Height="26"
+                                                              ItemsSource="{Binding Choices}"
+                                                              SelectedValuePath="Id" SelectedValue="{Binding ItemId}"
+                                                              IsSynchronizedWithCurrentItem="False"
+                                                              IsTextSearchEnabled="True" TextSearch.TextPath="Display"
+                                                              ScrollViewer.CanContentScroll="False">
+                                                        <ComboBox.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <TextBlock Text="{Binding Display}"/>
+                                                            </DataTemplate>
+                                                        </ComboBox.ItemTemplate>
+                                                    </ComboBox>
+                                                    <ComboBox Grid.Column="2" Width="68" HorizontalAlignment="Left" Height="26"
+                                                              ItemsSource="{Binding Enhancements}"
+                                                              SelectedItem="{Binding SelectedEnhancement}"
+                                                              IsEnabled="{Binding HasEnhancements}"
+                                                              IsSynchronizedWithCurrentItem="False"
+                                                              ToolTip="Switch this item between its base and the higher (+1/+2/+3) versions the game defines for it.">
+                                                        <ComboBox.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <TextBlock Text="{Binding Label}"/>
+                                                            </DataTemplate>
+                                                        </ComboBox.ItemTemplate>
+                                                    </ComboBox>
+                                                    <TextBox Grid.Column="3" Width="60" HorizontalAlignment="Left"
+                                                             Text="{Binding Charges, UpdateSourceTrigger=LostFocus}"/>
+                                                    <CheckBox Grid.Column="4" Content="🧊 Freeze" VerticalAlignment="Center"
+                                                              IsChecked="{Binding FreezeCharges}"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </DockPanel>
+                        </TabItem>
+
+                        <!-- ===== Raw bytes tab ===== -->
+                        <TabItem Header="Raw Bytes">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Margin="0,0,0,6" Foreground="{StaticResource FgDim}"
+                                           Text="Every byte of the 127-byte record. Edit the Hex or Dec cell; changes write to the game immediately when attached."/>
+                                <DataGrid ItemsSource="{Binding HexBytes}" AutoGenerateColumns="False"
+                                          CanUserAddRows="False" CanUserDeleteRows="False"
+                                          HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                          Background="{StaticResource Panel}" Foreground="{StaticResource Fg}"
+                                          RowBackground="{StaticResource Panel2}" AlternatingRowBackground="{StaticResource Panel}"
+                                          BorderThickness="0" FontFamily="Consolas">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Offset" Binding="{Binding OffsetHex}" IsReadOnly="True" Width="70"/>
+                                        <DataGridTextColumn Header="Hex" Binding="{Binding ValueHex, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                                        <DataGridTextColumn Header="Dec" Binding="{Binding Value, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                                        <DataGridTextColumn Header="Field" Binding="{Binding Label}" IsReadOnly="True" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </TabItem>
+                    </TabControl>
+                </Grid>
+                </TabItem>
+
+                <!-- ============ Cast (quick-cast key macros) ============ -->
+                <TabItem Header="🪄 Cast"
+                         DataContext="{Binding DataContext.SpellMacros, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+                        <StackPanel>
+                            <!-- ===== Cast a spell (picks keystrokes from the spellbook) ===== -->
+                            <TextBlock Style="{StaticResource Section}" Text="Cast a spell"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,8"
+                                       Text="Pick the caster on the left, choose a spell, and the trainer types the in-game key walk for you (caster slot → c → spell level → spell number → Enter). The spell list comes from the character's class and known spell level. For every spell and its description, see the 📖 Spells tab."/>
+
+                            <Border Background="{StaticResource Panel2}" CornerRadius="4" Padding="8" Margin="0,0,0,8">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding CasterHeader}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding CasterClassLine}" Foreground="{StaticResource FgDim}"
+                                               Margin="0,2,0,0"/>
+
+                                    <StackPanel Margin="0,8,0,0"
+                                                Visibility="{Binding CasterCanCast, Converter={StaticResource BoolVis}}">
+                                        <ComboBox ItemsSource="{Binding SpellsView}" SelectedItem="{Binding SelectedSpell}"
+                                                  Height="28" ScrollViewer.CanContentScroll="False">
+                                            <ComboBox.GroupStyle>
+                                                <GroupStyle>
+                                                    <GroupStyle.HeaderTemplate>
+                                                        <DataTemplate>
+                                                            <TextBlock Text="{Binding Name}" FontWeight="Bold"
+                                                                       Foreground="{StaticResource Accent}"
+                                                                       Margin="2,4,0,2"/>
+                                                        </DataTemplate>
+                                                    </GroupStyle.HeaderTemplate>
+                                                </GroupStyle>
+                                            </ComboBox.GroupStyle>
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type vm:SpellEntryViewModel}">
+                                                    <Grid Opacity="{Binding RowOpacity}" MinWidth="320">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="16"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding Lock}" FontSize="11"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding Display}"/>
+                                                        <TextBlock Grid.Column="2" Text="{Binding CostText}"
+                                                                   Foreground="{StaticResource FgDim}" Margin="12,0,0,0"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+
+                                        <!-- selected spell details -->
+                                        <StackPanel Margin="0,8,0,0" DataContext="{Binding SelectedSpell}">
+                                            <TextBlock Text="{Binding Spell.Name}" FontWeight="SemiBold" FontSize="13"/>
+                                            <TextBlock Text="{Binding DetailLine}" Foreground="{StaticResource FgDim}"
+                                                       Margin="0,1,0,0"/>
+                                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                            <TextBlock Text="{Binding CastableNote}" TextWrapping="Wrap"
+                                                       Foreground="#E0746A" Margin="0,4,0,0"/>
+                                        </StackPanel>
+
+                                        <Grid Margin="0,8,0,0">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                <TextBlock Text="Keys sent" Foreground="{StaticResource FgDim}" FontSize="11"/>
+                                                <TextBlock Text="{Binding SpellKeysPreview}" FontFamily="Consolas"/>
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Content="▶ Cast spell" VerticalAlignment="Center"
+                                                    Background="{StaticResource AccentDim}"
+                                                    Command="{Binding CastSpellCommand}"/>
+                                        </Grid>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,0,0,8"/>
+
+                            <TextBlock Style="{StaticResource Section}" Text="Quick-cast macros"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,8"
+                                       Text="Each macro replays a key sequence into the attached game window, so a long menu walk becomes one click. Attach first, then click Cast (the game window is brought to the foreground automatically). Syntax: type the characters to press (spaces are ignored); use tokens like {ENTER} {ESC} {SPACE} {UP} {DOWN} {LEFT} {RIGHT} and {DELAY:200} to pause."/>
+                            <WrapPanel Margin="0,0,0,8">
+                                <StackPanel Margin="0,0,16,0">
+                                    <Label Content="Delay between keys (ms)"/>
+                                    <TextBox Width="90" Text="{Binding KeyDelayMs, UpdateSourceTrigger=LostFocus}"/>
+                                </StackPanel>
+                                <StackPanel Margin="0,0,16,0">
+                                    <Label Content="Pause after focusing (ms)"/>
+                                    <TextBox Width="90" Text="{Binding FocusDelayMs, UpdateSourceTrigger=LostFocus}"/>
+                                </StackPanel>
+                            </WrapPanel>
+
+                            <ItemsControl ItemsSource="{Binding Macros}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:MacroViewModel}">
+                                        <Border Background="{StaticResource Panel2}" CornerRadius="4" Padding="6" Margin="0,0,0,5">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="180"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBox Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                             Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
+                                                    <TextBox Grid.Column="1" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                             FontFamily="Consolas"
+                                                             Text="{Binding Keys, UpdateSourceTrigger=PropertyChanged}"/>
+                                                    <Button Grid.Column="2" Content="▶ Cast" Margin="0,0,4,0"
+                                                            Command="{Binding DataContext.SendCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"/>
+                                                    <Button Grid.Column="3" Content="✕"
+                                                            Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}"/>
+                                                </Grid>
+                                                <TextBlock Text="{Binding KeysError}" Foreground="#E0746A" FontSize="11" Margin="0,3,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <Button Content="➕ Add macro" Command="{Binding AddCommand}"/>
+                                <Button Content="💾 Save" Command="{Binding SaveCommand}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ============ Memory search (Cheat-Engine-lite) ============ -->
+                <TabItem Header="🔍 Memory"
+                         DataContext="{Binding DataContext.MemorySearch, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Section}" Text="Memory search &amp; edit"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,8"
+                                       Text="Find values the roster format doesn't cover — e.g. the party's map North/East position and facing, which live in game state, not the character records. For a value the game never shows: pick a width, click First-scan Unknown, take one step in-game, click Decreased (or Increased), and repeat until one address remains. Then edit its value below."/>
+
+                            <WrapPanel Margin="0,0,0,6">
+                                <StackPanel Margin="0,0,16,0">
+                                    <Label Content="Width"/>
+                                    <ComboBox Width="90" ItemsSource="{Binding Widths}" SelectedItem="{Binding Width}"/>
+                                </StackPanel>
+                                <StackPanel Margin="0,0,16,0">
+                                    <Label Content="Value (dec or 0x..)"/>
+                                    <TextBox Width="120" Text="{Binding ValueText, UpdateSourceTrigger=PropertyChanged}"/>
+                                </StackPanel>
+                            </WrapPanel>
+
+                            <WrapPanel Margin="0,0,0,4">
+                                <Button Content="First-scan = value" Command="{Binding FirstScanExactCommand}"/>
+                                <Button Content="First-scan Unknown" Command="{Binding FirstScanUnknownCommand}"/>
+                                <Button Content="Reset" Command="{Binding ResetCommand}"/>
+                            </WrapPanel>
+                            <TextBlock Text="Next scan — keep addresses that…" Foreground="{StaticResource FgDim}" Margin="0,4,0,2"/>
+                            <WrapPanel Margin="0,0,0,4">
+                                <Button Content="= value" Command="{Binding NextExactCommand}"/>
+                                <Button Content="▲ Increased" Command="{Binding NextIncreasedCommand}"/>
+                                <Button Content="▼ Decreased" Command="{Binding NextDecreasedCommand}"/>
+                                <Button Content="≠ Changed" Command="{Binding NextChangedCommand}"/>
+                                <Button Content="= Unchanged" Command="{Binding NextUnchangedCommand}"/>
+                                <Button Content="↻ Refresh values" Command="{Binding RefreshValuesCommand}"/>
+                            </WrapPanel>
+
+                            <TextBlock Text="{Binding ResultSummary}" Foreground="{StaticResource FgDim}" Margin="0,4,0,4" TextWrapping="Wrap"/>
+
+                            <DataGrid ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                      Height="240" Background="{StaticResource Panel}" Foreground="{StaticResource Fg}"
+                                      RowBackground="{StaticResource Panel2}" AlternatingRowBackground="{StaticResource Panel}"
+                                      BorderThickness="0" FontFamily="Consolas">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="*"/>
+                                    <DataGridTextColumn Header="Value" Binding="{Binding ValueText}" Width="100"/>
+                                    <DataGridTextColumn Header="Hex" Binding="{Binding ValueHex}" Width="100"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Label Content="New value" VerticalAlignment="Center"/>
+                                <TextBox Width="120" Margin="6,0" VerticalAlignment="Center"
+                                         Text="{Binding NewValueText, UpdateSourceTrigger=PropertyChanged}"/>
+                                <Button Content="Write to selected address" Command="{Binding WriteSelectedCommand}"/>
+                            </StackPanel>
+
+                            <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,10,0,0" Padding="0,8,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Manual poke (uses the Width above)" Foreground="{StaticResource FgDim}" Margin="0,0,0,4"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Label Content="Address 0x" VerticalAlignment="Center"/>
+                                        <TextBox Width="160" Margin="4,0" VerticalAlignment="Center" FontFamily="Consolas"
+                                                 Text="{Binding PokeAddressText, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <Label Content="Value" VerticalAlignment="Center"/>
+                                        <TextBox Width="110" Margin="4,0" VerticalAlignment="Center"
+                                                 Text="{Binding PokeValueText, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <Button Content="Poke" Command="{Binding PokeCommand}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ============ X / Y search (find a coordinate pair) ============ -->
+                <TabItem Header="📍 X / Y Search"
+                         DataContext="{Binding DataContext.PairSearch, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Section}" Text="Find an X / Y pair"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,8"
+                                       Text="Searches memory for two values stored side by side as adjacent bytes — e.g. X=10, Y=5 is the byte pattern 0A 05. This is how the game keeps the party's map position (North/East), which the roster format doesn't expose. A single pair matches in many incidental places, so the trick is to Search, take one step in-game, enter the new X/Y, and Narrow — repeating until one address remains. Attach to the game first."/>
+
+                            <WrapPanel Margin="0,0,0,6">
+                                <StackPanel Margin="0,0,16,0">
+                                    <Label Content="X (0–255, dec or 0x..)"/>
+                                    <TextBox Width="110" Text="{Binding XText, UpdateSourceTrigger=PropertyChanged}"/>
+                                </StackPanel>
+                                <StackPanel Margin="0,0,16,0">
+                                    <Label Content="Y (0–255, dec or 0x..)"/>
+                                    <TextBox Width="110" Text="{Binding YText, UpdateSourceTrigger=PropertyChanged}"/>
+                                </StackPanel>
+                            </WrapPanel>
+                            <TextBlock Text="{Binding PatternPreview}" Foreground="{StaticResource Accent}"
+                                       FontFamily="Consolas" Margin="0,0,0,6" TextWrapping="Wrap"/>
+
+                            <WrapPanel Margin="0,0,0,4">
+                                <Button Content="🔍 Search" Command="{Binding SearchCommand}"
+                                        Background="{StaticResource AccentDim}"/>
+                                <Button Content="⊓ Narrow to these" Command="{Binding NarrowCommand}"
+                                        ToolTip="After moving in-game, enter the new X/Y and click this to keep only addresses that now hold the new pair."/>
+                                <Button Content="↻ Refresh values" Command="{Binding RefreshCommand}"/>
+                                <Button Content="✕ Reset" Command="{Binding ResetCommand}"/>
+                            </WrapPanel>
+
+                            <TextBlock Text="{Binding ResultSummary}" Foreground="{StaticResource FgDim}"
+                                       Margin="0,4,0,4" TextWrapping="Wrap"/>
+
+                            <DataGrid ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                      Height="260" Background="{StaticResource Panel}" Foreground="{StaticResource Fg}"
+                                      RowBackground="{StaticResource Panel2}" AlternatingRowBackground="{StaticResource Panel}"
+                                      BorderThickness="0" FontFamily="Consolas"
+                                      BeginningEdit="OnXyGridBeginningEdit" CellEditEnding="OnXyGridCellEditEnding">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" IsReadOnly="True" Width="*"/>
+                                    <DataGridTextColumn Header="X" Width="70"
+                                                        Binding="{Binding X, UpdateSourceTrigger=LostFocus,
+                                                                  ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                                    <DataGridTextColumn Header="Y" Width="70"
+                                                        Binding="{Binding Y, UpdateSourceTrigger=LostFocus,
+                                                                  ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                                    <DataGridTextColumn Header="Bytes" Binding="{Binding BytesHex}" IsReadOnly="True" Width="120"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,6,0,0"
+                                       Text="✎ Found the address? Double-click its X or Y cell, type a new value, and press Enter — it's written to the game the moment you leave the cell. (X and Y are each 0–255.)"/>
+                            <CheckBox Content="↻ Auto-refresh values (once narrowed)" IsChecked="{Binding AutoRefresh}"
+                                      Margin="0,6,0,0"
+                                      ToolTip="Once you're down to a handful of addresses, re-reads their live values every ¾ second so you can watch them change as you move in-game."/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ============ Memory dump (whole process → file) ============ -->
+                <TabItem Header="💾 Dump"
+                         DataContext="{Binding DataContext.MemoryDump, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Section}" Text="Dump process memory to a file"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,8"
+                                       Text="Writes every committed, readable memory region of the attached process — the whole DOSBox-X address space, emulated DOS memory included — into a single .bin file, with a .csv index alongside it mapping each region's offset in the file back to its live process address. Open the .bin in a hex editor to hunt for game data: find a byte pattern, look up which region its file offset falls in, and the index gives the live address to poke (e.g. in the Memory tab). Dumping twice — before and after a change in-game — and diffing the two files shows exactly which bytes moved. Attach to the game first."/>
+
+                            <WrapPanel Margin="0,0,0,4">
+                                <Button Content="💾 Dump memory to file…" Click="OnDumpMemoryClicked"
+                                        IsEnabled="{Binding CanDump}" Background="{StaticResource AccentDim}"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        ToolTip="Pick where to save the dump. Attach to the game first."/>
+                                <Button Content="✕ Cancel" Command="{Binding CancelCommand}"
+                                        ToolTip="Stops the dump and discards its partial output. An earlier finished dump at the same name is left untouched."/>
+                                <Button Content="📂 Open folder" Command="{Binding OpenFolderCommand}"
+                                        ToolTip="Shows the last completed dump in File Explorer."/>
+                            </WrapPanel>
+
+                            <ProgressBar Height="14" Minimum="0" Maximum="1" Value="{Binding Progress, Mode=OneWay}"
+                                         IsIndeterminate="{Binding IsIndeterminate}"
+                                         Margin="0,4,0,6" Background="{StaticResource Panel2}"
+                                         Foreground="{StaticResource Accent}" BorderThickness="0"/>
+
+                            <TextBlock Text="{Binding Summary}" Foreground="{StaticResource FgDim}" TextWrapping="Wrap"/>
+
+                            <!-- ===== Compare two dumps (offline; works on the saved files) ===== -->
+                            <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,12,0,0" Padding="0,8,0,0"
+                                    DataContext="{Binding DataContext.DumpDiff, RelativeSource={RelativeSource AncestorType=Window}}">
+                                <StackPanel>
+                                    <TextBlock Style="{StaticResource Section}" Text="Compare two dumps"/>
+                                    <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,6"
+                                               Text="Diffs two saved dumps and lists every changed byte run by its live process address — dump, change exactly one thing in-game (take a step, spend a gold piece), dump again, and compare. The addresses can be poked in the Memory tab. Each .bin needs its .csv index beside it; the comparison is done by address, so it stays correct even if the emulator remapped memory between dumps."/>
+                                    <Grid Margin="0,0,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/><RowDefinition/>
+                                        </Grid.RowDefinitions>
+                                        <Label Grid.Row="0" Grid.Column="0" Content="Before (older)" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Row="0" Grid.Column="1" Margin="6,1" VerticalAlignment="Center"
+                                                 Text="{Binding OldPath, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <Button Grid.Row="0" Grid.Column="2" Content="📂" Margin="0,0,0,2" Padding="8,3"
+                                                Click="OnBrowseOldDumpClicked"/>
+                                        <Label Grid.Row="1" Grid.Column="0" Content="After (newer)" VerticalAlignment="Center"/>
+                                        <TextBox Grid.Row="1" Grid.Column="1" Margin="6,1" VerticalAlignment="Center"
+                                                 Text="{Binding NewPath, UpdateSourceTrigger=PropertyChanged}"/>
+                                        <Button Grid.Row="1" Grid.Column="2" Content="📂" Margin="0,0,0,2" Padding="8,3"
+                                                Click="OnBrowseNewDumpClicked"/>
+                                    </Grid>
+                                    <WrapPanel>
+                                        <Button Content="⇆ Compare" Command="{Binding CompareCommand}"
+                                                Background="{StaticResource AccentDim}"/>
+                                        <Button Content="✕ Cancel" Command="{Binding CancelCommand}"/>
+                                    </WrapPanel>
+                                    <ProgressBar Height="14" Minimum="0" Maximum="1" Value="{Binding Progress, Mode=OneWay}"
+                                                 Margin="0,4,0,6" Background="{StaticResource Panel2}"
+                                                 Foreground="{StaticResource Accent}" BorderThickness="0"/>
+                                    <TextBlock Text="{Binding Summary}" Foreground="{StaticResource FgDim}" TextWrapping="Wrap"
+                                               Margin="0,0,0,6"/>
+                                    <DataGrid ItemsSource="{Binding Results}" AutoGenerateColumns="False"
+                                              CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True"
+                                              HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                              Height="240" Background="{StaticResource Panel}" Foreground="{StaticResource Fg}"
+                                              RowBackground="{StaticResource Panel2}" AlternatingRowBackground="{StaticResource Panel}"
+                                              BorderThickness="0" FontFamily="Consolas">
+                                        <DataGrid.Columns>
+                                            <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="140"/>
+                                            <DataGridTextColumn Header="Len" Binding="{Binding Length}" Width="60"/>
+                                            <DataGridTextColumn Header="Before" Binding="{Binding OldHex}" Width="*"/>
+                                            <DataGridTextColumn Header="After" Binding="{Binding NewHex}" Width="*"/>
+                                        </DataGrid.Columns>
+                                    </DataGrid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ============ Maps (bundled area reference maps) ============ -->
+                <TabItem Header="🗺 Maps"
+                         DataContext="{Binding DataContext.MapReference, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <DockPanel Margin="4">
+                        <StackPanel DockPanel.Dock="Top">
+                            <TextBlock Style="{StaticResource Section}" Text="Area maps"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,6"
+                                       Text="Bundled reference maps for the towns, castles, overworld areas and dungeons of Might &amp; Magic 1. Pick a map to view it; drag the scrollbars to pan around larger maps."/>
+                            <ComboBox ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}" Height="28"
+                                      ScrollViewer.CanContentScroll="False">
+                                <ComboBox.GroupStyle>
+                                    <GroupStyle>
+                                        <GroupStyle.HeaderTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold"
+                                                           Foreground="{StaticResource Accent}" Margin="2,4,0,2"/>
+                                            </DataTemplate>
+                                        </GroupStyle.HeaderTemplate>
+                                    </GroupStyle>
+                                </ComboBox.GroupStyle>
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:MapEntryViewModel}">
+                                        <TextBlock Text="{Binding Name}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <StackPanel DataContext="{Binding SelectedMap}" Margin="0,8,0,6">
+                                <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"/>
+                                <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                                           Foreground="{StaticResource FgDim}" Margin="0,2,0,0"/>
+                            </StackPanel>
+
+                            <!-- live party marker / teleport controls -->
+                            <Border Background="{StaticResource Panel2}" CornerRadius="4" Padding="8" Margin="0,0,0,6">
+                                <StackPanel>
+                                    <WrapPanel>
+                                        <TextBlock Text="Live position:" Foreground="{StaticResource FgDim}" Margin="0,0,6,0"/>
+                                        <TextBlock Text="{Binding LivePositionText}" FontFamily="Consolas"
+                                                   Foreground="{StaticResource Accent}" Margin="0,0,16,0"/>
+                                        <TextBlock Text="{Binding CalibrationText}" Foreground="{StaticResource FgDim}"/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <CheckBox Content="✛ Mark party position (next map click)"
+                                                  IsChecked="{Binding IsMarkingAnchor}" IsEnabled="{Binding HasPositionLock}"
+                                                  VerticalAlignment="Center"
+                                                  ToolTip="Tick, then click the party's current spot on the map below. Two marks from different positions calibrate the map."/>
+                                        <CheckBox Content="🚀 Teleport on click" IsChecked="{Binding TeleportOnClick}"
+                                                  IsEnabled="{Binding IsCalibrated}" VerticalAlignment="Center"
+                                                  ToolTip="When ticked, clicking the map writes that cell's X/Y to the locked position address — the party jumps there."/>
+                                        <Button Content="🗑 Clear calibration" Command="{Binding ClearCalibrationCommand}"
+                                                ToolTip="Forgets this map's anchors (e.g. after a mis-click)."/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <TextBlock Text="Go to cell:" Foreground="{StaticResource FgDim}"
+                                                   VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <TextBlock Text="X" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                                        <TextBox Text="{Binding GoToX, UpdateSourceTrigger=PropertyChanged}" Width="42"
+                                                 VerticalContentAlignment="Center" FontFamily="Consolas" Margin="0,0,8,0"
+                                                 ToolTip="Destination X (0–15)."/>
+                                        <TextBlock Text="Y" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                                        <TextBox Text="{Binding GoToY, UpdateSourceTrigger=PropertyChanged}" Width="42"
+                                                 VerticalContentAlignment="Center" FontFamily="Consolas" Margin="0,0,8,0"
+                                                 ToolTip="Destination Y (0–15)."/>
+                                        <Button Content="🚀 Teleport" Command="{Binding TeleportToInputCommand}"
+                                                ToolTip="Writes the typed X/Y straight to the locked position address. Needs the position locked, but no map calibration."/>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding HintText}" TextWrapping="Wrap" FontSize="11"
+                                               Foreground="{StaticResource FgDim}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        <Border Background="{StaticResource Panel2}" CornerRadius="4">
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                          Padding="4">
+                                <!-- The Grid wraps the unscaled image plus the marker overlay, so a click's
+                                     position relative to the grid IS the image-pixel coordinate. -->
+                                <Grid HorizontalAlignment="Left" VerticalAlignment="Top"
+                                      MouseLeftButtonDown="OnMapImageClicked" Background="Transparent">
+                                    <Image Source="{Binding SelectedMap.Image}" Stretch="None"
+                                           HorizontalAlignment="Left" VerticalAlignment="Top"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                    <Canvas IsHitTestVisible="False">
+                                        <!-- party marker: a gold dot with a dark halo, centred on the cell -->
+                                        <Grid Canvas.Left="{Binding MarkerX}" Canvas.Top="{Binding MarkerY}"
+                                              Visibility="{Binding MarkerVisible, Converter={StaticResource BoolVis}}">
+                                            <Ellipse Width="18" Height="18" Margin="-9,-9,0,0"
+                                                     Stroke="#CC1E1F26" StrokeThickness="4"/>
+                                            <Ellipse Width="18" Height="18" Margin="-9,-9,0,0"
+                                                     Stroke="{StaticResource Accent}" StrokeThickness="2"/>
+                                            <Ellipse Width="6" Height="6" Margin="-3,-3,0,0"
+                                                     Fill="{StaticResource Accent}"/>
+                                        </Grid>
+                                    </Canvas>
+                                </Grid>
+                            </ScrollViewer>
+                        </Border>
+                    </DockPanel>
+                </TabItem>
+
+                <!-- ============ Map drawn from Mazedata.dta ============ -->
+                <TabItem Header="🧭 Map (drawn)"
+                         DataContext="{Binding DataContext.DrawnMap, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <DockPanel Margin="4">
+                        <StackPanel DockPanel.Dock="Top">
+                            <TextBlock Style="{StaticResource Section}" Text="Maps drawn from game data"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,6"
+                                       Text="Rendered straight from the game's own Mazedata.dta — the walls, doors and secret passages of all 55 mazes. Pick your current area; the gold dot is the live party cell. With Teleport on click, clicking a cell jumps the party there (exact cells, no calibration needed)."/>
+                            <WrapPanel Margin="0,0,0,6">
+                                <Button Content="📂 Load Mazedata.dta" Click="OnLoadMazedataClicked"/>
+                                <TextBlock Text="{Binding MazeStatus}" Foreground="{StaticResource FgDim}"
+                                           VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            </WrapPanel>
+                            <ComboBox ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}" Height="28"
+                                      IsEnabled="{Binding HasMaze}" ScrollViewer.CanContentScroll="False">
+                                <ComboBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding DisplayName}"/>
+                                    </DataTemplate>
+                                </ComboBox.ItemTemplate>
+                            </ComboBox>
+                            <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource FgDim}" TextWrapping="Wrap"
+                                       Text="Legend:  grey = wall   ·   gold = door   ·   teal dashed = special edge   ·   thin dashed = secret / illusory wall"/>
+                            <WrapPanel Margin="0,6,0,0">
+                                <CheckBox Content="🧭 Follow current map automatically" IsChecked="{Binding AutoFollowCurrentMap}"
+                                          VerticalAlignment="Center"
+                                          ToolTip="Detects the current map by matching the game's live maze buffer to the decoded data, and selects it for you."/>
+                                <TextBlock Text="{Binding DetectedText}" Foreground="{StaticResource Accent}"
+                                           VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            </WrapPanel>
+
+                            <Border Background="{StaticResource Panel2}" CornerRadius="4" Padding="8" Margin="0,8,0,6">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding DataContext.GameStateText, RelativeSource={RelativeSource AncestorType=Window}}"
+                                               FontFamily="Consolas" Foreground="{StaticResource Accent}" TextWrapping="Wrap"/>
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <TextBlock Text="Live position:" Foreground="{StaticResource FgDim}" Margin="0,0,6,0"/>
+                                        <TextBlock Text="{Binding LivePositionText}" FontFamily="Consolas"
+                                                   Foreground="{StaticResource Accent}" Margin="0,0,16,0"/>
+                                        <CheckBox Content="🚀 Teleport on click" IsChecked="{Binding TeleportOnClick}"
+                                                  IsEnabled="{Binding HasPositionLock}" VerticalAlignment="Center"
+                                                  ToolTip="When ticked, clicking a cell writes its X/Y to the locked position address."/>
+                                    </WrapPanel>
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <TextBlock Text="Go to cell:" Foreground="{StaticResource FgDim}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                        <TextBlock Text="X" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                                        <TextBox Text="{Binding GoToX, UpdateSourceTrigger=PropertyChanged}" Width="42"
+                                                 VerticalContentAlignment="Center" FontFamily="Consolas" Margin="0,0,8,0"/>
+                                        <TextBlock Text="Y" VerticalAlignment="Center" Margin="0,0,3,0"/>
+                                        <TextBox Text="{Binding GoToY, UpdateSourceTrigger=PropertyChanged}" Width="42"
+                                                 VerticalContentAlignment="Center" FontFamily="Consolas" Margin="0,0,8,0"/>
+                                        <Button Content="🚀 Teleport" Command="{Binding TeleportToInputCommand}"/>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding HintText}" TextWrapping="Wrap" FontSize="11"
+                                               Foreground="{StaticResource FgDim}" Margin="0,2,0,0"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <Border Background="{StaticResource Panel2}" CornerRadius="4">
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Padding="10">
+                                <Grid HorizontalAlignment="Left" VerticalAlignment="Top"
+                                      Width="{Binding BoardSize}" Height="{Binding BoardSize}"
+                                      MouseLeftButtonDown="OnDrawnMapClicked" Background="Transparent">
+                                    <Image Source="{Binding Board}" Stretch="Fill"
+                                           Width="{Binding BoardSize}" Height="{Binding BoardSize}"/>
+                                    <Canvas IsHitTestVisible="False">
+                                        <Grid Canvas.Left="{Binding MarkerX}" Canvas.Top="{Binding MarkerY}"
+                                              Visibility="{Binding MarkerVisible, Converter={StaticResource BoolVis}}">
+                                            <Ellipse Width="16" Height="16" Margin="-8,-8,0,0" Stroke="#CC161821" StrokeThickness="4"/>
+                                            <Ellipse Width="16" Height="16" Margin="-8,-8,0,0" Stroke="{StaticResource Accent}" StrokeThickness="2"/>
+                                            <Ellipse Width="6" Height="6" Margin="-3,-3,0,0" Fill="{StaticResource Accent}"/>
+                                        </Grid>
+                                    </Canvas>
+                                </Grid>
+                            </ScrollViewer>
+                        </Border>
+                    </DockPanel>
+                </TabItem>
+
+                <!-- ============ Auto-fight ============ -->
+                <TabItem Header="⚔ Auto-fight"
+                         DataContext="{Binding DataContext.AutoCombat, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <DockPanel Margin="8">
+                        <StackPanel DockPanel.Dock="Top" MaxWidth="660" HorizontalAlignment="Left">
+                            <TextBlock Style="{StaticResource Section}" Text="Auto-fight"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,8"
+                                       Text="While combat is detected, the trainer focuses the game window and replays the key sequence below each round, then stops when combat ends. Keep the game windowed and in front."/>
+                            <Border Background="{StaticResource Panel2}" CornerRadius="4" Padding="10">
+                                <StackPanel>
+                                    <CheckBox Content="Enable auto-fight" IsChecked="{Binding Enabled}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding Activity}" FontFamily="Consolas"
+                                               Foreground="{StaticResource Accent}" Margin="0,8,0,0"/>
+                                    <TextBlock Text="{Binding DataContext.GameStateText, RelativeSource={RelativeSource AncestorType=Window}}"
+                                               FontFamily="Consolas" Foreground="{StaticResource FgDim}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                    <TextBlock Text="Keys sent each round (spaces between letters are ignored):"
+                                               Margin="0,10,0,2" Foreground="{StaticResource FgDim}"/>
+                                    <TextBox Text="{Binding Keys, UpdateSourceTrigger=PropertyChanged}" FontFamily="Consolas"/>
+                                    <TextBlock Text="{Binding KeysError}" Foreground="#E06C75" Margin="0,2,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource FgDim}" Margin="0,8,0,0"
+                                       Text="⚠ Combat detection reuses the game's own &quot;non-combat-only&quot; gate (DS:0xC5DC[activeChar] &amp; 2), recovered by reverse-engineering. Watch the game-state line above to confirm it reads 'in combat: yes' during a fight before trusting auto-fight unattended."/>
+                        </StackPanel>
+                    </DockPanel>
+                </TabItem>
+
+                <!-- ============ Roll predictor (live LFSR) ============ -->
+                <TabItem Header="🎲 Roll Predictor"
+                         DataContext="{Binding DataContext.RollPredictor, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <DockPanel Margin="8">
+                        <StackPanel DockPanel.Dock="Top">
+                            <TextBlock Style="{StaticResource Section}" Text="Roll predictor"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,6"
+                                       Text="The game's randomness is a deterministic LFSR (its state lives in memory). Reading that state lets the trainer predict upcoming dice rolls exactly — to-hit uses d20, weapon/HP damage use the weapon/class die, etc. Each row assumes that die is the NEXT random draw the game makes; the predictions update live as rolls happen."/>
+                            <Border Background="{StaticResource Panel2}" CornerRadius="4" Padding="8" Margin="0,0,0,6">
+                                <TextBlock Text="{Binding StateText}" FontFamily="Consolas" Foreground="{StaticResource Accent}" TextWrapping="Wrap"/>
+                            </Border>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{StaticResource FgDim}" Margin="0,0,0,6"
+                                       Text="ℹ Reverse-engineered from Mm.exe and verified byte-exact against the disassembly. The 'Next 8' column is the sequence that die would produce starting now."/>
+                        </StackPanel>
+                        <DataGrid ItemsSource="{Binding Predictions}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False"
+                                  Background="{StaticResource Panel2}" RowBackground="Transparent" FontFamily="Consolas">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Die" Binding="{Binding Die}" Width="70"/>
+                                <DataGridTextColumn Header="Next roll" Binding="{Binding Next}" Width="90"/>
+                                <DataGridTextColumn Header="Next 8 rolls" Binding="{Binding Sequence}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </TabItem>
+
+                <!-- ============ Spells (full reference; was a pop-up window) ============ -->
+                <TabItem Header="📖 Spells"
+                         DataContext="{Binding DataContext.SpellReference, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <DockPanel Margin="4">
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Section}"
+                                   Text="All spells &amp; descriptions"/>
+                        <TextBlock DockPanel.Dock="Top" Foreground="{StaticResource FgDim}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                   Text="Every Cleric and Sorcerer spell in Might &amp; Magic 1, grouped by spell level. The L# / #N coordinates match what you type in the game's cast menu."/>
+                        <TabControl Background="Transparent" BorderThickness="0">
+                            <TabItem Header="Cleric spells">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="2,6,6,2">
+                                    <ItemsControl ItemsSource="{Binding ClericSpells}"
+                                                  ItemTemplate="{StaticResource SpellRow}">
+                                        <ItemsControl.GroupStyle>
+                                            <GroupStyle ContainerStyle="{StaticResource GroupHeader}"/>
+                                        </ItemsControl.GroupStyle>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </TabItem>
+                            <TabItem Header="Sorcerer spells">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="2,6,6,2">
+                                    <ItemsControl ItemsSource="{Binding SorcererSpells}"
+                                                  ItemTemplate="{StaticResource SpellRow}">
+                                        <ItemsControl.GroupStyle>
+                                            <GroupStyle ContainerStyle="{StaticResource GroupHeader}"/>
+                                        </ItemsControl.GroupStyle>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </TabItem>
+                        </TabControl>
+                    </DockPanel>
+                </TabItem>
+
+                <!-- ============ Item reference ============ -->
+                <TabItem Header="🎒 Items"
+                         DataContext="{Binding DataContext.ItemReference, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <DockPanel Margin="4">
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Section}"
+                                   Text="Items &amp; equipment"/>
+                        <TextBlock DockPanel.Dock="Top" Foreground="{StaticResource FgDim}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                   Text="The game's complete item table — all 255 items grouped by category, each showing its id, shop cost, and damage/armor/charges (extracted from MM.EXE). The id is the number you'll see in the Inventory tab's item picker."/>
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="🔍 Search:" Foreground="{StaticResource FgDim}"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Grid.Column="1" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Filter the list by item name, id, effect or usable class (e.g. cursed, knight, fire)."/>
+                        </Grid>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="2,6,6,2">
+                            <ItemsControl ItemsSource="{Binding Items}"
+                                          ItemTemplate="{StaticResource ItemRow}">
+                                <ItemsControl.GroupStyle>
+                                    <GroupStyle ContainerStyle="{StaticResource GroupHeader}"/>
+                                </ItemsControl.GroupStyle>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </TabItem>
+
+                <!-- ============ Monster reference (the game's bestiary) ============ -->
+                <TabItem Header="🐉 Monsters"
+                         DataContext="{Binding DataContext.MonsterReference, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <DockPanel Margin="4">
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Section}"
+                                   Text="Monsters"/>
+                        <TextBlock DockPanel.Dock="Top" Foreground="{StaticResource FgDim}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                   Text="The game's complete monster table — all 195 monsters grouped by difficulty tier (random encounters draw from groups I–X by area danger level, aquatic monsters appear on water), each with its hit points (the game adds a small random bonus per monster), armor class, melee damage × attacks per round, speed, group size, and the experience a kill awards. Extracted from MM.EXE; special attacks and resistances aren't decoded yet."/>
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="🔍 Search:" Foreground="{StaticResource FgDim}"
+                                       VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox Grid.Column="1" Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                     ToolTip="Filter the list by monster name or id (e.g. dragon, 195)."/>
+                        </Grid>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="2,6,6,2">
+                            <ItemsControl ItemsSource="{Binding Monsters}">
+                                <ItemsControl.GroupStyle>
+                                    <GroupStyle ContainerStyle="{StaticResource GroupHeader}"/>
+                                </ItemsControl.GroupStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:MonsterEntryViewModel}">
+                                        <Border Background="{StaticResource Panel2}" CornerRadius="4" Padding="8" Margin="0,0,0,5">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontWeight="SemiBold"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding ExpTag}"
+                                                               Foreground="{StaticResource Accent}" Margin="12,0,0,0"/>
+                                                </Grid>
+                                                <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                                                           Foreground="{StaticResource FgDim}" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </TabItem>
+
+                <!-- ============ Classes (min stats, HP/level, XP table) ============ -->
+                <TabItem Header="🛡 Classes"
+                         DataContext="{Binding DataContext.ClassReference, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Section}" Text="Character classes"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,8"
+                                       Text="The six Might &amp; Magic 1 classes, each with the prime attribute(s) a character needs to qualify, the hit points gained per level, and whether it casts spells. A character must have every prime statistic at the listed minimum; the Robber has no minimum, so any roll qualifies. Transcribed from the MM1 manual."/>
+                            <ItemsControl ItemsSource="{Binding Classes}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:ClassEntryViewModel}">
+                                        <Border Background="{StaticResource Panel2}" CornerRadius="4" Padding="8" Margin="0,0,0,5">
+                                            <StackPanel>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="SemiBold" FontSize="13"/>
+                                                    <TextBlock Grid.Column="1" Text="{Binding Spells}"
+                                                               Foreground="{StaticResource Accent}" Margin="12,0,0,0"/>
+                                                </Grid>
+                                                <TextBlock Text="{Binding Requirement}" Foreground="{StaticResource Accent}"
+                                                           TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                                <TextBlock Text="{Binding MetaLine}" Foreground="{StaticResource FgDim}"
+                                                           TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                                <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Style="{StaticResource Section}" Text="Experience &amp; levels" Margin="0,12,0,4"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,6"
+                                       Text="You gain experience from combat but only advance a level by paying at a Training Center. The manual states roughly 2,000 points are needed to reach level 2, with the requirement generally doubling each level after — so these figures are approximate. The character's raw experience is the value edited on the Character tab."/>
+                            <DataGrid ItemsSource="{Binding ExperienceTable}" AutoGenerateColumns="False"
+                                      CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True"
+                                      HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                      Background="{StaticResource Panel}" Foreground="{StaticResource Fg}"
+                                      RowBackground="{StaticResource Panel2}" AlternatingRowBackground="{StaticResource Panel}"
+                                      BorderThickness="0" FontFamily="Consolas">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Reach level" Binding="{Binding Level}" Width="*"/>
+                                    <DataGridTextColumn Header="XP from previous (≈)" Binding="{Binding FromPreviousText}" Width="*"/>
+                                    <DataGridTextColumn Header="Cumulative XP (≈)" Binding="{Binding CumulativeText}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <!-- ============ Walkthrough (solution guide reference) ============ -->
+                <TabItem Header="🧭 Walkthrough"
+                         DataContext="{Binding DataContext.Walkthrough, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <DockPanel Margin="4">
+                        <StackPanel DockPanel.Dock="Top">
+                            <TextBlock Style="{StaticResource Section}" Text="Solution walkthrough"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,6"
+                                       Text="A practical, broadly-ordered guide to finishing Might &amp; Magic 1 — from party creation through the Inner Sanctum. Summarised from community guides; some coordinates vary between sources. Contains story spoilers."/>
+                        </StackPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="2,4,6,2">
+                            <ItemsControl ItemsSource="{Binding Sections}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:WalkthroughSectionViewModel}">
+                                        <Border Background="{StaticResource Panel2}" CornerRadius="4" Padding="8" Margin="0,0,0,6">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="13"
+                                                           Foreground="{StaticResource Accent}" Margin="0,0,0,4"/>
+                                                <ItemsControl ItemsSource="{Binding Steps}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate DataType="{x:Type vm:WalkthroughStepViewModel}">
+                                                            <Grid Margin="0,2">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="28"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Grid.Column="0" Text="{Binding Number}" VerticalAlignment="Top"
+                                                                           Foreground="{StaticResource FgDim}" FontFamily="Consolas"/>
+                                                                <TextBlock Grid.Column="1" Text="{Binding Text}" TextWrapping="Wrap"
+                                                                           VerticalAlignment="Top"/>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </TabItem>
+
+                <!-- ============ Roll a Hero (auto re-roll on the create screen) ============ -->
+                <TabItem Header="🎲 Roll a Hero"
+                         DataContext="{Binding DataContext.Roller, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Section}" Text="Roll a hero"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,8"
+                                       Text="Automates the CREATE NEW CHARACTERS re-roll: it taps Enter for you and reads each fresh roll straight from the game's memory, stopping when your target is hit. The freshly-rolled stats aren't a saved character yet, so the trainer first has to find them — type the seven numbers currently on the create screen, click Lock onto roll, then set a target and Roll. Attach to the game first."/>
+
+                            <!-- 1 · capture the on-screen roll to locate it in memory -->
+                            <TextBlock Text="1 · Capture the current roll" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" FontSize="11" Margin="0,0,0,4"
+                                       Text="Enter the seven attribute values exactly as they show on the create screen. ‘Live’ fills in once locked, and updates on every roll."/>
+                            <Grid Margin="0,0,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Attribute" Foreground="{StaticResource FgDim}"/>
+                                <TextBlock Grid.Column="1" Text="On screen" Foreground="{StaticResource FgDim}"/>
+                                <TextBlock Grid.Column="2" Text="Live" Foreground="{StaticResource FgDim}"/>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding Stats}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:RollStatViewModel}">
+                                        <Grid Margin="0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="80"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                            <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                     Text="{Binding Captured, UpdateSourceTrigger=LostFocus}"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding LiveText}" VerticalAlignment="Center"
+                                                       FontFamily="Consolas" Foreground="{StaticResource Accent}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <WrapPanel Margin="0,6,0,0">
+                                <Button Content="🎯 Lock onto roll" Command="{Binding LockCommand}"
+                                        Background="{StaticResource AccentDim}"/>
+                                <Button Content="↻ Read current roll" Command="{Binding ReadOnceCommand}"/>
+                                <Button Content="✕ Reset lock" Command="{Binding ResetLockCommand}"/>
+                            </WrapPanel>
+                            <TextBlock Text="{Binding LockInfo}" Foreground="{StaticResource FgDim}" TextWrapping="Wrap"
+                                       Margin="0,6,0,0"/>
+
+                            <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,10,0,8"/>
+
+                            <!-- 2 · target -->
+                            <TextBlock Text="2 · Set your target" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" FontSize="11" Margin="0,0,0,4"
+                                       Text="Set a minimum for each stat you care about. The roller stops once every stat is at or above its minimum. Leave a stat at 0 to ignore it."/>
+                            <Grid Margin="0,0,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Attribute" Foreground="{StaticResource FgDim}"/>
+                                <TextBlock Grid.Column="1" Text="Minimum (≥)" Foreground="{StaticResource FgDim}"/>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding Stats}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:RollStatViewModel}">
+                                        <Grid Margin="0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                            <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                     Text="{Binding Minimum, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Button Content="🗑 Clear all targets" Command="{Binding ClearMinimumsCommand}"
+                                    HorizontalAlignment="Left" Margin="0,6,0,0"
+                                    ToolTip="Reset every stat minimum back to blank (no requirement)."/>
+                            <TextBlock Text="{Binding CriteriaText}" Foreground="{StaticResource Accent}" TextWrapping="Wrap"
+                                       Margin="0,6,0,2"/>
+                            <TextBlock Text="{Binding OddsText}" Foreground="{StaticResource FgDim}" TextWrapping="Wrap"
+                                       Margin="0,0,0,6"/>
+
+                            <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,4,0,8"/>
+
+                            <!-- 3 · roll -->
+                            <TextBlock Text="3 · Roll" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                            <WrapPanel Margin="0,0,0,6">
+                                <Button Content="🎲 Roll until target met" Command="{Binding StartCommand}"
+                                        Background="{StaticResource AccentDim}"/>
+                                <Button Content="⏹ Stop" Command="{Binding StopCommand}"/>
+                            </WrapPanel>
+                            <TextBlock Text="{Binding AttemptsText}" Foreground="{StaticResource FgDim}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                <TextBlock Text="Best so far: " Foreground="{StaticResource FgDim}"/>
+                                <TextBlock Text="{Binding BestText}" Foreground="{StaticResource Fg}"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" Foreground="{StaticResource Accent}"
+                                       Margin="0,6,0,0"/>
+
+                            <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,10,0,8"/>
+
+                            <!-- 4 · statistics -->
+                            <TextBlock Text="4 · Statistics" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" FontSize="11" Margin="0,0,0,4"
+                                       Text="Tallies every fresh roll read this session and checks it against fair three-six-sided-dice (3d6): each attribute should average 10.5 over a range of 3–18, for a total around 73.5."/>
+                            <TextBlock Text="{Binding SamplesText}" Foreground="{StaticResource Fg}"/>
+                            <TextBlock Text="{Binding TotalSummaryText}" Foreground="{StaticResource FgDim}" TextWrapping="Wrap"
+                                       Margin="0,2,0,4"/>
+                            <Grid Margin="0,0,0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Attribute" Foreground="{StaticResource FgDim}"/>
+                                <TextBlock Grid.Column="1" Text="Average (min–max)" Foreground="{StaticResource FgDim}"/>
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding Stats}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:RollStatViewModel}">
+                                        <Grid Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding AvgText}" VerticalAlignment="Center"
+                                                       FontFamily="Consolas" Foreground="{StaticResource Accent}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="{Binding FairnessText}" Foreground="{StaticResource Accent}" TextWrapping="Wrap"
+                                       Margin="0,6,0,0"/>
+                            <Button Content="🗑 Clear statistics" Command="{Binding ClearStatsCommand}"
+                                    HorizontalAlignment="Left" Margin="0,6,0,0"/>
+
+                            <Expander Header="Advanced timing" Margin="0,10,0,0" Foreground="{StaticResource FgDim}">
+                                <WrapPanel Margin="0,6,0,0">
+                                    <StackPanel Margin="0,0,16,6">
+                                        <Label Content="Max rolls"/>
+                                        <TextBox Width="90" Text="{Binding MaxAttempts, UpdateSourceTrigger=LostFocus}"/>
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,16,6">
+                                        <Label Content="Settle after Enter (ms)"/>
+                                        <TextBox Width="90" Text="{Binding SettleDelayMs, UpdateSourceTrigger=LostFocus}"
+                                                 ToolTip="Pause after each re-roll so the game updates memory before the trainer reads it. Raise this if rolls read stale."/>
+                                    </StackPanel>
+                                    <StackPanel Margin="0,0,16,6">
+                                        <Label Content="Focus pause (ms)"/>
+                                        <TextBox Width="90" Text="{Binding FocusDelayMs, UpdateSourceTrigger=LostFocus}"/>
+                                    </StackPanel>
+                                </WrapPanel>
+                            </Expander>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+              </TabControl>
+            </Border>
+        </Grid>
+
+        <!-- ===== Bottom: status ===== -->
+        <Border Grid.Row="2" Background="{StaticResource Panel}" CornerRadius="6" Padding="8,5" Margin="0,8,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="160"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Status}" TextTrimming="CharacterEllipsis"/>
+                <ProgressBar Grid.Column="1" Height="14" Minimum="0" Maximum="1" Value="{Binding ScanProgress}"
+                             Background="{StaticResource Panel2}" Foreground="{StaticResource Accent}"
+                             BorderThickness="0"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>MightAndMagic1Trainer</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Compile the format/record logic straight from the WPF project -->
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\RosterFormat.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\CharacterRecord.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\ItemBook.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\ItemEffectBook.cs" />
+    <!-- Spell school enum + class→school map, the class reference, and the walkthrough -->
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\Spellbook.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\ClassBook.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\Walkthrough.cs" />
+    <!-- Roll-buffer scanner (+ the memory P/Invoke it references) for the signature tests -->
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Memory\NativeMethods.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Memory\ProcessMemory.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Memory\RollScanner.cs" />
+    <!-- Roller statistics: 3d6 odds model + observed-roll tally -->
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\ThreeD6.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\RollHistory.cs" />
+    <!-- Party snapshots, map calibration math, the bestiary, and the dump comparer -->
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\PartySnapshot.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\MapCalibration.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\MonsterBook.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Memory\DumpComparer.cs" />
+  </ItemGroup>
+</Project>

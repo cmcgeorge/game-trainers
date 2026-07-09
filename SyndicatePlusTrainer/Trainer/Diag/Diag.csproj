@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>SyndicateDiag</AssemblyName>
+    <RootNamespace>SyndicateTrainer</RootNamespace>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <!-- Reuse the verified memory-access classes from the trainer. -->
+  <ItemGroup>
+    <Compile Include="..\SyndicateTrainer\NativeMethods.cs" Link="NativeMethods.cs" />
+    <Compile Include="..\SyndicateTrainer\ProcessMemory.cs" Link="ProcessMemory.cs" />
+    <Compile Include="..\SyndicateTrainer\GameConnection.cs" Link="GameConnection.cs" />
+  </ItemGroup>
+
+</Project>

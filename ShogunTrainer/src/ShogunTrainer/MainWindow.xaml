@@ -1,0 +1,156 @@
+<Window x:Class="ShogunTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Shōgun Trainer" Height="780" Width="440"
+        Background="{StaticResource Bg}" ResizeMode="CanMinimize"
+        WindowStartupLocation="CenterScreen" FontFamily="Segoe UI" FontSize="13">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header / attach -->
+        <Border Grid.Row="0" Background="{StaticResource Panel}" CornerRadius="4" Padding="10" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="James Clavell's Shōgun — Trainer" FontWeight="Bold" FontSize="15"/>
+                    <TextBlock x:Name="StatusText" Text="Not attached." Foreground="{StaticResource Muted}"
+                               TextWrapping="Wrap" Margin="0,3,0,0"/>
+                </StackPanel>
+                <Button Grid.Column="1" x:Name="AttachButton" Content="Attach" VerticalAlignment="Center"
+                        Padding="16,7" Click="OnAttachClick"/>
+            </Grid>
+        </Border>
+
+        <!-- Player -->
+        <GroupBox Grid.Row="1" x:Name="PlayerGroup" Header="Blackthorne (player)" Background="{StaticResource Panel}">
+            <StackPanel>
+                <Grid Margin="0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="70"/>
+                        <ColumnDefinition Width="70"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Cash (yen)"/>
+                    <TextBox   Grid.Column="1" x:Name="CashBox" Text="255"/>
+                    <Button    Grid.Column="2" Content="Set" Click="OnSetCash" Margin="6,0,6,0"/>
+                    <CheckBox  Grid.Column="3" x:Name="FreezeCash" Content="Freeze" Checked="OnFreezeCash" Unchecked="OnFreezeCash"/>
+                    <TextBlock Grid.Column="4" x:Name="CashNow" Text="" Foreground="{StaticResource Muted}"
+                               HorizontalAlignment="Right"/>
+                </Grid>
+                <Grid Margin="0,6,0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="70"/>
+                        <ColumnDefinition Width="70"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Health"/>
+                    <TextBox   Grid.Column="1" x:Name="HpBox" Text="254"/>
+                    <Button    Grid.Column="2" Content="Set" Click="OnSetHp" Margin="6,0,6,0"/>
+                    <CheckBox  Grid.Column="3" x:Name="FreezeHp" Content="Freeze" Checked="OnFreezeHp" Unchecked="OnFreezeHp"/>
+                    <TextBlock Grid.Column="4" x:Name="HpNow" Text="" Foreground="{StaticResource Muted}"
+                               HorizontalAlignment="Right"/>
+                </Grid>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Followers -->
+        <GroupBox Grid.Row="2" x:Name="FollowGroup" Header="Following" Background="{StaticResource Panel}">
+            <StackPanel>
+                <TextBlock x:Name="FollowersNow" Text="Followers: —" Margin="0,0,0,6"/>
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="Recruit ALL (39)" Click="OnRecruitAll"/>
+                    <TextBox x:Name="RecruitCount" Text="20" Width="46"/>
+                    <Button Content="Recruit N" Click="OnRecruitN" Margin="6,0,0,0"/>
+                </StackPanel>
+                <TextBlock Text="Recruiting &gt;19 followers opens the become-Shōgun contest."
+                           Foreground="{StaticResource Muted}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Extras -->
+        <GroupBox Grid.Row="3" x:Name="ExtrasGroup" Header="Extras" Background="{StaticResource Panel}">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <Button Content="Make all NPCs friendly" Click="OnMakeFriendly"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="Max player stats" Click="OnMaxStats"/>
+                    <Button Content="Give 3 relics (pockets only)" Click="OnGiveRelics"/>
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Time & Contest -->
+        <GroupBox Grid.Row="4" x:Name="ContestGroup" Header="Time &amp; contest" Background="{StaticResource Panel}">
+            <StackPanel>
+                <Grid Margin="0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Fail timer:"/>
+                    <TextBlock Grid.Column="1" x:Name="TimerNow" Text="—" Margin="6,0,0,0" Foreground="{StaticResource Muted}"/>
+                    <CheckBox  Grid.Column="3" x:Name="FreezeTime" Content="Freeze time" Checked="OnFreezeTime" Unchecked="OnFreezeTime"/>
+                </Grid>
+                <Grid Margin="0,6,0,2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Contest tally:"/>
+                    <TextBlock Grid.Column="1" x:Name="TallyNow" Text="—" Margin="6,0,0,0" Foreground="{StaticResource Muted}"/>
+                    <CheckBox  Grid.Column="3" x:Name="ForceFollow" Content="Force following (open contest)"
+                               Checked="OnForceFollow" Unchecked="OnForceFollow"/>
+                </Grid>
+                <TextBlock Text="Force following pushes your tally past 19; pick up any object to open the become-Shōgun contest."
+                           Foreground="{StaticResource Muted}" FontSize="11" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                <Button Content="Place 3 relics at the palace (win)" Click="OnPlaceRelics" Margin="0,8,0,0" HorizontalAlignment="Left"/>
+                <TextBlock Text="Once the contest is open, this drops Buddha/Scroll/Mirror at the palace — pick up any object there to win."
+                           Foreground="{StaticResource Muted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+
+                <Separator Margin="0,10,0,8" Background="#3A3128"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="56"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Go to area:"/>
+                    <TextBox   Grid.Column="1" x:Name="AreaTargetBox" Text="210" Margin="6,0,6,0"/>
+                    <Button    Grid.Column="2" Content="Route" Click="OnRoute"/>
+                    <Button    Grid.Column="3" Content="Teleport" Click="OnTeleport"/>
+                </Grid>
+                <TextBlock x:Name="RouteResult" Text="" Foreground="{StaticResource Muted}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                <TextBlock Text="Route = compass steps from your current area. Teleport is experimental — save first."
+                           Foreground="{StaticResource Muted}" FontSize="11" Margin="0,2,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Log -->
+        <GroupBox Grid.Row="5" Header="Log" Background="{StaticResource Panel}">
+            <TextBox x:Name="LogBox" IsReadOnly="True" VerticalScrollBarVisibility="Auto"
+                     Background="#14100C" Foreground="#BFE0B0" BorderThickness="0"
+                     FontFamily="Consolas" FontSize="12" TextWrapping="Wrap"/>
+        </GroupBox>
+    </Grid>
+</Window>

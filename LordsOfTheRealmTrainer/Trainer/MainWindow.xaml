@@ -1,0 +1,238 @@
+<Window x:Class="LordsTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Lords of the Realm — Trainer" Height="940" Width="900"
+        Background="{StaticResource Parchment}" FontFamily="Segoe UI" FontSize="13">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Title -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock Text="👑" FontSize="24" Margin="0,0,10,0"/>
+            <StackPanel>
+                <TextBlock Text="Lords of the Realm — Trainer" FontSize="19" FontWeight="Bold"
+                           Foreground="{StaticResource Accent}"/>
+                <TextBlock Text="Cheats for the DOSBox-X build. Start the game, load a match, then Attach."
+                           Foreground="#B8B0A0" FontSize="12"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Connect -->
+        <GroupBox Grid.Row="1" Header="1 · Connect">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnAttach" Content="Attach to DOSBox-X" Click="OnAttachClick"/>
+                <Button x:Name="BtnDetach" Content="Detach" Click="OnDetachClick" IsEnabled="False"/>
+                <TextBlock x:Name="TxtStatus" VerticalAlignment="Center" Margin="12,0,0,0"
+                           Text="Not attached." Foreground="#D08A6A" TextWrapping="Wrap"/>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Cheats -->
+        <GroupBox Grid.Row="2" Header="2 · Cheats">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="640">
+            <StackPanel>
+                <TextBlock Foreground="#8A8375" FontSize="11" Margin="0,0,0,8" TextWrapping="Wrap"
+                    Text="To set your gold reliably across restarts: type the crowns shown on your treasury screen, click 'Find my treasury', then 'Set to 999,999'. If more than one match remains, change your gold in-game (advance a season or buy/sell), type the new amount, and Find again to narrow it. After you restart or load a game, click 'New search' first, then Find again. (The lord table below is a best-effort auto-detect and can read the wrong slot after a game reload — the Find button is the dependable path.)"/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Text="Crowns on screen" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox x:Name="TxtGoldNow" Width="90"/>
+                    <Button x:Name="BtnFindGold" Content="🔍 Find my treasury" Click="OnFindGold" IsEnabled="False"/>
+                    <Button x:Name="BtnMakeRich" Content="💰 Set to 999,999" Click="OnMakeRich" IsEnabled="False"/>
+                    <CheckBox x:Name="ChkFreezeGold" Content="Freeze" IsChecked="True" VerticalAlignment="Center"
+                              Margin="8,0,0,0" Foreground="{StaticResource Ink}"
+                              Checked="OnFreezeGoldToggled" Unchecked="OnFreezeGoldToggled"/>
+                    <Button x:Name="BtnGoldNewScan" Content="New search" Click="OnGoldNewScan" IsEnabled="False"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                    <Button x:Name="BtnLoadLords" Content="↻ Detect lords" Click="OnLoadLords" IsEnabled="False"/>
+                    <Button x:Name="BtnBankruptRivals" Content="🗡 Bankrupt rival lords" Click="OnBankruptRivals" IsEnabled="False"/>
+                </StackPanel>
+                <DataGrid x:Name="DgLords" AutoGenerateColumns="False" CanUserAddRows="False" Height="118"
+                          Background="#15120F" Foreground="{StaticResource Ink}"
+                          GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                          BorderBrush="{StaticResource Line}" RowBackground="#1A1712" AlternatingRowBackground="#201C16">
+                    <DataGrid.Columns>
+                        <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Freeze, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="55"/>
+                        <DataGridTextColumn Header="Lord" Binding="{Binding Description}" IsReadOnly="True" Width="*"/>
+                        <DataGridTextColumn Header="Gold (live)" Binding="{Binding Value}" IsReadOnly="True" Width="120"/>
+                        <DataGridTextColumn Header="Set to" Binding="{Binding FreezeValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <Button Content="Set selected lord's gold" Click="OnSetSelectedLord"/>
+                    <TextBlock x:Name="TxtCheatInfo" VerticalAlignment="Center" Margin="12,0,0,0"
+                               Foreground="{StaticResource Accent}" FontSize="12"/>
+                </StackPanel>
+
+                <!-- County resources -->
+                <TextBlock Text="County resources" Foreground="{StaticResource Accent}" FontWeight="SemiBold" Margin="0,10,0,2"/>
+                <TextBlock Foreground="#8A8375" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"
+                    Text="Grain, cattle, sheep and wool for every county. Click 'List all counties', tick the ones you want, then 'Max selected counties' to fill and freeze their stores. Counties are shown by slot number (names aren't reliably mapped in this build); the one you currently have open in-game is marked 'viewing'."/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                    <Button x:Name="BtnListCounties" Content="🗺 List all counties" Click="OnListCounties" IsEnabled="False"/>
+                    <Button x:Name="BtnSelectAllCounties" Content="Select all" Click="OnSelectAllCounties" IsEnabled="False"/>
+                    <Button x:Name="BtnClearCountySelection" Content="Clear" Click="OnClearCountySelection" IsEnabled="False"/>
+                    <Button x:Name="BtnMaxSelectedCounties" Content="🌾 Max selected counties" Click="OnMaxSelectedCounties" IsEnabled="False"/>
+                </StackPanel>
+                <DataGrid x:Name="DgCounties" AutoGenerateColumns="False" CanUserAddRows="False" Height="200"
+                          Background="#15120F" Foreground="{StaticResource Ink}"
+                          GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                          BorderBrush="{StaticResource Line}" RowBackground="#1A1712" AlternatingRowBackground="#201C16">
+                    <DataGrid.Columns>
+                        <DataGridCheckBoxColumn Header="Set" Binding="{Binding Selected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="42"/>
+                        <DataGridTextColumn Header="County" Binding="{Binding Label}" IsReadOnly="True" Width="*"/>
+                        <DataGridTextColumn Header="Grain" Binding="{Binding Grain}" IsReadOnly="True" Width="70"/>
+                        <DataGridTextColumn Header="Cattle" Binding="{Binding Cattle}" IsReadOnly="True" Width="70"/>
+                        <DataGridTextColumn Header="Sheep" Binding="{Binding Sheep}" IsReadOnly="True" Width="70"/>
+                        <DataGridTextColumn Header="Wool" Binding="{Binding Wool}" IsReadOnly="True" Width="70"/>
+                        <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Freeze, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+
+                <!-- Global (kingdom-wide) resources -->
+                <TextBlock Text="Global resources (not tied to a province)" Foreground="{StaticResource Accent}" FontWeight="SemiBold" Margin="0,12,0,2"/>
+                <TextBlock Foreground="#8A8375" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"
+                    Text="Iron, stone, wood AND your armoury (swords, axes, crossbows, spears, maces, long bows, armor) are kingdom-wide. They live in your economy struct (re-allocated each match, like your treasury), so they're found by their live values: type the Iron/Stone/Wood shown on your goods/overview screen, then 'Find &amp; max materials'. That pins the block; 'Max weapons' then fills the armoury (weapons are stored in batches of 50, so amounts here are the real in-game counts)."/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock Text="Iron" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                    <TextBox x:Name="TxtIron" Width="60"/>
+                    <TextBlock Text="Stone" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                    <TextBox x:Name="TxtStone" Width="60"/>
+                    <TextBlock Text="Wood" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                    <TextBox x:Name="TxtWood" Width="60"/>
+                    <Button x:Name="BtnFindMaterials" Content="⛏ Find &amp; max materials" Click="OnFindMaterials" IsEnabled="False" Margin="10,0,0,0"/>
+                    <Button x:Name="BtnMaxWeapons" Content="⚔ Max weapons" Click="OnMaxWeapons" IsEnabled="False"/>
+                </StackPanel>
+                <DataGrid x:Name="DgGlobals" AutoGenerateColumns="False" CanUserAddRows="False" Height="150"
+                          Background="#15120F" Foreground="{StaticResource Ink}"
+                          GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                          BorderBrush="{StaticResource Line}" RowBackground="#1A1712" AlternatingRowBackground="#201C16">
+                    <DataGrid.Columns>
+                        <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Freeze, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="55"/>
+                        <DataGridTextColumn Header="Resource" Binding="{Binding Description}" IsReadOnly="True" Width="*"/>
+                        <DataGridTextColumn Header="Amount (live)" Binding="{Binding DisplayValue}" IsReadOnly="True" Width="120"/>
+                        <DataGridTextColumn Header="Set to" Binding="{Binding DisplayFreezeValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+                <Button Content="Set selected resource" Click="OnSetSelectedGlobal" HorizontalAlignment="Left" Margin="0,4,0,0"/>
+
+                <!-- Unit movement (army moves per turn) -->
+                <TextBlock Text="Unit movement (army moves per turn)" Foreground="{StaticResource Accent}" FontWeight="SemiBold" Margin="0,12,0,2"/>
+                <TextBlock Foreground="#8A8375" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"
+                    Text="Freeze an army's per-turn moves so it never runs out. The counter lives in the per-match heap, so it's found by how it behaves: click 'Start', move the selected army one space in-game and click 'I moved', then end your turn and click 'I ended turn'. Repeat until only a few remain, then 'Freeze movement'. Armies stack units of different speeds, so 2–3 values usually survive together — that's expected; freeze them all."/>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <Button x:Name="BtnMoveStart" Content="① Start" Click="OnMovementStart" IsEnabled="False"/>
+                    <Button x:Name="BtnMoveMoved" Content="② I moved" Click="OnMovementMoved" IsEnabled="False"/>
+                    <Button x:Name="BtnMoveEndedTurn" Content="③ I ended turn" Click="OnMovementEndedTurn" IsEnabled="False"/>
+                    <Button x:Name="BtnFreezeMovement" Content="♾ Freeze movement" Click="OnFreezeMovement" IsEnabled="False"/>
+                    <Button x:Name="BtnMoveNewScan" Content="New search" Click="OnMovementNewScan" IsEnabled="False"/>
+                </StackPanel>
+                <DataGrid x:Name="DgMovement" AutoGenerateColumns="False" CanUserAddRows="False" Height="88"
+                          Background="#15120F" Foreground="{StaticResource Ink}"
+                          GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                          BorderBrush="{StaticResource Line}" RowBackground="#1A1712" AlternatingRowBackground="#201C16">
+                    <DataGrid.Columns>
+                        <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Freeze, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="55"/>
+                        <DataGridTextColumn Header="Move slot" Binding="{Binding Description}" IsReadOnly="True" Width="*"/>
+                        <DataGridTextColumn Header="Moves (live)" Binding="{Binding Value}" IsReadOnly="True" Width="120"/>
+                        <DataGridTextColumn Header="Set to" Binding="{Binding FreezeValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="120"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <Button Content="Set selected slot" Click="OnSetSelectedMovement"/>
+                    <TextBlock x:Name="TxtMoveInfo" VerticalAlignment="Center" Margin="12,0,0,0"
+                               Foreground="{StaticResource Accent}" FontSize="12" Text="Not scanning."/>
+                </StackPanel>
+            </StackPanel>
+            </ScrollViewer>
+        </GroupBox>
+
+        <!-- Advanced scanner -->
+        <Expander Grid.Row="3" Header="3 · Advanced — memory scanner (find any other value)"
+                  Foreground="{StaticResource Accent}" Margin="0,10,0,0" IsExpanded="False">
+            <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="400"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Scan controls -->
+                <GroupBox Grid.Column="0" Header="Scan" Margin="0,0,10,0">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Top">
+                            <TextBlock Foreground="#8A8375" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"
+                                Text="Use this for per-county values (grain, happiness, population…). Enter the number you see in-game, First Scan, change it in-game, then narrow."/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Value" VerticalAlignment="Center" Width="44"/>
+                                <TextBox x:Name="TxtValue" Width="110" Text="0"/>
+                                <RadioButton x:Name="RbInt32" Content="Int32" IsChecked="True" GroupName="vt" Margin="10,0,0,0"/>
+                                <RadioButton x:Name="RbInt16" Content="Int16" GroupName="vt"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Range" VerticalAlignment="Center" Width="44"/>
+                                <TextBox x:Name="TxtRangeStart" Width="84" Text="0x00000"/>
+                                <TextBlock Text="→" VerticalAlignment="Center" Margin="6,0"/>
+                                <TextBox x:Name="TxtRangeEnd" Width="84" Text="0xA0000"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
+                                <Button x:Name="BtnFirstScan" Content="First Scan" Click="OnFirstScan" IsEnabled="False"/>
+                                <Button x:Name="BtnUnknownScan" Content="Snapshot" Click="OnUnknownScan" IsEnabled="False"/>
+                                <Button x:Name="BtnNewScan" Content="New Scan" Click="OnNewScan" IsEnabled="False"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Button x:Name="BtnNextExact" Content="= value" Click="OnNextExact" IsEnabled="False"/>
+                                <Button x:Name="BtnInc" Content="▲ Incr" Click="OnNextInc" IsEnabled="False"/>
+                                <Button x:Name="BtnDec" Content="▼ Decr" Click="OnNextDec" IsEnabled="False"/>
+                                <Button x:Name="BtnUnch" Content="= Unch" Click="OnNextUnch" IsEnabled="False"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtScanInfo" Text="No scan yet." Foreground="{StaticResource Accent}" Margin="0,2,0,6"/>
+                        </StackPanel>
+                        <ListView x:Name="LvResults" Height="150" Background="#15120F" BorderBrush="{StaticResource Line}"
+                                  Foreground="{StaticResource Ink}" MouseDoubleClick="OnResultDoubleClick">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Address" Width="110" DisplayMemberBinding="{Binding AddressHex}"/>
+                                    <GridViewColumn Header="Value" Width="140" DisplayMemberBinding="{Binding Value}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </DockPanel>
+                </GroupBox>
+
+                <!-- Generic watch table -->
+                <GroupBox Grid.Column="1" Header="Watch / freeze (from scans)">
+                    <DockPanel>
+                        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                            <Button Content="Set selected" Click="OnSetSelected"/>
+                            <Button Content="Remove" Click="OnRemoveWatch"/>
+                            <Button Content="Clear" Click="OnClearWatch"/>
+                        </StackPanel>
+                        <DataGrid x:Name="DgWatch" AutoGenerateColumns="False" CanUserAddRows="False"
+                                  Background="#15120F" Foreground="{StaticResource Ink}"
+                                  GridLinesVisibility="Horizontal" HeadersVisibility="Column"
+                                  BorderBrush="{StaticResource Line}" RowBackground="#1A1712" AlternatingRowBackground="#201C16">
+                            <DataGrid.Columns>
+                                <DataGridCheckBoxColumn Header="Frz" Binding="{Binding Freeze, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="40"/>
+                                <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" IsReadOnly="True" Width="80"/>
+                                <DataGridTextColumn Header="T" Binding="{Binding TypeLabel}" IsReadOnly="True" Width="32"/>
+                                <DataGridTextColumn Header="Description" Binding="{Binding Description, Mode=TwoWay}" Width="*"/>
+                                <DataGridTextColumn Header="Value" Binding="{Binding Value}" IsReadOnly="True" Width="80"/>
+                                <DataGridTextColumn Header="Set to" Binding="{Binding FreezeValue, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="80"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </GroupBox>
+            </Grid>
+        </Expander>
+
+        <!-- Footer -->
+        <TextBlock Grid.Row="4" Margin="0,10,0,0" Foreground="#6E675A" FontSize="11" TextWrapping="Wrap"
+            Text="Single-player use only. Do not use in modem/network games — writing memory trips the game's DIVERGANCE desync check. Reverse-engineering notes: ../.docs/ReverseEngineering.md"/>
+    </Grid>
+</Window>
