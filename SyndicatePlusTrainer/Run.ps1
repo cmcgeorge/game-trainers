@@ -16,6 +16,9 @@
 .PARAMETER NoRun
     Build only; do not launch the trainer.
 
+.PARAMETER Clean
+    Delete bin/obj for the project before building.
+
 .EXAMPLE
     .\Run.ps1
     Builds in Release and launches the trainer.
@@ -29,62 +32,50 @@ param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',
 
-    [switch]$NoRun
+    [switch]$NoRun,
+
+    [switch]$Clean
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
 $root    = $PSScriptRoot
 $project = Join-Path $root 'Trainer\SyndicateTrainer\SyndicateTrainer.csproj'
+$tfm     = 'net8.0-windows'
+$exePath = Join-Path $root "Trainer\SyndicateTrainer\bin\x64\$Configuration\$tfm\SyndicateTrainer.exe"
+
+function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
+
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+    throw "The .NET SDK ('dotnet') was not found on PATH. Install it from https://dotnet.microsoft.com/download"
+}
 
 if (-not (Test-Path -LiteralPath $project)) {
-    throw "Project not found: $project"
+    throw "Project not found at '$project'. Run this script from the repository root."
 }
 
-# --- Locate the .NET SDK ---
-$dotnet = (Get-Command dotnet -ErrorAction SilentlyContinue).Source
-if (-not $dotnet) {
-    $fallback = Join-Path $env:ProgramFiles 'dotnet\dotnet.exe'
-    if (Test-Path -LiteralPath $fallback) {
-        $dotnet = $fallback
-    }
-    else {
-        throw "The .NET SDK ('dotnet') was not found on PATH. Install it from https://dotnet.microsoft.com/download"
-    }
+if ($Clean) {
+    Write-Step "Cleaning bin/obj"
+    Get-ChildItem $root -Recurse -Directory -Include bin, obj |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-# --- Build ---
-Write-Host "Building SyndicateTrainer ($Configuration, x64)..." -ForegroundColor Cyan
-& $dotnet build $project -c $Configuration -p:Platform=x64 --nologo
-if ($LASTEXITCODE -ne 0) {
-    throw "Build failed (exit code $LASTEXITCODE)."
-}
+Write-Step "Building ($Configuration, x64)"
+dotnet build $project -c $Configuration -p:Platform=x64 -v minimal
+if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE)." }
 
 if ($NoRun) {
-    Write-Host "Build complete (-NoRun specified; not launching)." -ForegroundColor Green
+    Write-Step "Build complete. Skipping launch (-NoRun)."
+    Write-Host "Executable: $exePath"
     return
 }
 
-# --- Locate the freshly built executable ---
-$binDir   = Join-Path $root 'Trainer\SyndicateTrainer\bin'
-$expected = Join-Path $binDir "x64\$Configuration\net8.0-windows\SyndicateTrainer.exe"
-
-if (Test-Path -LiteralPath $expected) {
-    $exePath = $expected
-}
-else {
-    # Fall back to the newest matching exe under the project's bin folder.
-    $exe = Get-ChildItem -Path $binDir -Recurse -Filter 'SyndicateTrainer.exe' -ErrorAction SilentlyContinue |
-        Where-Object { $_.FullName -like "*\$Configuration\*" } |
-        Sort-Object LastWriteTime -Descending |
-        Select-Object -First 1
-    if (-not $exe) {
-        throw "Could not find SyndicateTrainer.exe under $binDir after the build."
-    }
-    $exePath = $exe.FullName
+if (-not (Test-Path -LiteralPath $exePath)) {
+    throw "Build succeeded but the executable was not found at '$exePath'."
 }
 
-# --- Launch ---
-Write-Host "Launching $exePath" -ForegroundColor Green
+Write-Step "Launching the trainer"
+Write-Host "A UAC prompt may appear if DOSBox-X is running as Administrator." -ForegroundColor Yellow
 Start-Process -FilePath $exePath
-Write-Host "Trainer started. If you hit 'Access denied' attaching, re-run PowerShell as Administrator." -ForegroundColor DarkGray
+Write-Step "Started. (Select the DOSBox process and click Attach in the trainer.)"

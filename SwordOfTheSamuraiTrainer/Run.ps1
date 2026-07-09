@@ -1,3 +1,4 @@
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Build (if needed) and launch the Sword of the Samurai WPF age trainer.
@@ -29,15 +30,15 @@
     Wait for the trainer window to close before returning (default: launch and return immediately).
 
 .EXAMPLE
-    .\Run-SotsTrainer.ps1
+    .\Run.ps1
     Build if necessary, then launch the trainer.
 
 .EXAMPLE
-    .\Run-SotsTrainer.ps1 -Rebuild
+    .\Run.ps1 -Rebuild
     Force a fresh Release build, then launch.
 
 .EXAMPLE
-    .\Run-SotsTrainer.ps1 -NoBuild
+    .\Run.ps1 -NoBuild
     Launch the already-built trainer without touching the build.
 #>
 [CmdletBinding()]
@@ -50,6 +51,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
 $root       = $PSScriptRoot
 $project    = Join-Path $root 'SwordSamuraiTrainer\src\SotSAgeTrainer\SotSAgeTrainer.csproj'

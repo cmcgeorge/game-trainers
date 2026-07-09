@@ -1,3 +1,4 @@
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Builds the Bard's Tale 1 trainer and launches it.
@@ -37,6 +38,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
 $root        = $PSScriptRoot
 $project     = Join-Path $root 'src\BardsTale1Trainer\BardsTale1Trainer.csproj'

@@ -29,21 +29,24 @@ Each game lives in its own self-contained folder with its own solution/project, 
 
 ## Building and Running
 
-Work inside the folder of the game you want. Conventions vary slightly per trainer — check that trainer's `README.md` — but the common flow is:
+Work inside the folder of the game you want. All `Run.ps1` scripts share a common set of flags:
 
 ```powershell
 cd PoolOfRadianceTrainer
 .\Run.ps1                        # restore, build Release, and launch (UAC prompt)
 .\Run.ps1 -Configuration Debug   # debug build
-.\Run.ps1 -Clean                 # wipe bin/obj first
+.\Run.ps1 -Clean                 # wipe bin/obj first, then build and launch
+.\Run.ps1 -NoRun                 # build only; print the exe path
 .\Run.ps1 -Test -NoRun           # build + run the verification harness, no GUI
 ```
 
-The flags above (`-Configuration`, `-Clean`, `-NoRun`, `-Test`) all work for `PoolOfRadianceTrainer`, but the set varies per script — `-Test` only exists on `BardsTale1Trainer`, `MightAndMagic1Trainer`, and `PoolOfRadianceTrainer`, and some scripts use `-NoBuild` instead of `-NoRun`. Check the trainer's own `README.md`. Notable exceptions:
+Every trainer uses `.\Run.ps1`. Most scripts share the core flags (`-Configuration`, `-Clean`, `-NoRun`); the exceptions are listed below. Notable per-trainer variations:
 
-- **KeefTrainer** has no run script — build/run directly: `dotnet run --project KeefTrainer`.
-- **SwordOfTheSamuraiTrainer** uses `.\Run-SotsTrainer.ps1` (flags `-Configuration`, `-Rebuild`, `-NoBuild`, `-Wait`), plus `.\Edit-SotsSave.ps1` for offline saves.
-- **LordsOfTheRealmTrainer** uses `-NoBuild` (no `-NoRun`); **ShogunTrainer** adds `-Publish`.
+- **`-Test`** (run the headless verification harness) is only on `BardsTale1Trainer`, `MightAndMagic1Trainer`, and `PoolOfRadianceTrainer`.
+- **`ShogunTrainer`** adds `-Publish` to produce a self-contained single-file exe.
+- **`LordsOfTheRealmTrainer`** uses `-NoBuild` instead of `-NoRun` — it skips the build step and launches the existing binary directly.
+- **`KeefTrainer`** has no run script — build/run directly: `dotnet run --project KeefTrainer`.
+- **`SwordOfTheSamuraiTrainer`** uses a different flag set — `-Rebuild` (force a fresh build even if an exe already exists), `-NoBuild` (skip building and launch the existing binary), and `-Wait` (block until the trainer window closes) — instead of the standard `-Clean`/`-NoRun`. `.\Edit-SotsSave.ps1` handles offline save editing separately.
 
 You can always build directly with the SDK:
 

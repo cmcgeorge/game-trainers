@@ -42,19 +42,15 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-# Always operate relative to this script's own location, not the caller's cwd.
-$root       = $PSScriptRoot
-$projectDir = Join-Path $root 'Trainer'
+$root        = $PSScriptRoot
+$projectDir  = Join-Path $root 'Trainer'
 $projectFile = Join-Path $projectDir 'AutoduelTrainer.csproj'
+$tfm         = 'net9.0-windows'
+$exePath     = Join-Path $projectDir "bin\$Configuration\$tfm\AutoduelTrainer.exe"
 
-Write-Host 'Autoduel Trainer - build & run' -ForegroundColor Yellow
-Write-Host "  Configuration : $Configuration"
-Write-Host "  Project       : $projectFile"
-Write-Host ''
+function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 
-# --- prerequisites -----------------------------------------------------------
-$dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
-if (-not $dotnet) {
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw "The .NET SDK ('dotnet') was not found on PATH. Install .NET 9 SDK from https://dotnet.microsoft.com/download"
 }
 
@@ -62,9 +58,8 @@ if (-not (Test-Path -LiteralPath $projectFile)) {
     throw "Project not found at '$projectFile'. Run this script from the solution root."
 }
 
-# --- optional clean ----------------------------------------------------------
 if ($Clean) {
-    Write-Host 'Cleaning bin\ and obj\ ...' -ForegroundColor Cyan
+    Write-Step "Cleaning bin\ and obj\"
     foreach ($dir in @('bin', 'obj')) {
         $path = Join-Path $projectDir $dir
         if (Test-Path -LiteralPath $path) {
@@ -73,35 +68,21 @@ if ($Clean) {
     }
 }
 
-# --- build -------------------------------------------------------------------
-Write-Host 'Building ...' -ForegroundColor Cyan
-& dotnet build $projectFile -c $Configuration --nologo
-if ($LASTEXITCODE -ne 0) {
-    throw "Build failed (dotnet exit code $LASTEXITCODE)."
-}
-Write-Host 'Build succeeded.' -ForegroundColor Green
+Write-Step "Building ($Configuration)"
+dotnet build $projectFile -c $Configuration -v minimal
+if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE)." }
 
 if ($NoRun) {
-    Write-Host 'NoRun specified - skipping launch.'
+    Write-Step "Build complete. Skipping launch (-NoRun)."
+    Write-Host "Executable: $exePath"
     return
 }
 
-# --- locate and launch the built executable ----------------------------------
-# Prefer the produced .exe so the app runs detached from this shell.
-$exe = Get-ChildItem -LiteralPath $projectDir -Recurse -Filter 'AutoduelTrainer.exe' -ErrorAction SilentlyContinue |
-    Where-Object { $_.FullName -match [regex]::Escape("\bin\$Configuration\") } |
-    Sort-Object LastWriteTime -Descending |
-    Select-Object -First 1
-
-Write-Host ''
-if ($exe) {
-    Write-Host "Launching $($exe.FullName)" -ForegroundColor Green
-    Start-Process -FilePath $exe.FullName
-} else {
-    # Fall back to 'dotnet run' if the exe could not be located. Launch it
-    # detached (Start-Process) so this behaves like the primary path and does
-    # not block the calling shell for the app's lifetime.
-    Write-Host 'Executable not found; falling back to dotnet run ...' -ForegroundColor Yellow
-    Start-Process -FilePath 'dotnet' `
-        -ArgumentList @('run', '--project', $projectFile, '-c', $Configuration, '--no-build')
+if (-not (Test-Path -LiteralPath $exePath)) {
+    throw "Build succeeded but the executable was not found at '$exePath'."
 }
+
+Write-Step "Launching the trainer"
+Write-Host "A UAC prompt will appear — the trainer needs admin rights to access the game's memory." -ForegroundColor Yellow
+Start-Process -FilePath $exePath
+Write-Step "Started. (Launch AUTODUEL in DOSBox-X past the title screen, then Attach in the trainer.)"

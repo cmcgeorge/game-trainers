@@ -16,8 +16,8 @@ Dot-prefixed dirs (`.docs/` teardown & strategy notes, `.data/` RAM dumps, `.gam
 
 Conventions vary per trainer — always check the local `README.md`. Run from inside a trainer's own folder:
 
-- `.\Run.ps1` — most trainers: restore, build Release, launch (a UAC prompt appears; the app manifest requests admin for `Read/WriteProcessMemory`). Exceptions: `KeefTrainer` has no script (use `dotnet run --project KeefTrainer`); `SwordOfTheSamuraiTrainer` uses `.\Run-SotsTrainer.ps1`.
-- Flags differ per script — most take `-Configuration Debug|Release` and `-Clean`. Build-without-launch is `-NoRun` on most, but `-NoBuild` on `LordsOfTheRealmTrainer` and `SwordOfTheSamuraiTrainer`. `-Test` (run the verification harness, no GUI) exists only on `BardsTale1Trainer`, `MightAndMagic1Trainer`, and `PoolOfRadianceTrainer`; `ShogunTrainer` has `-Publish` instead.
+- `.\Run.ps1` — every trainer except `KeefTrainer` (use `dotnet run --project KeefTrainer`). Restores, builds Release, and launches; a UAC prompt appears because the app manifests request admin for `Read/WriteProcessMemory`.
+- Flags: most scripts accept `-Configuration Debug|Release`, `-Clean`, and `-NoRun`. Exceptions: `LordsOfTheRealmTrainer` uses `-NoBuild` instead of `-NoRun` (skip build, run the existing binary); `SwordOfTheSamuraiTrainer` uses an entirely different set (`-Rebuild`, `-NoBuild`, `-Wait`) with no `-Clean` or `-NoRun`. `-Test` (run the verification harness without the GUI) exists only on `BardsTale1Trainer`, `MightAndMagic1Trainer`, and `PoolOfRadianceTrainer`; `ShogunTrainer` adds `-Publish`.
 - Direct: `dotnet build <project>.csproj -c Release` / `dotnet run --project <test-project>`.
 
 ## Coding Style & Naming Conventions

@@ -1,3 +1,4 @@
+#Requires -Version 5.1
 <#
 .SYNOPSIS
     Builds the Might & Magic 1 trainer and launches it.
@@ -37,6 +38,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
 
 # Resolve paths relative to this script so it works from any working directory.
 $root        = $PSScriptRoot
