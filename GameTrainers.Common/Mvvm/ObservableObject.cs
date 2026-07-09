@@ -1,7 +1,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace BardsTale1Trainer.Mvvm;
+namespace GameTrainers.Common.Mvvm;
 
 public abstract class ObservableObject : INotifyPropertyChanged
 {

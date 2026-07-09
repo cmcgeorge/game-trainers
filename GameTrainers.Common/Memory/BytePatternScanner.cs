@@ -1,4 +1,4 @@
-namespace BardsTale1Trainer.Memory;
+namespace GameTrainers.Common.Memory;
 
 /// <summary>The outcome of a pattern scan: the matching addresses (ascending) plus
 /// whether coverage was incomplete (a match or per-region cap was hit).</summary>

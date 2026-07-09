@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
 using MightAndMagic1Trainer.Memory;
-using MightAndMagic1Trainer.Mvvm;
 
 namespace MightAndMagic1Trainer.ViewModels;
 

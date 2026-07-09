@@ -4,7 +4,6 @@ using System.IO;
 using System.Windows.Threading;
 using MightAndMagic1Trainer.Game;
 using MightAndMagic1Trainer.Memory;
-using MightAndMagic1Trainer.Mvvm;
 
 namespace MightAndMagic1Trainer.ViewModels;
 

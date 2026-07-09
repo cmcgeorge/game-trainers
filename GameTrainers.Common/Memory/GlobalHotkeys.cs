@@ -1,8 +1,8 @@
 using System.Windows;
 using System.Windows.Interop;
-using static BardsTale1Trainer.Memory.NativeMethods;
+using static GameTrainers.Common.Memory.NativeMethods;
 
-namespace BardsTale1Trainer.Memory;
+namespace GameTrainers.Common.Memory;
 
 /// <summary>
 /// Registers system-wide hotkeys against a window and dispatches WM_HOTKEY to callbacks.

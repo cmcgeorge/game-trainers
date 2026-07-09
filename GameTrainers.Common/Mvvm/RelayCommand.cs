@@ -1,6 +1,6 @@
 using System.Windows.Input;
 
-namespace BardsTale1Trainer.Mvvm;
+namespace GameTrainers.Common.Mvvm;
 
 public sealed class RelayCommand : ICommand
 {

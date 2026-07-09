@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.IO;
 
-namespace BardsTale1Trainer.Memory;
+namespace GameTrainers.Common.Memory;
 
 /// <summary>One region row parsed from a dump's .csv index.</summary>
 public sealed record DumpRegion(long FileOffset, ulong Address, long Size, long UnreadableBytes);

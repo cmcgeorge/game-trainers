@@ -380,14 +380,11 @@ src/MightAndMagic1Trainer/
                MonsterBook.cs       the 195-entry bestiary extracted from MM.EXE
                Lfsr.cs              byte-exact port of the game's LFSR rand(n) (roll predictor)
                MazeData.cs          decodes Mazedata.dta into the 55 vector mazes
-  Memory/      NativeMethods.cs     OpenProcess / Read|WriteProcessMemory / VirtualQueryEx / RegisterHotKey
-               ProcessMemory.cs     handle wrapper + region enumeration
-               RosterLocator.cs     signature scanner
-               RollScanner.cs       locates the create-screen roll buffer for the roller
-               MemoryDumper.cs      whole-process dump (+ region index)
-               DumpComparer.cs      address-space diff of two dumps
-               GlobalHotkeys.cs     system-wide Ctrl+F1/F2/F3 bindings
+  Memory/      RosterLocator.cs     signature scanner (game-specific)
+               RollScanner.cs       locates the create-screen roll buffer for the roller (game-specific)
                DataSegment.cs       fixed DS-offset reader for the game's globals (offset-map.md)
+               (shared)             NativeMethods, ProcessMemory, MemoryDumper, DumpComparer,
+                                    GlobalHotkeys, KeyboardSender, MemorySearcher — see GameTrainers.Common
   ViewModels/  MainViewModel, CharacterViewModel, StatViewModel, HexByteViewModel,
                DrawnMapViewModel, AutoCombatViewModel, RollPredictorViewModel, …
   App.xaml, MainWindow.xaml         dark, two-pane UI (party list + editor/hex tabs)

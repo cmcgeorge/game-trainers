@@ -20,6 +20,10 @@ Each game lives in its own self-contained folder with its own solution/project, 
 
 `MightAndMagic1Trainer` is the architectural template most of the others were ported from.
 
+### Shared library
+
+`GameTrainers.Common/` is a small shared library holding the game-agnostic plumbing that used to be copied between trainers: the process/guest-memory access layer (`GameTrainers.Common.Memory`) and the hand-rolled MVVM base types (`GameTrainers.Common.Mvvm`). The three MM1-family trainers — `MightAndMagic1Trainer`, `BardsTale1Trainer`, and `PoolOfRadianceTrainer` — reference it instead of duplicating that code; each keeps only its own game-specific locators and scanners. The remaining trainers are still self-contained.
+
 ## Prerequisites
 
 - **Windows** (the trainers use WPF and the Win32 process-memory APIs).

@@ -4,12 +4,12 @@ A WPF (.NET 8, `net8.0-windows`) live-memory trainer and offline save editor for
 
 ## Project Structure & Module Organization
 
-Two projects in `PoolOfRadianceTrainer.sln`:
+Three projects in `PoolOfRadianceTrainer.sln`: the WPF app, its test harness, and the shared `GameTrainers.Common` library it references.
 
 - `src/PoolOfRadianceTrainer/` — the WPF app (`AssemblyName` `PoRTrainer`), layered by concern:
   - `Game/` — pure data layer, no UI or process dependencies. `PorFormat.cs` holds the validated 285-byte character-record offset table; `CharacterRecord.cs` is a typed mutable view over that buffer (handles the `60 − x` AC/THAC0 encoding). `SaveGame.cs`/`InventoryItem.cs` edit on-disk saves; `*Book.cs` files are reference data (monsters, spells, maps, effects).
-  - `Memory/` — Win32 P/Invoke (`NativeMethods.cs`), process-memory access, and the signature scanner (`CharacterLocator.cs`) that locates the party by record *shape* since its address changes every session.
-  - `ViewModels/` + `Mvvm/` — MVVM; views (`*.xaml`) bind to view models. `ObservableObject`/`RelayCommand` are hand-rolled, not a library.
+  - `Memory/` — the signature scanner (`CharacterLocator.cs`) that locates the party by record *shape* since its address changes every session, PoR's own value-scanner (`MemorySearcher.cs`), hotkey P/Invoke (`NativeMethods.cs`, now hotkeys-only) and `GlobalHotkeys.cs`. The generic process-memory wrapper (`ProcessMemory`/`MemoryRegion`) is pulled from the shared `GameTrainers.Common.Memory` library via csproj using-aliases; PoR keeps its own MVVM, `NativeMethods` and value-scanner locally because those diverged from Common's versions.
+  - `ViewModels/` + `Mvvm/` — MVVM; views (`*.xaml`) bind to view models. `ObservableObject`/`RelayCommand` are hand-rolled and kept PoR-local (they diverge from `GameTrainers.Common.Mvvm` — PoR uses `SetProperty` and `CommandManager`-driven `CanExecuteChanged`), not a library.
 - `test/FormatCheck/` — headless verification harness (console `Exe`), not the app.
 
 Docs live in `.docs/` (reverse-engineering write-up, strategy guide); ground-truth memory dumps in `.data/`. Dot-prefixed dirs are git-ignored.

@@ -15,6 +15,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\GameTrainers.Common\GameTrainers.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="GameTrainers.Common.Memory" />
+    <Using Include="GameTrainers.Common.Mvvm" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Embedded so the Window/taskbar icon can load it via a pack URI. -->
     <Resource Include="Assets\app.ico" />
     <!-- Bundled map reference images, loaded by the Maps tab via pack URIs. -->

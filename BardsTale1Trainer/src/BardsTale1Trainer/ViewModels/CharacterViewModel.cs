@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using BardsTale1Trainer.Game;
 using BardsTale1Trainer.Memory;
-using BardsTale1Trainer.Mvvm;
 
 namespace BardsTale1Trainer.ViewModels;
 

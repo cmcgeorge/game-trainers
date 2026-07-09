@@ -9,7 +9,6 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using BardsTale1Trainer.Game;
 using BardsTale1Trainer.Memory;
-using BardsTale1Trainer.Mvvm;
 
 namespace BardsTale1Trainer.ViewModels;
 

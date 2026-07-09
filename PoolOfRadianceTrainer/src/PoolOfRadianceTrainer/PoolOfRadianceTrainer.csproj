@@ -13,4 +13,16 @@
     <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\GameTrainers.Common\GameTrainers.Common.csproj" />
+  </ItemGroup>
+
+  <!-- PoR keeps its own divergent Mvvm, NativeMethods and value-scan MemorySearcher, so the
+       Common.Memory namespace is not blanket-imported (its MemorySearcher would collide). Only
+       the identical ProcessMemory/MemoryRegion are pulled from Common via aliases. -->
+  <ItemGroup>
+    <Using Include="GameTrainers.Common.Memory.ProcessMemory" Alias="ProcessMemory" />
+    <Using Include="GameTrainers.Common.Memory.MemoryRegion" Alias="MemoryRegion" />
+  </ItemGroup>
+
 </Project>

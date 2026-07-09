@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using BardsTale1Trainer.Memory;
-using BardsTale1Trainer.Mvvm;
 
 namespace BardsTale1Trainer.ViewModels;
 

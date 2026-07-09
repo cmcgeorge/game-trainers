@@ -1,11 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>BardsTale1Trainer</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\GameTrainers.Common\GameTrainers.Common.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="GameTrainers.Common.Memory" />
+  </ItemGroup>
   <ItemGroup>
     <!-- Compile the format/record logic straight from the WPF project (no GUI deps). -->
     <Compile Include="..\..\src\BardsTale1Trainer\Game\PartyFormat.cs" />
@@ -17,6 +23,5 @@
     <Compile Include="..\..\src\BardsTale1Trainer\Game\MapBook.cs" />
     <Compile Include="..\..\src\BardsTale1Trainer\Game\MapCalibration.cs" />
     <Compile Include="..\..\src\BardsTale1Trainer\Game\PartySnapshot.cs" />
-    <Compile Include="..\..\src\BardsTale1Trainer\Memory\DumpComparer.cs" />
   </ItemGroup>
 </Project>

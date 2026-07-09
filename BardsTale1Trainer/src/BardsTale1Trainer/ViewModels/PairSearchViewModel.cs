@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using BardsTale1Trainer.Memory;
-using BardsTale1Trainer.Mvvm;
 
 namespace BardsTale1Trainer.ViewModels;
 

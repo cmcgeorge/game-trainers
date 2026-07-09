@@ -204,13 +204,11 @@ src/BardsTale1Trainer/
                MapBook.cs           the 17 areas (city + dungeon levels) with grid sizes
                MapCalibration.cs    two-anchor pixel↔cell transform for the Maps tab
                ClassBook.cs         class & race reference text
-  Memory/      NativeMethods.cs     P/Invoke (OpenProcess, R/W ProcessMemory, RegisterHotKey, …)
-               ProcessMemory.cs     handle wrapper + region enumeration
-               PartyLocator.cs      signature scanner -> data-segment base address
-               DumpComparer.cs      address-space diff of two saved dumps
-               GlobalHotkeys.cs     system-wide Ctrl+F1/F2/F3 (RegisterHotKey + WndProc hook)
-               BytePatternScanner.cs, MemorySearcher.cs, MemoryDumper.cs, KeyboardSender.cs
-  Mvvm/        ObservableObject, RelayCommand
+  Memory/      PartyLocator.cs      signature scanner -> data-segment base address (game-specific)
+               (shared)             NativeMethods, ProcessMemory, DumpComparer, GlobalHotkeys,
+                                    BytePatternScanner, MemorySearcher, MemoryDumper, KeyboardSender
+                                    — see GameTrainers.Common
+  Mvvm/        (shared)             ObservableObject, RelayCommand — see GameTrainers.Common
   ViewModels/  MainViewModel (attach/scan/freeze timer, snapshots, slot tools, hotkeys),
                CharacterViewModel, StatViewModel, ItemSlotViewModel, SpellLevelViewModel,
                HexByteViewModel, MemorySearchViewModel, PairSearchViewModel,

@@ -1,4 +1,3 @@
-using MightAndMagic1Trainer.Mvvm;
 
 namespace MightAndMagic1Trainer.ViewModels;
 

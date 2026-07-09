@@ -10,6 +10,8 @@ Every top-level folder is a **self-contained trainer** with its own solution/pro
 
 Layout varies: some use a single `Trainer/` project (no `.sln`), others `src/<Name>/` with a `.sln` and a `test/FormatCheck/` harness. `MightAndMagic1Trainer` is the architectural template the others were ported from. Common layers: Win32 P/Invoke (`Native*.cs`), process/guest-memory access, a game-knowledge layer holding all reverse-engineered offsets as constants, and hand-rolled MVVM (`ObservableObject`/`RelayCommand`).
 
+`GameTrainers.Common/` is a shared library that extracts the game-agnostic plumbing out of that duplication: `GameTrainers.Common.Memory` (process/guest-memory access — `ProcessMemory`/`MemoryRegion`, `NativeMethods`, `MemorySearcher`, `MemoryDumper`, `DumpComparer`, `BytePatternScanner`, `GlobalHotkeys`, `KeyboardSender`) and `GameTrainers.Common.Mvvm` (`ObservableObject`/`RelayCommand`). The three MM1-family trainers (`MightAndMagic1Trainer`, `BardsTale1Trainer`, `PoolOfRadianceTrainer`) reference it instead of carrying their own copies; each keeps only its game-specific locators/scanners locally. `PoolOfRadianceTrainer` intentionally kept its own divergent MVVM, `NativeMethods` and value-scanner and pulls only `ProcessMemory`/`MemoryRegion` from Common (via csproj using-aliases). The remaining trainers are still self-contained. So a fix to the shared plumbing lands once for all three; a fix in one trainer's local copy of the old code still needs porting.
+
 Dot-prefixed dirs (`.docs/` teardown & strategy notes, `.data/` RAM dumps, `.game/` copyrighted assets) are **git-ignored** (`.gitignore` `.*/`) — never commit them.
 
 ## Build, Test, and Development Commands

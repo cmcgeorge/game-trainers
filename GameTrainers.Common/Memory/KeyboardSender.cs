@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
-using static BardsTale1Trainer.Memory.NativeMethods;
+using static GameTrainers.Common.Memory.NativeMethods;
 
-namespace BardsTale1Trainer.Memory;
+namespace GameTrainers.Common.Memory;
 
 /// <summary>
 /// Focuses a target process's main window and replays a short key sequence into it

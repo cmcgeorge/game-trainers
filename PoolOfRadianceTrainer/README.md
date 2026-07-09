@@ -167,13 +167,13 @@ src/PoolOfRadianceTrainer/
                MonsterBook.cs        bestiary + XP values      SpellBook.cs      cleric/mage spells
                ClassRaceBook.cs      classes/races/XP tables    Walkthrough.cs    in-app strategy
                MapBook.cs            areas + keyed location coordinates (Maps tab)
-  Memory/      NativeMethods.cs      OpenProcess / RPM / WPM / VirtualQueryEx / RegisterHotKey / SendInput
-               ProcessMemory.cs      handle wrapper + region enumeration
+  Memory/      NativeMethods.cs      hotkey P/Invoke (memory P/Invokes now in GameTrainers.Common)
                CharacterLocator.cs   signature scanner (returns party + monsters)
-               MemorySearcher.cs     Cheat-Engine-style value scanner
+               MemorySearcher.cs     Cheat-Engine-style value scanner (PoR-local)
                GlobalHotkeys.cs      system-wide Ctrl+F1/F2/F3
+               (shared)              ProcessMemory / MemoryRegion — pulled from GameTrainers.Common via alias
   ViewModels/  MainViewModel, CharacterViewModel, MemorySearchViewModel, child VMs, converters
-  Mvvm/        ObservableObject, RelayCommand
+  Mvvm/        ObservableObject, RelayCommand (PoR-local; diverges from GameTrainers.Common.Mvvm)
   App.xaml, MainWindow.xaml          dark, gold-accented UI
 test/FormatCheck/                    headless verification against ground-truth party bytes
 .docs/         reverse-engineering.md, strategy-guide.md

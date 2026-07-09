@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 
-namespace BardsTale1Trainer.Memory;
+namespace GameTrainers.Common.Memory;
 
 /// <summary>What a completed dump wrote: region/byte totals, unreadable (zero-filled) bytes, and elapsed time.</summary>
 public sealed record DumpResult(int RegionCount, long BytesWritten, long BytesUnreadable, TimeSpan Elapsed);
@@ -67,14 +67,10 @@ public static class MemoryDumper
         // Advisory fail-fast: better a clear message now than gigabytes of I/O ending in a raw
         // IOException on a full drive. (Space can still change under us; the write path copes.)
         var root = Path.GetPathRoot(Path.GetFullPath(binPath));
-        if (root != null)
-        {
-            long free = new DriveInfo(root).AvailableFreeSpace;
-            if (free < total)
-                throw new InvalidOperationException(
-                    $"Not enough disk space: the dump needs {FormatBytes(total)} and the drive has "
-                    + $"{FormatBytes(free)} free.");
-        }
+        if (root != null && TryGetFreeSpace(root) is long free && free < total)
+            throw new InvalidOperationException(
+                $"Not enough disk space: the dump needs {FormatBytes(total)} and the drive has "
+                + $"{FormatBytes(free)} free.");
 
         phase.Report($"Dumping {regions.Count} regions ({FormatBytes(total)})…");
 
@@ -152,6 +148,17 @@ public static class MemoryDumper
         return zeroed;
     }
 
+    // Free space can't be queried for some roots (UNC/network shares, oddly-formed paths):
+    // DriveInfo throws there. Treat "unknown" as "proceed" rather than abort a dump that
+    // would otherwise succeed — the write path still copes with an actually-full drive.
+    private static long? TryGetFreeSpace(string root)
+    {
+        try { return new DriveInfo(root).AvailableFreeSpace; }
+        catch (ArgumentException) { return null; }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
+    }
+
     // Only consulted on the already-slow all-pages-failed path, so the cost is irrelevant.
     private static bool ProcessExited(int pid)
     {
@@ -160,9 +167,9 @@ public static class MemoryDumper
             using var p = Process.GetProcessById(pid);
             return p.HasExited;
         }
-        catch (ArgumentException)
+        catch
         {
-            return true;   // no such pid — it's gone
+            return true;   // no such pid, access denied, or racing exit — treat as gone
         }
     }
 

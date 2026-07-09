@@ -55,17 +55,18 @@ dotnet run --project test\FormatCheck      # the verification harness
 src/MightAndMagic1Trainer/
   Game/        RosterFormat.cs    field offsets, enums, the record signature predicate
                CharacterRecord.cs typed view over a 127-byte buffer (LE accessors + props)
-  Memory/      NativeMethods.cs   P/Invoke (OpenProcess, R/W ProcessMemory, VirtualQueryEx,
-                                  SendInput + window-focus for cast macros)
-               ProcessMemory.cs   handle wrapper + region enumeration
-               RosterLocator.cs   signature scanner -> roster base address
-               KeyboardSender.cs  focus the game window + replay a key sequence (SendInput)
-               MemorySearcher.cs  Cheat-Engine-style value scanner (exact/unknown + narrowing)
+  Memory/      RosterLocator.cs   signature scanner -> roster base address (game-specific, local)
                RollScanner.cs     signature-scan for the temporary create-screen roll buffer
-                                  (7 stat bytes at stride 1 or 2) + read it back
+                                  (7 stat bytes at stride 1 or 2) + read it back (game-specific, local)
                DataSegment.cs     locates DGROUP (string anchor + a second validation string) and
                                   reads/writes globals at fixed DS-relative offsets (docs/offset-map.md)
-  Mvvm/        ObservableObject, RelayCommand
+                                  (game-specific, local)
+               (shared)           NativeMethods (P/Invoke), ProcessMemory (handle wrapper + region
+                                  enumeration), KeyboardSender (focus + SendInput key replay),
+                                  MemorySearcher (Cheat-Engine-style value scanner), MemoryDumper,
+                                  DumpComparer, BytePatternScanner, GlobalHotkeys — now in
+                                  GameTrainers.Common.Memory (imported via a global using)
+  (Mvvm/       ObservableObject, RelayCommand now live in GameTrainers.Common.Mvvm)
   ViewModels/  MainViewModel (attach/scan/freeze timer), CharacterViewModel,
                StatViewModel, ItemSlotViewModel (one inventory slot: item id + charges + charge freeze),
                HexByteViewModel,
@@ -101,7 +102,8 @@ README.md                         user-facing docs + full format table
 
 ## Architecture notes
 
-- **MVVM, no framework.** Hand-rolled `ObservableObject`/`RelayCommand`. View
+- **MVVM, no framework.** Hand-rolled `ObservableObject`/`RelayCommand`, now shared
+  across the MM1-family trainers via `GameTrainers.Common.Mvvm`. View
   models raise `PropertyChanged`; the View binds. Keep logic out of code-behind
   (`MainWindow.xaml.cs` only wires the file-open dialog + DataContext).
 - **Single source of truth per character** is the `byte[127]` inside

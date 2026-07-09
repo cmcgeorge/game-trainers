@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.Threading.Tasks;
 using System.Windows.Threading;
 using MightAndMagic1Trainer.Memory;
-using MightAndMagic1Trainer.Mvvm;
 
 namespace MightAndMagic1Trainer.ViewModels;
 

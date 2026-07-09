@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using MightAndMagic1Trainer.Memory;
-using MightAndMagic1Trainer.Mvvm;
 
 namespace MightAndMagic1Trainer.ViewModels;
 

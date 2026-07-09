@@ -2,7 +2,6 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Windows.Data;
 using BardsTale1Trainer.Game;
-using BardsTale1Trainer.Mvvm;
 
 namespace BardsTale1Trainer.ViewModels;
 

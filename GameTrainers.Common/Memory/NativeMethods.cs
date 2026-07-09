@@ -1,7 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
-namespace MightAndMagic1Trainer.Memory;
+namespace GameTrainers.Common.Memory;
 
 internal static class NativeMethods
 {

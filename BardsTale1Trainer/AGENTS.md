@@ -52,13 +52,12 @@ src/BardsTale1Trainer/
                MapBook.cs         the 17 areas (city 30×30 + sixteen 22×22 dungeon levels)
                MapCalibration.cs  two-anchor pixel↔cell transform (pure, tested; verbatim from MM1)
                ClassBook.cs       class & race reference text
-  Memory/      NativeMethods.cs   P/Invoke (OpenProcess, R/W ProcessMemory, VirtualQueryEx, SendInput, RegisterHotKey)
-               ProcessMemory.cs   handle wrapper + region enumeration
-               PartyLocator.cs    signature scanner -> data-segment base
-               DumpComparer.cs    address-space diff of two dumps (pure, tested; verbatim from MM1)
-               GlobalHotkeys.cs   RegisterHotKey wrapper + WM_HOTKEY dispatch (verbatim from MM1)
-               BytePatternScanner.cs, MemorySearcher.cs, MemoryDumper.cs, KeyboardSender.cs (copied verbatim from MM1)
-  Mvvm/        ObservableObject, RelayCommand
+  Memory/      PartyLocator.cs    signature scanner -> data-segment base (game-specific, local)
+               (shared)           NativeMethods (P/Invoke), ProcessMemory (handle wrapper + region
+                                  enumeration), DumpComparer, GlobalHotkeys, BytePatternScanner,
+                                  MemorySearcher, MemoryDumper, KeyboardSender — all game-agnostic,
+                                  now in GameTrainers.Common.Memory (imported via a global using)
+  (Mvvm/       ObservableObject, RelayCommand now live in GameTrainers.Common.Mvvm)
   ViewModels/  MainViewModel (attach/scan/freeze timer, .TPW save, snapshots, slot tools, hotkey entry points),
                CharacterViewModel, StatViewModel, ItemSlotViewModel, SpellLevelViewModel, HexByteViewModel,
                MemorySearchViewModel, PairSearchViewModel, MemoryDumpViewModel, DumpDiffViewModel (verbatim from MM1),
@@ -75,7 +74,8 @@ README.md                         user-facing docs + full format table
 
 ## Architecture notes
 
-- **MVVM, no framework.** Hand-rolled `ObservableObject`/`RelayCommand`. Keep logic out of
+- **MVVM, no framework.** Hand-rolled `ObservableObject`/`RelayCommand`, shared via
+  `GameTrainers.Common.Mvvm`. Keep logic out of
   code-behind (`MainWindow.xaml.cs` only wires file dialogs + the X/Y grid edit hooks).
 - **Single source of truth per character** is the `byte[92]` inside `CharacterRecord`.
   Friendly fields *and* the raw hex grid write into that buffer; any edit then pushes the
@@ -153,6 +153,8 @@ anything format-related** and keep those constants the single source of the layo
   file the character was loaded from, and always copy the previous version to `.bak` first.
 - The memory dump in `testdata/` is ~380 MB — handy for `FormatCheck` but should not be
   committed. `FormatCheck` skips the dump checks gracefully when it's absent.
-- Several `Memory/` and `ViewModels/` files (the scanner, dumper, key sender, value/pair
-  search) were copied verbatim from `MightAndMagic1Trainer` with only the namespace renamed —
-  they are game-agnostic. Fixes worth keeping should ideally land in both.
+- The game-agnostic `Memory/` and MVVM plumbing (process access, the scanner, dumper, key
+  sender, hotkeys, `ObservableObject`/`RelayCommand`) now lives in the shared
+  `GameTrainers.Common` library, so a fix lands once for every MM1-family trainer instead of
+  being copied per project. Only game-specific pieces stay here — `PartyLocator` in `Memory/`
+  and the value/pair-search view models in `ViewModels/`.

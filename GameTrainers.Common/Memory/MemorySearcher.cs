@@ -1,4 +1,4 @@
-namespace BardsTale1Trainer.Memory;
+namespace GameTrainers.Common.Memory;
 
 /// <summary>Width of the value a <see cref="MemorySearcher"/> looks for.</summary>
 public enum ScanWidth { Byte = 1, Int16 = 2, Int32 = 4 }

@@ -6,7 +6,6 @@ using System.Windows;
 using System.Windows.Data;
 using MightAndMagic1Trainer.Game;
 using MightAndMagic1Trainer.Memory;
-using MightAndMagic1Trainer.Mvvm;
 
 namespace MightAndMagic1Trainer.ViewModels;
 

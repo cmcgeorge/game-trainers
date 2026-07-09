@@ -1,5 +1,4 @@
 using BardsTale1Trainer.Game;
-using BardsTale1Trainer.Memory;
 
 // Headless verification of the Bard's Tale 1 record format and the extracted game
 // tables. Runs against the two bundled .TPW sample characters in docs\, and — if the
