@@ -8,11 +8,12 @@ namespace DragonWarsTrainer.ViewModels;
 /// <summary>
 /// Backs the 🗺 Maps tab: an offline area/location reference plus a live "where am I / teleport me
 /// there" helper. The party's live position lives in a 256-byte global "Heap" whose address changes
-/// every session and cannot be anchored offline, so it is found the MM1/BT1 way — an initial
-/// structural scan collects every plausible Heap address, then the user takes a step in-game and
-/// <see cref="Narrow"/> discards every candidate that did not move like the party, repeating until a
-/// single address remains (the position lock). Teleport writes only the 2 position bytes (X/Y) to
-/// that locked address; do it while exploring, never mid-combat.
+/// every session and cannot be anchored offline, so it is found by moving — a structural
+/// <see cref="Snapshot"/> collects every plausible Heap address, then the user walks a known number
+/// of squares in-game and <see cref="ApplyMoveNarrow"/> discards every candidate that did not shift
+/// by that exact distance on each axis, repeating until a single address remains (the position
+/// lock). Matching by magnitude means the Y axis direction is handled automatically. Teleport writes
+/// only the 2 position bytes (X/Y) to that locked address; do it while exploring, never mid-combat.
 /// </summary>
 public sealed class MapsViewModel : ObservableObject
 {
@@ -20,6 +21,7 @@ public sealed class MapsViewModel : ObservableObject
 
     private List<(nuint Address, HeapReading Reading)> _candidates = new();
     private nuint? _lockedAddress;
+    private int? _liveBoardId;
     private bool _isScanning;
     private CancellationTokenSource? _scanCts;
 
@@ -29,10 +31,11 @@ public sealed class MapsViewModel : ObservableObject
     public MapsViewModel(Func<ProcessMemory?> getMem)
     {
         _getMem = getMem;
-        FindCommand = new RelayCommand(_ => Find(), _ => IsAttached && !_isScanning);
-        NarrowCommand = new RelayCommand(_ => Narrow(), _ => IsAttached && !_isScanning && _candidates.Count > 1);
+        SnapshotCommand = new RelayCommand(_ => Snapshot(), _ => IsAttached && !_isScanning);
+        ApplyMoveCommand = new RelayCommand(_ => ApplyMoveNarrow(), _ => IsAttached && !_isScanning && _candidates.Count > 0);
         ResetCommand = new RelayCommand(_ => ResetSearch(), _ => !_isScanning && (_candidates.Count > 0 || _lockedAddress != null));
         TeleportCommand = new RelayCommand(_ => Teleport(), _ => CanTeleport());
+        SelectLocationCommand = new RelayCommand(p => { if (p is MapLocation l) SelectedLocation = l; });
         SelectedArea = Areas.FirstOrDefault();
     }
 
@@ -59,7 +62,10 @@ public sealed class MapsViewModel : ObservableObject
         set
         {
             if (!SetField(ref _selectedLocation, value)) return;
-            if (value != null) { TargetX = value.X; TargetY = value.Y; }
+            if (value != null)
+            {
+                TargetX = value.X; TargetY = value.Y;
+            }
         }
     }
 
@@ -69,6 +75,20 @@ public sealed class MapsViewModel : ObservableObject
     private int _targetY;
     public int TargetY { get => _targetY; set => SetField(ref _targetY, Math.Clamp(value, 0, 255)); }
 
+    // --- located live position (drives the green dot on the map) -------------
+    private int _liveX;
+    public int LiveX { get => _liveX; private set => SetField(ref _liveX, value); }
+
+    private int _liveY;
+    public int LiveY { get => _liveY; private set => SetField(ref _liveY, value); }
+
+    // --- movement entered between snapshots to narrow the search -------------
+    // Total squares walked in a straight line since the last snapshot. Direction is deliberately not
+    // asked for: Dragon Wars moves the party forward relative to its facing, so matching by total
+    // distance (X+Y shift) locates the party no matter which way it faced.
+    private int _stepsMoved = 1;
+    public int StepsMoved { get => _stepsMoved; set => SetField(ref _stepsMoved, Math.Max(0, value)); }
+
     // --- position lock -------------------------------------------------------
     public bool HasLock => _lockedAddress != null;
 
@@ -76,20 +96,21 @@ public sealed class MapsViewModel : ObservableObject
     /// <summary>"Purgatory — X 20 · Y 13 facing North" once locked; empty otherwise.</summary>
     public string LivePosition { get => _livePosition; private set => SetField(ref _livePosition, value); }
 
-    private string _searchState = "Take a step in-game between Find and Narrow so the party's position changes.";
+    private string _searchState = "Snapshot memory, then walk a known distance and Apply move to locate the party.";
     public string SearchState { get => _searchState; private set => SetField(ref _searchState, value); }
 
     private string _status =
-        "Reference only until located. To teleport: attach on the Party tab, click Find here, take one step in-game, then Narrow until a single address remains.";
+        "Reference only until located. To teleport: attach on the Party tab, click Snapshot memory, walk a few squares in-game in a straight line, type how many, then Apply move until a single address remains.";
     public string Status { get => _status; set => SetField(ref _status, value); }
 
-    public ICommand FindCommand { get; }
-    public ICommand NarrowCommand { get; }
+    public ICommand SnapshotCommand { get; }
     public ICommand ResetCommand { get; }
     public ICommand TeleportCommand { get; }
+    public ICommand ApplyMoveCommand { get; }
+    public ICommand SelectLocationCommand { get; }
 
     // --- position search -----------------------------------------------------
-    private async void Find()
+    private async void Snapshot()
     {
         var mem = _getMem();
         if (mem is not { IsOpen: true }) { Status = "Attach on the Party tab first."; return; }
@@ -101,8 +122,10 @@ public sealed class MapsViewModel : ObservableObject
 
         _isScanning = true;
         _lockedAddress = null;
+        _liveBoardId = null;
         _candidates = new();
-        Status = "Scanning memory for the party's position…";
+        StepsMoved = 1;
+        Status = "Reading memory for every plausible position…";
         RaiseSearchState();
 
         List<(nuint, HeapReading)> found;
@@ -128,7 +151,7 @@ public sealed class MapsViewModel : ObservableObject
         catch (Exception ex)
         {
             _isScanning = false;
-            Status = "Find error: " + ex.Message;
+            Status = "Snapshot error: " + ex.Message;
             RaiseSearchState();
             return;
         }
@@ -140,15 +163,19 @@ public sealed class MapsViewModel : ObservableObject
         _candidates = found;
         RaiseSearchState();
         Status = _candidates.Count == 0
-            ? "No candidates found. Make sure the party is loaded and on a map, then Find again."
-            : $"Found {_candidates.Count} candidate(s). Take one step in-game, then click Narrow.";
+            ? "No candidates found. Make sure the party is loaded and on a map, then Snapshot again."
+            : $"Snapshot taken: {_candidates.Count} candidate(s). Walk a known number of squares in-game (straight line), enter how many, then Apply move.";
     }
 
-    private async void Narrow()
+    private async void ApplyMoveNarrow()
     {
         var mem = _getMem();
         if (mem is not { IsOpen: true }) { Status = "Attach on the Party tab first."; return; }
         if (_isScanning) return;
+        if (_candidates.Count == 0) { Status = "Click Snapshot memory first, then walk and Apply move."; return; }
+        if (StepsMoved <= 0) { Status = "Enter how many squares you walked (a straight line, at least 1) before applying."; return; }
+
+        int steps = StepsMoved;
 
         _scanCts?.Dispose();
         _scanCts = new CancellationTokenSource();
@@ -161,7 +188,7 @@ public sealed class MapsViewModel : ObservableObject
         List<(nuint Address, HeapReading Reading)> survivors;
         try
         {
-            survivors = await Task.Run(() => HeapLocator.Narrow(mem, previous, ct), ct);
+            survivors = await Task.Run(() => HeapLocator.NarrowBySteps(mem, previous, steps, ct), ct);
         }
         catch (OperationCanceledException)
         {
@@ -170,7 +197,7 @@ public sealed class MapsViewModel : ObservableObject
         catch (Exception ex)
         {
             _isScanning = false;
-            Status = "Narrow error: " + ex.Message;
+            Status = "Apply move error: " + ex.Message;
             RaiseSearchState();
             return;
         }
@@ -180,12 +207,13 @@ public sealed class MapsViewModel : ObservableObject
         if (_getMem() != mem) return;   // detached/re-attached while narrowing
 
         _candidates = survivors;
+        StepsMoved = 1;
         RaiseSearchState();
         Status = _candidates.Count switch
         {
-            0 => "All candidates dropped. Click Reset and Find again (be sure to actually move between Find and Narrow).",
-            1 => "Position locked. Pick a location (or type X/Y) and Teleport.",
-            _ => $"{_candidates.Count} candidate(s) remain. Take another step, then Narrow again."
+            0 => "No position matched that move. Click Reset, Snapshot again, and make sure the number of squares matches exactly how far you walked in a straight line (all within one map).",
+            1 => "Position locked! The green dot on the map is your live position, and Teleport is now enabled.",
+            _ => $"{_candidates.Count} candidate(s) left. Walk again in a straight line, enter the squares moved, then Apply move."
         };
     }
 
@@ -195,14 +223,17 @@ public sealed class MapsViewModel : ObservableObject
         _isScanning = false;
         _candidates = new();
         _lockedAddress = null;
+        _liveBoardId = null;
+        StepsMoved = 1;
         RaiseSearchState();
-        Status = "Search reset. Click Find to begin again.";
+        Status = "Search reset. Click Snapshot memory to begin again.";
     }
 
     /// <summary>
     /// Clears all position-search state when the trainer detaches so a fresh session starts from
     /// scratch (a locked address from the previous process is meaningless once detached). Also
-    /// cancels any in-flight Find/Narrow so the background sweep stops touching the disposed process.
+    /// cancels any in-flight snapshot/narrow so the background sweep stops touching the disposed
+    /// process.
     /// </summary>
     public void OnDetached()
     {
@@ -210,9 +241,16 @@ public sealed class MapsViewModel : ObservableObject
         _isScanning = false;
         _candidates = new();
         _lockedAddress = null;
+        _liveBoardId = null;
         LivePosition = "";
         RaiseSearchState();
-        Status = "Detached. Attach on the Party tab, then Find to locate the party again.";
+        Status = "Detached. Attach on the Party tab, then Snapshot memory to locate the party again.";
+    }
+
+    public void OnAttached()
+    {
+        RaiseSearchState();
+        Status = "Attached. Click Snapshot memory, walk a known distance in a straight line, enter how many squares, then Apply move — repeat until it locks.";
     }
 
     /// <summary>Poll-tick refresh: lock when one candidate remains and re-read the live position.</summary>
@@ -234,15 +272,27 @@ public sealed class MapsViewModel : ObservableObject
         if (reading == null)
         {
             _lockedAddress = null;
+            _liveBoardId = null;
             _candidates = new();
             LivePosition = "";
             RaiseSearchState();
-            Status = "Lost the position lock (map changed or DOSBox restarted). Click Find to re-locate.";
+            Status = "Lost the position lock (map changed or DOSBox restarted). Click Snapshot memory to re-locate.";
             return;
         }
 
         var r = reading.Value;
+        LiveX = r.X; LiveY = r.Y;
         LivePosition = $"{MapBook.MapName(r.BoardId)} — X {r.X} · Y {r.Y} facing {MapBook.FacingName(r.Facing)}";
+
+        // Follow the party onto whatever board it is standing on so the green dot lands on the right
+        // map — but only when the board actually changes, so we don't clobber a map the user is
+        // browsing on every poll tick.
+        if (_liveBoardId != r.BoardId)
+        {
+            _liveBoardId = r.BoardId;
+            var area = Areas.FirstOrDefault(a => a.Id == r.BoardId);
+            if (area != null && !ReferenceEquals(area, SelectedArea)) SelectedArea = area;
+        }
     }
 
     // --- teleport ------------------------------------------------------------
@@ -252,10 +302,10 @@ public sealed class MapsViewModel : ObservableObject
     {
         var mem = _getMem();
         if (mem is not { IsOpen: true }) { Status = "Attach on the Party tab first."; return; }
-        if (_lockedAddress == null) { Status = "No position lock yet — Find and Narrow to a single address first."; return; }
+        if (_lockedAddress == null) { Status = "No position lock yet — Snapshot and Apply move down to a single address first."; return; }
 
         var reading = HeapLocator.Read(mem, _lockedAddress.Value);
-        if (reading == null) { Status = "The position lock went stale. Click Find to re-locate."; return; }
+        if (reading == null) { Status = "The position lock went stale. Click Snapshot memory to re-locate."; return; }
 
         var r = reading.Value;
         if (SelectedArea != null && SelectedArea.Id != r.BoardId)
@@ -274,7 +324,7 @@ public sealed class MapsViewModel : ObservableObject
         bool ok = mem.WriteRange(_lockedAddress.Value, new[] { (byte)TargetY, (byte)TargetX }, 0, 2);
         Status = ok
             ? $"Teleported to ({TargetX}, {TargetY}). Take one step in-game to redraw the map."
-            : "Teleport write failed — click Find to re-locate the position.";
+            : "Teleport write failed — click Snapshot memory to re-locate the position.";
     }
 
     private void RaiseSearchState()
@@ -283,11 +333,11 @@ public sealed class MapsViewModel : ObservableObject
         SearchState = _lockedAddress != null
             ? "Locked on a single address."
             : _candidates.Count == 0
-                ? "No candidates — click Find."
-                : $"{_candidates.Count} candidate(s) — step in-game, then Narrow.";
+                ? "No candidates — click Snapshot memory."
+                : $"{_candidates.Count} candidate(s) — walk a known distance, then Apply move.";
         OnPropertyChanged(nameof(HasLock));
-        (FindCommand as RelayCommand)?.RaiseCanExecuteChanged();
-        (NarrowCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (SnapshotCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (ApplyMoveCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (ResetCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (TeleportCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }

@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using DragonWarsTrainer.Game;
 using DragonWarsTrainer.ViewModels;
 
@@ -54,5 +55,22 @@ public partial class MainWindow : Window
         if (Item(combo) is not { } vm || e.AddedItems[0] is not ItemTemplate template) return;
         if (!combo.IsDropDownOpen && template.Name == vm.Name) return;
         vm.ApplyTemplate(template);
+    }
+
+    // Each map square is drawn at this many pixels (matches the DrawingBrush viewport and the
+    // MapScale converter's Cell). Clicking the schematic sets the teleport target to that square;
+    // the Y axis is drawn bottom-up (origin bottom-left), so the row is flipped back to a grid Y.
+    private const double MapCell = 15;
+
+    private void Map_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement map || map.DataContext is not MapsViewModel vm) return;
+        if (vm.SelectedArea is not { } area) return;
+
+        var p = e.GetPosition(map);
+        int x = (int)Math.Floor(p.X / MapCell);
+        int y = area.GridHeight - 1 - (int)Math.Floor(p.Y / MapCell);
+        vm.TargetX = Math.Clamp(x, 0, area.GridWidth - 1);
+        vm.TargetY = Math.Clamp(y, 0, area.GridHeight - 1);
     }
 }

@@ -1,9 +1,13 @@
 <Window x:Class="DragonWarsTrainer.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:DragonWarsTrainer"
         Title="Dragon Wars Trainer" Height="720" Width="960"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen" WindowState="Maximized">
     <Window.Resources>
+        <local:MapScaleConverter x:Key="MapScale" Cell="15"/>
+        <local:MapFlipYConverter x:Key="MapFlipY" Cell="15"/>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <Style TargetType="TextBox">
             <Setter Property="Margin" Value="2"/>
             <Setter Property="Padding" Value="2,1"/>
@@ -400,7 +404,7 @@
                     <GroupBox Grid.Column="0" Header="Areas">
                         <DockPanel>
                             <ComboBox DockPanel.Dock="Top" ItemsSource="{Binding Areas}"
-                                      SelectedItem="{Binding SelectedArea}" DisplayMemberPath="Header" Margin="2"/>
+                                      SelectedItem="{Binding SelectedArea}" DisplayMemberPath="Name" Margin="2"/>
                             <ListBox ItemsSource="{Binding Locations}" SelectedItem="{Binding SelectedLocation}">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
@@ -427,13 +431,118 @@
                                 </StackPanel>
                             </GroupBox>
 
-                            <GroupBox Header="Locate the party" Margin="0,8,0,0">
+                            <GroupBox Header="Map" Margin="0,8,0,0">
                                 <StackPanel Margin="4">
                                     <TextBlock TextWrapping="Wrap" Foreground="#555"
-                                               Text="The live position lives in memory that moves each session, so locate it once: click Find, take a single step in-game, then click Narrow. Repeat Narrow (stepping each time) until it locks on one address."/>
+                                               Text="Schematic drawn from the location list — X across, Y up (origin bottom-left, matching the in-game map). Hover a marker for its name and notes. Click any square to set the teleport target (the blue outline), then use Teleport below; the green dot is your live position once located."/>
+                                    <ScrollViewer MaxHeight="420" Margin="0,6,0,0"
+                                                  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                        <Border BorderBrush="#CCC" BorderThickness="1" Background="#FBFBF5"
+                                                HorizontalAlignment="Left" VerticalAlignment="Top" ClipToBounds="True"
+                                                Width="{Binding SelectedArea.GridWidth, Converter={StaticResource MapScale}}"
+                                                Height="{Binding SelectedArea.GridHeight, Converter={StaticResource MapScale}}">
+                                            <Grid MouseLeftButtonDown="Map_Click">
+                                                <Rectangle>
+                                                    <Rectangle.Fill>
+                                                        <DrawingBrush TileMode="Tile" Viewport="0,0,15,15" ViewportUnits="Absolute">
+                                                            <DrawingBrush.Drawing>
+                                                                <GeometryDrawing Geometry="M0,0 L15,0 15,15 0,15 Z">
+                                                                    <GeometryDrawing.Pen>
+                                                                        <Pen Brush="#E4E4D8" Thickness="1"/>
+                                                                    </GeometryDrawing.Pen>
+                                                                </GeometryDrawing>
+                                                            </DrawingBrush.Drawing>
+                                                        </DrawingBrush>
+                                                    </Rectangle.Fill>
+                                                </Rectangle>
+
+                                                <ItemsControl ItemsSource="{Binding Locations}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <Canvas/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemContainerStyle>
+                                                        <Style TargetType="ContentPresenter">
+                                                            <Setter Property="Canvas.Left" Value="{Binding X, Converter={StaticResource MapScale}}"/>
+                                                            <Setter Property="Canvas.Top">
+                                                                <Setter.Value>
+                                                                    <MultiBinding Converter="{StaticResource MapFlipY}">
+                                                                        <Binding Path="Y"/>
+                                                                        <Binding Path="DataContext.SelectedArea.GridHeight" RelativeSource="{RelativeSource AncestorType=ItemsControl}"/>
+                                                                    </MultiBinding>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </Style>
+                                                    </ItemsControl.ItemContainerStyle>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Grid Width="15" Height="15" Background="Transparent" Cursor="Hand">
+                                                                <Grid.InputBindings>
+                                                                    <MouseBinding MouseAction="LeftClick"
+                                                                                  Command="{Binding DataContext.SelectLocationCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                                  CommandParameter="{Binding}"/>
+                                                                </Grid.InputBindings>
+                                                                <Grid.ToolTip>
+                                                                    <StackPanel MaxWidth="260">
+                                                                        <TextBlock FontWeight="Bold">
+                                                                            <Run Text="{Binding Coord, Mode=OneWay}"/>
+                                                                            <Run Text="  "/>
+                                                                            <Run Text="{Binding Name, Mode=OneWay}"/>
+                                                                        </TextBlock>
+                                                                        <TextBlock Text="{Binding Notes}" TextWrapping="Wrap" Foreground="#555"/>
+                                                                    </StackPanel>
+                                                                </Grid.ToolTip>
+                                                                <Ellipse Width="11" Height="11" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                         Fill="#C0392B" Stroke="White" StrokeThickness="1"/>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <Canvas>
+                                                    <Border Width="15" Height="15" BorderBrush="#2E86DE" BorderThickness="2"
+                                                            Canvas.Left="{Binding TargetX, Converter={StaticResource MapScale}}">
+                                                        <Canvas.Top>
+                                                            <MultiBinding Converter="{StaticResource MapFlipY}">
+                                                                <Binding Path="TargetY"/>
+                                                                <Binding Path="SelectedArea.GridHeight"/>
+                                                            </MultiBinding>
+                                                        </Canvas.Top>
+                                                    </Border>
+                                                </Canvas>
+
+                                                <Canvas>
+                                                    <Grid Width="15" Height="15" ToolTip="Your live position"
+                                                          Visibility="{Binding HasLock, Converter={StaticResource BoolToVis}}"
+                                                          Canvas.Left="{Binding LiveX, Converter={StaticResource MapScale}}">
+                                                        <Canvas.Top>
+                                                            <MultiBinding Converter="{StaticResource MapFlipY}">
+                                                                <Binding Path="LiveY"/>
+                                                                <Binding Path="SelectedArea.GridHeight"/>
+                                                            </MultiBinding>
+                                                        </Canvas.Top>
+                                                        <Ellipse Width="13" Height="13" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                 Fill="#27AE60" Stroke="White" StrokeThickness="2"/>
+                                                    </Grid>
+                                                </Canvas>
+                                            </Grid>
+                                        </Border>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Locate the party (by moving)" Margin="0,8,0,0">
+                                <StackPanel Margin="4">
+                                    <TextBlock TextWrapping="Wrap" Foreground="#555"
+                                               Text="The live position lives in memory that moves each session, so find it by moving. Click 'Snapshot memory', then walk a known number of squares in-game in a straight line, type how many, and click 'Apply move'. Repeat — walking and applying — until it locks on one address. You don't need to say which direction: Dragon Wars moves you forward relative to your facing, and the total distance is matched either way. Keep it all within a single map. Once locked, the green dot tracks you live."/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <TextBlock Text="Squares moved (straight line)" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox Width="60" Text="{Binding StepsMoved}"/>
+                                    </StackPanel>
                                     <WrapPanel Margin="0,6,0,0">
-                                        <Button Content="Find" Command="{Binding FindCommand}"/>
-                                        <Button Content="Narrow" Command="{Binding NarrowCommand}"/>
+                                        <Button Content="Snapshot memory" Command="{Binding SnapshotCommand}"/>
+                                        <Button Content="Apply move" Command="{Binding ApplyMoveCommand}"/>
                                         <Button Content="Reset" Command="{Binding ResetCommand}"/>
                                     </WrapPanel>
                                     <TextBlock Text="{Binding SearchState}" Foreground="#777" Margin="2,6,0,0"/>

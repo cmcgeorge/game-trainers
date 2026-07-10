@@ -39,7 +39,10 @@ public static class HeapLocator
     private const int WindowSize = 0x40;                   // bytes read to validate a candidate
     private const int MaxCandidates = 500_000;             // safety cap on the initial sweep
 
-    private static bool IsValidDim(int d) => d == 16 || d == 32 || d == 48;
+    // Board dimensions are stored as the true width/height (the wrap modulus in the engine). Real
+    // maps are 16/32/48, but accept the whole plausible range so an unexpected size never hides the
+    // real Heap — the strong filter is that the party's X/Y must fall inside these bounds.
+    private static bool IsValidDim(int d) => d >= 2 && d <= 64;
 
     private static bool Plausible(byte[] buf, int i)
     {
@@ -117,5 +120,43 @@ public static class HeapLocator
             survivors.Add((addr, now.Value));
         }
         return survivors;
+    }
+
+    /// <summary>
+    /// Narrows a candidate set after the party walked a known number of squares in a straight line:
+    /// keeps only addresses whose combined X+Y shift equals <paramref name="steps"/> since
+    /// <paramref name="baseline"/> was captured. Matching by total distance means the caller does not
+    /// have to know which compass direction the party faced (Dragon Wars moves the party forward
+    /// relative to its facing), so a step counts whether it landed on the X or the Y axis. Distances
+    /// are measured on the wrapping grid (walking off one edge reappears on the other), and any
+    /// candidate whose board id changed is dropped, since leaving the map through a door randomises
+    /// the coordinates and would otherwise lock a false address. Returns the survivors with fresh
+    /// readings, ready to serve as the next baseline.
+    /// </summary>
+    public static List<(nuint Address, HeapReading Reading)> NarrowBySteps(
+        ProcessMemory mem, IEnumerable<(nuint Address, HeapReading Reading)> baseline,
+        int steps, CancellationToken ct = default)
+    {
+        var survivors = new List<(nuint, HeapReading)>();
+        foreach (var (addr, before) in baseline)
+        {
+            ct.ThrowIfCancellationRequested();
+            var now = Read(mem, addr);
+            if (now is null) continue;
+            if (now.Value.BoardId != before.BoardId) continue;   // walked off the map — not a straight-line step
+            int moved = WrappedDelta(now.Value.X, before.X, before.MaxX)
+                      + WrappedDelta(now.Value.Y, before.Y, before.MaxY);
+            if (moved != steps) continue;
+            survivors.Add((addr, now.Value));
+        }
+        return survivors;
+    }
+
+    /// <summary>Shortest distance between two coordinates on an axis that wraps at <paramref name="size"/>.</summary>
+    private static int WrappedDelta(int now, int before, int size)
+    {
+        int d = Math.Abs(now - before);
+        if (size > 0 && d > size - d) d = size - d;
+        return d;
     }
 }

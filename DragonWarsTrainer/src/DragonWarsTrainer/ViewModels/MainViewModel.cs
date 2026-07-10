@@ -140,6 +140,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             _mem = ProcessMemory.Open(SelectedProcess.Id);
             OnPropertyChanged(nameof(IsAttached));
             RaiseCommands();
+            Maps.OnAttached();
             _poll.Start();
             Status = $"Attached to {SelectedProcess.Name} (pid {SelectedProcess.Id}). Scanning for the party…";
             Scan();
