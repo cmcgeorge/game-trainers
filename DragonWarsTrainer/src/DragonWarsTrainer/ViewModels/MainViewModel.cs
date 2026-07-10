@@ -76,6 +76,13 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         set { if (SetField(ref _freezePower, value)) { foreach (var c in Party) c.FreezePower = value; Status = value ? "Power frozen for the party." : "Power freeze OFF."; } }
     }
 
+    private bool _freezePoints;
+    public bool FreezePoints
+    {
+        get => _freezePoints;
+        set { if (SetField(ref _freezePoints, value)) { foreach (var c in Party) c.FreezePoints = value; Status = value ? "Points to allocate frozen for the party." : "Points freeze OFF."; } }
+    }
+
     // --- commands ------------------------------------------------------------
     public ICommand RefreshProcessesCommand { get; }
     public ICommand AttachCommand { get; }
@@ -163,6 +170,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         _freezeHealth = false; OnPropertyChanged(nameof(FreezeHealth));
         _freezeStun = false; OnPropertyChanged(nameof(FreezeStun));
         _freezePower = false; OnPropertyChanged(nameof(FreezePower));
+        _freezePoints = false; OnPropertyChanged(nameof(FreezePoints));
         OnPropertyChanged(nameof(IsAttached));
         RaiseCommands();
         Status = "Detached.";
@@ -189,6 +197,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             if (FreezeHealth) foreach (var c in Party) c.FreezeHealth = true;
             if (FreezeStun) foreach (var c in Party) c.FreezeStun = true;
             if (FreezePower) foreach (var c in Party) c.FreezePower = true;
+            if (FreezePoints) foreach (var c in Party) c.FreezePoints = true;
             Status = Party.Count == 0
                 ? "No party found. Make sure characters are loaded (past the title screen), then Re-scan."
                 : $"Found {Party.Count} character(s).";

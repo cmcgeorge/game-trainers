@@ -52,6 +52,7 @@
                 <CheckBox Content="Freeze Health" IsChecked="{Binding FreezeHealth}" VerticalAlignment="Center" Margin="4,0"/>
                 <CheckBox Content="Freeze Stun" IsChecked="{Binding FreezeStun}" VerticalAlignment="Center" Margin="4,0"/>
                 <CheckBox Content="Freeze Power" IsChecked="{Binding FreezePower}" VerticalAlignment="Center" Margin="4,0"/>
+                <CheckBox Content="Freeze Points" IsChecked="{Binding FreezePoints}" VerticalAlignment="Center" Margin="4,0"/>
                 <Separator Style="{x:Null}" Width="12"/>
                 <Button Content="Heal Party" Command="{Binding HealPartyCommand}"/>
                 <Button Content="Max Attributes" Command="{Binding MaxPartyCommand}"/>
@@ -115,6 +116,14 @@
                                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Gold" Style="{StaticResource FieldLabel}"/>
                                     <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Gold}"/>
                                 </Grid>
+
+                                <GroupBox Header="Points to Allocate" Margin="0,8,0,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Unspent" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox Width="80" Text="{Binding UnspentPoints}"/>
+                                        <CheckBox Content="Freeze" IsChecked="{Binding FreezePoints}" VerticalAlignment="Center" Margin="8,0"/>
+                                    </StackPanel>
+                                </GroupBox>
 
                                 <GroupBox Header="Vitals" Margin="0,8,0,0">
                                     <Grid>

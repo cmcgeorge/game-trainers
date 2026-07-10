@@ -67,7 +67,7 @@ public static class RosterFormat
     public const int OffSkills = 0x20;      // 27 skill ranks, one byte each (0x20..0x3A)
     public const int SkillCount = 27;
 
-    public const int OffAttackPoints = 0x3B;
+    public const int OffUnspentPoints = 0x3B;   // unspent advancement points ("Unspent AP") available to allocate after levelling
     public const int OffSpells = 0x3C;      // 8 bytes, each a bitfield of 8 spells (0x3C..0x43)
     public const int SpellByteCount = 8;
 

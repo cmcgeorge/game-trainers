@@ -32,6 +32,14 @@ public sealed class CharacterViewModel : ObservableObject
     private bool _freezePower;
     public bool FreezePower { get => _freezePower; set => SetField(ref _freezePower, value); }
 
+    private int _pointsFreezeValue;
+    private bool _freezePoints;
+    public bool FreezePoints
+    {
+        get => _freezePoints;
+        set { if (SetField(ref _freezePoints, value) && value) _pointsFreezeValue = Record.UnspentPoints; }
+    }
+
     public CharacterViewModel(ICharacterHost host, LocatedCharacter located)
     {
         _host = host;
@@ -106,7 +114,8 @@ public sealed class CharacterViewModel : ObservableObject
     public string Title => $"{Record.Name}  —  L{Record.Level} {Record.GenderName}";
     public string Summary =>
         $"HP {Record.HealthCurrent}/{Record.HealthMax}   Stun {Record.StunCurrent}/{Record.StunMax}   " +
-        $"Pow {Record.PowerCurrent}/{Record.PowerMax}   AV {Record.ArmorValue} DV {Record.DefenseValue} AC {Record.ArmorClass}   [{Record.StatusName}]";
+        $"Pow {Record.PowerCurrent}/{Record.PowerMax}   AV {Record.ArmorValue} DV {Record.DefenseValue} AC {Record.ArmorClass}   " +
+        $"Pts {Record.UnspentPoints}   [{Record.StatusName}]";
     public string ListLabel => $"{Record.Name}  (L{Record.Level})";
 
     public int GenderIndex
@@ -129,6 +138,18 @@ public sealed class CharacterViewModel : ObservableObject
     {
         get => Record.Gold;
         set { Record.Gold = value; Poke(RosterFormat.OffGold, 4); OnPropertyChanged(); }
+    }
+
+    /// <summary>Unspent advancement points available to allocate (e.g. after levelling up).</summary>
+    public int UnspentPoints
+    {
+        get => Record.UnspentPoints;
+        set
+        {
+            Record.UnspentPoints = value; Poke(RosterFormat.OffUnspentPoints, 1);
+            if (_freezePoints) _pointsFreezeValue = Record.UnspentPoints;
+            OnPropertyChanged(); RaiseDerived();
+        }
     }
 
     // --- vitals --------------------------------------------------------------
@@ -243,6 +264,8 @@ public sealed class CharacterViewModel : ObservableObject
         { Record.StunCurrent = Record.StunMax; Poke(RosterFormat.OffStunCur, 2); }
         if (FreezePower && Record.PowerCurrent != Record.PowerMax)
         { Record.PowerCurrent = Record.PowerMax; Poke(RosterFormat.OffPowerCur, 2); }
+        if (FreezePoints && Record.UnspentPoints != _pointsFreezeValue)
+        { Record.UnspentPoints = _pointsFreezeValue; Poke(RosterFormat.OffUnspentPoints, 1); }
     }
 
     /// <summary>

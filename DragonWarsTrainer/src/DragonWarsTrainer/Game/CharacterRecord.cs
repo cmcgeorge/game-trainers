@@ -89,7 +89,8 @@ public sealed class CharacterRecord
     }
 
     // --- identity / progression ----------------------------------------------
-    public int AttackPoints { get => U8(RosterFormat.OffAttackPoints); set => U8(RosterFormat.OffAttackPoints, value); }
+    /// <summary>Unspent advancement points the character has available to allocate (e.g. after levelling up).</summary>
+    public int UnspentPoints { get => U8(RosterFormat.OffUnspentPoints); set => U8(RosterFormat.OffUnspentPoints, value); }
     public int Status { get => U8(RosterFormat.OffStatus); set => U8(RosterFormat.OffStatus, value); }
     public int NpcId { get => U8(RosterFormat.OffNpcId); set => U8(RosterFormat.OffNpcId, value); }
     public int Gender { get => U8(RosterFormat.OffGender); set => U8(RosterFormat.OffGender, value); }
