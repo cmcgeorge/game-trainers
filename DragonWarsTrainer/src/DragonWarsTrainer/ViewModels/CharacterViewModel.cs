@@ -56,10 +56,45 @@ public sealed class CharacterViewModel : ObservableObject
         }
 
         for (int i = 0; i < InventoryFormat.SlotCount; i++)
-            Items.Add(new ItemSlotViewModel(i, Record.GetItem(i), (off, len) => Poke(off, len)));
+            Items.Add(new ItemSlotViewModel(
+                i,
+                Record.GetItem(i),
+                (off, len) => Poke(off, len),
+                DuplicateItem,
+                HasEmptyItemSlot,
+                OnInventoryChanged));
     }
 
     public int ItemCount => Record.ItemCount;
+
+    /// <summary>True when at least one inventory slot is empty (a duplicate/apply has room to land).</summary>
+    private bool HasEmptyItemSlot() => Record.ItemCount < InventoryFormat.SlotCount;
+
+    /// <summary>
+    /// Occupancy changed in some slot: refresh the item count and let every row re-evaluate its
+    /// duplicate affordance (a newly-filled or freed slot flips <c>CanDuplicate</c> for all rows).
+    /// </summary>
+    private void OnInventoryChanged()
+    {
+        OnPropertyChanged(nameof(ItemCount));
+        foreach (var item in Items)
+            item.NotifyAvailabilityChanged();
+    }
+
+    /// <summary>
+    /// Copies the given slot's item into the first empty inventory slot, writes it to live memory,
+    /// and refreshes the affected row. No-op when the source is empty or the inventory is full.
+    /// </summary>
+    public void DuplicateItem(ItemSlotViewModel source)
+    {
+        int dest = Record.DuplicateItem(source.Index);
+        if (dest < 0) return;
+        int destBase = InventoryFormat.OffInventory + dest * InventoryFormat.SlotSize;
+        Poke(destBase, InventoryFormat.SlotSize);
+        Items[dest].NotifyReloaded();
+        OnInventoryChanged();
+        RaiseDerived();
+    }
 
     // --- identity / summary --------------------------------------------------
     public string Name

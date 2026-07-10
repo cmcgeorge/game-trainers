@@ -60,13 +60,19 @@ public static class InventoryFormat
     public const byte MaskReqSkill = 0x3F;
 
     /// <summary>
-    /// Item-type names, indexed by the low 5 bits of slot byte 5 (<c>Lists.ITEM_TYPES</c>).
+    /// Item-type names, indexed by the low 5 bits of slot byte 5 (<c>Lists.ITEM_TYPES</c> from the
+    /// dragonjars reimplementation).
     /// </summary>
     public static readonly string[] ItemTypeNames =
     {
-        "Miscellaneous", "Axe", "Flail", "Sword", "Two-Hander", "Mace",
-        "Bow", "Crossbow", "Thrown", "Ammo", "Body Armor", "Shield",
-        "Helm", "Gloves", "Boots", "Ring"
+        "General Item", "Shield", "Full Shield", "Axe",
+        "Flail", "Sword", "Two-handed sword", "Mace",
+        "Bow", "Crossbow", "Gun", "Thrown weapon",
+        "Ammunition", "Gloves", "Mage Gloves", "Ammo Clip",
+        "Cloth Armor", "Leather Armor", "Cuir Bouilli Armor", "Brigandine Armor",
+        "Scale Armor", "Chain Armor", "Plate and Chain Armor", "Full Plate Armor",
+        "Helmet", "Scroll", "Boots", "-",
+        "-", "-", "-", "-"
     };
 
     public static string ItemTypeName(int type) =>

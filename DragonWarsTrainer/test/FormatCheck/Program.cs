@@ -74,6 +74,45 @@ Check("empty (0xFF) slot", new CharacterRecord(FilledWith(0xFF)).IsOccupied, fal
 Check("empty (0x00) slot", new CharacterRecord(new byte[RosterFormat.RecordSize]).IsOccupied, false);
 Console.WriteLine();
 
+Console.WriteLine("Item type table (Lists.ITEM_TYPES):");
+Check("item type count", InventoryFormat.ItemTypeNames.Length, 32);
+Check("type 0", InventoryFormat.ItemTypeName(0), "General Item");
+Check("type 5 (Sword)", InventoryFormat.ItemTypeName(5), "Sword");
+Check("type 24 (Helmet)", InventoryFormat.ItemTypeName(24), "Helmet");
+Console.WriteLine();
+
+Console.WriteLine("Item templates / apply / infinite charges / duplicate:");
+Check("catalog non-empty", ItemTemplates.All.Count > 0, true);
+Check("all headers 11 bytes", ItemTemplates.All.All(t => t.Header.Length == InventoryFormat.OffItemName), true);
+Check("template names unique", ItemTemplates.All.Select(t => t.Name).Distinct().Count(), ItemTemplates.All.Count);
+
+var invRec = new CharacterRecord(new byte[RosterFormat.RecordSize]);
+var wand = ItemTemplates.All.First(t => t.Name == "Wand");
+var slot0 = invRec.GetItem(0);
+slot0.Apply(wand);
+Check("applied name", slot0.Name, "Wand");
+Check("applied type is General Item", slot0.TypeName, "General Item");
+Check("applied slot occupied", slot0.IsEmpty, false);
+Check("Wand is chargeable", slot0.IsChargeable, true);
+
+slot0.Charges = 5;
+Check("charges set to 5", slot0.Charges, 5);
+slot0.Charges = InventoryFormat.MaskCharges;
+Check("infinite charges = 63", slot0.Charges, 63);
+Check("charges never exceed 63", new Func<bool>(() => { slot0.Charges = 99; return slot0.Charges == 63; })(), true);
+
+int dup = invRec.DuplicateItem(0);
+Check("duplicate lands in slot 1", dup, 1);
+Check("duplicate name matches", invRec.GetItem(1).Name, "Wand");
+Check("duplicate charges match source", invRec.GetItem(1).Charges, slot0.Charges);
+
+var full = new CharacterRecord(new byte[RosterFormat.RecordSize]);
+for (int i = 0; i < InventoryFormat.SlotCount; i++) full.GetItem(i).Apply(wand);
+Check("duplicate into full inventory = -1", full.DuplicateItem(0), -1);
+
+Check("empty slot not chargeable", invRec.GetItem(5).IsChargeable, false);
+Console.WriteLine();
+
 Console.WriteLine(failures == 0
     ? "ALL CHECKS PASSED — the 512-byte record layout decodes the sample party correctly."
     : $"{failures} CHECK(S) FAILED.");

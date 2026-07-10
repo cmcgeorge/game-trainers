@@ -210,7 +210,7 @@
                           DataContext="{Binding SelectedCharacter}">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Foreground="#555" TextWrapping="Wrap" Margin="2,2,2,6"
-                                   Text="Twelve item slots per character. Tick Equip to wear/wield an item, edit charges, rename, or Clear a slot. Item field layout is transcribed from the dragonjars reimplementation and pending live-game confirmation — verify a change in-game before trusting it."/>
+                                   Text="Twelve item slots per character. Pick an item from the drop-down to place it, tick Equip to wear/wield it, edit charges, ∞ to set a chargeable item to infinite (63), Dup to copy it into an empty slot, or Clear a slot. Item data is transcribed from captured game data and pending live-game confirmation — verify a change in-game before trusting it."/>
                         <TextBlock DockPanel.Dock="Top" Margin="2,0,2,6" FontWeight="Bold"
                                    Text="{Binding Title}"/>
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -227,16 +227,27 @@
                                                     <ColumnDefinition Width="60"/>
                                                     <ColumnDefinition Width="*"/>
                                                     <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="Auto"/>
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Grid.Column="0" Text="{Binding SlotLabel}" VerticalAlignment="Center" Foreground="#888"/>
-                                                <TextBox   Grid.Column="1" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
+                                                <ComboBox  Grid.Column="1" IsEditable="True" StaysOpenOnEdit="True"
+                                                           ItemsSource="{Binding Templates}" DisplayMemberPath="Name"
+                                                           Text="{Binding Name, UpdateSourceTrigger=LostFocus}"
+                                                           SelectionChanged="ItemTemplate_Selected"/>
                                                 <CheckBox  Grid.Column="2" Content="Equip" IsChecked="{Binding Equipped}"
                                                            VerticalAlignment="Center" Margin="6,0"/>
                                                 <TextBlock Grid.Column="3" Text="Chg" Style="{StaticResource FieldLabel}" MinWidth="0"/>
                                                 <TextBox   Grid.Column="4" Text="{Binding Charges}"/>
                                                 <TextBlock Grid.Column="5" Text="{Binding Detail}" Foreground="#555"
                                                            VerticalAlignment="Center" Margin="8,0" TextTrimming="CharacterEllipsis"/>
-                                                <Button    Grid.Column="6" Content="Clear" Click="ClearItem_Click"/>
+                                                <Button    Grid.Column="6" Content="∞" Width="24" Margin="0,0,4,0"
+                                                           ToolTip="Set charges to 63 (infinite)"
+                                                           IsEnabled="{Binding IsChargeable}" Click="InfiniteCharges_Click"/>
+                                                <Button    Grid.Column="7" Content="Dup" Margin="0,0,4,0"
+                                                           ToolTip="Duplicate into the first empty slot"
+                                                           IsEnabled="{Binding CanDuplicate}" Click="DuplicateItem_Click"/>
+                                                <Button    Grid.Column="8" Content="Clear" Click="ClearItem_Click"/>
                                             </Grid>
                                         </Border>
                                     </DataTemplate>

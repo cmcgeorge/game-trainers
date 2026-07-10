@@ -106,6 +106,25 @@ public sealed class CharacterRecord
     public ItemSlot GetItem(int index) =>
         new(Bytes, InventoryFormat.OffInventory + index * InventoryFormat.SlotSize);
 
+    /// <summary>
+    /// Copies the item in <paramref name="sourceIndex"/> into the first empty slot and returns that
+    /// slot's index, or -1 if the source is empty or the inventory is full.
+    /// </summary>
+    public int DuplicateItem(int sourceIndex)
+    {
+        var source = GetItem(sourceIndex);
+        if (source.IsEmpty) return -1;
+        for (int i = 0; i < InventoryFormat.SlotCount; i++)
+        {
+            if (i == sourceIndex) continue;
+            var dest = GetItem(i);
+            if (!dest.IsEmpty) continue;
+            source.CopyTo(dest);
+            return i;
+        }
+        return -1;
+    }
+
     /// <summary>Count of non-empty item slots.</summary>
     public int ItemCount
     {

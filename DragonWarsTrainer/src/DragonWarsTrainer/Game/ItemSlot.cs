@@ -74,6 +74,39 @@ public sealed class ItemSlot
     public int ItemType => U8(InventoryFormat.OffItemType) & 0x1F;
     public string TypeName => InventoryFormat.ItemTypeName(ItemType);
 
+    /// <summary>
+    /// True when the item's magic-effect bytes mark it as consuming charges/uses, mirroring the
+    /// <c>chargeable</c> logic of the dragonjars <c>Item</c> parser (byte 6): a cleared high bit
+    /// means a spell/effect-on-use item, and among high-bit effects only 1, 2, 3 and the fallback
+    /// are chargeable (0 = flag, 4 = restores power). Empty slots are never chargeable.
+    /// </summary>
+    public bool IsChargeable
+    {
+        get
+        {
+            if (IsEmpty) return false;
+            byte one = U8(InventoryFormat.OffMagicEffect1);
+            if ((one & 0x80) == 0) return true;
+            int effect = one & 0x7F;
+            return effect switch { 0 => false, 4 => false, _ => true };
+        }
+    }
+
+    /// <summary>
+    /// Overwrites this slot from a catalog prototype: copies the 11-byte header verbatim, then
+    /// re-encodes the template name into the 12-byte name field (zero-padded), rewriting the whole
+    /// 23-byte slot.
+    /// </summary>
+    public void Apply(ItemTemplate template)
+    {
+        Array.Copy(template.Header, 0, _bytes, _base, InventoryFormat.OffItemName);
+        Name = template.Name;
+    }
+
+    /// <summary>Copies this slot's full 23 bytes over another slot in the same record buffer.</summary>
+    public void CopyTo(ItemSlot destination) =>
+        Array.Copy(_bytes, _base, destination._bytes, destination._base, InventoryFormat.SlotSize);
+
     /// <summary>Wipes the slot to empty (all zero bytes).</summary>
     public void Clear() => Array.Clear(_bytes, _base, InventoryFormat.SlotSize);
 }
