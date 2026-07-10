@@ -1,95 +1,137 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Builds the Might & Magic 1 trainer and launches it.
+    Builds and launches the Might & Magic 1 trainer.
 
 .DESCRIPTION
     Restores/builds the WPF project with `dotnet build`, then starts the produced
-    MM1Trainer.exe. The app's manifest requests administrator rights (needed to
+    executable. The app's manifest requests administrator rights (needed to
     read/write the game process's memory), so Windows shows a UAC prompt on launch.
 
 .PARAMETER Configuration
     Build configuration: Debug or Release. Default: Release.
 
-.PARAMETER NoRun
-    Build only; do not launch the app.
-
 .PARAMETER Clean
     Delete bin/obj for the project before building.
 
+.PARAMETER NoBuild
+    Skip building; launch the most recent build directly.
+
+.PARAMETER NoRun
+    Build only; do not launch the app.
+
 .PARAMETER Test
-    Run the FormatCheck verification harness after building (does not need the game).
+    Run the verification harness after building (warns if this trainer has none).
+
+.PARAMETER Publish
+    Publish a single self-contained win-x64 exe; skips launch.
 
 .EXAMPLE
-    .\build-and-run.ps1
-    Builds Release and launches the trainer (UAC prompt appears).
+    .\Run.ps1
+    Builds Release and launches the trainer (a UAC prompt appears).
 
 .EXAMPLE
-    .\build-and-run.ps1 -Configuration Debug -Test -NoRun
+    .\Run.ps1 -Configuration Debug -Test -NoRun
     Builds Debug, runs the format checks, and does not launch the GUI.
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',
-    [switch]$NoRun,
     [switch]$Clean,
-    [switch]$Test
+    [switch]$NoBuild,
+    [switch]$NoRun,
+    [switch]$Test,
+    [switch]$Publish
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-# Resolve paths relative to this script so it works from any working directory.
+# ---- trainer-specific configuration ------------------------------------------
 $root        = $PSScriptRoot
 $project     = Join-Path $root 'src\MightAndMagic1Trainer\MightAndMagic1Trainer.csproj'
 $testProject = Join-Path $root 'test\FormatCheck\FormatCheck.csproj'
-$tfm         = 'net8.0-windows'
-$exePath     = Join-Path $root "src\MightAndMagic1Trainer\bin\$Configuration\$tfm\MM1Trainer.exe"
+$exeName     = 'MM1Trainer.exe'
+$exePath     = Join-Path $root "src\MightAndMagic1Trainer\bin\$Configuration\net8.0-windows\MM1Trainer.exe"
+$binConfigDir = 'bin'
+$buildArgs   = @()
+$launchHint  = 'Launch the game in your emulator, then Attach in the trainer.'
+# ------------------------------------------------------------------------------
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 
-# Verify the .NET SDK is available.
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    throw "The .NET SDK ('dotnet') was not found on PATH. Install .NET 8 SDK or newer from https://dotnet.microsoft.com/download"
+    throw "The .NET SDK ('dotnet') was not found on PATH. Install it from https://dotnet.microsoft.com/download"
 }
 
-if (-not (Test-Path $project)) {
+if (-not (Test-Path -LiteralPath $project)) {
     throw "Project not found at '$project'. Run this script from the repository root."
 }
 
+$binDir = Join-Path (Split-Path -Parent $project) (Join-Path $binConfigDir $Configuration)
+
+function Resolve-Exe {
+    if ($exePath -and (Test-Path -LiteralPath $exePath)) { return (Resolve-Path -LiteralPath $exePath).Path }
+    if ($binDir -and (Test-Path -LiteralPath $binDir)) {
+        $hit = Get-ChildItem -LiteralPath $binDir -Recurse -Filter $exeName -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($hit) { return $hit.FullName }
+    }
+    return $null
+}
+
 if ($Clean) {
-    Write-Step "Cleaning bin/obj"
-    foreach ($dir in @(
-            (Join-Path $root 'src\MightAndMagic1Trainer\bin'),
-            (Join-Path $root 'src\MightAndMagic1Trainer\obj'))) {
-        if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+    Write-Step 'Cleaning bin/obj'
+    $cleanDirs = @([System.IO.Path]::GetDirectoryName($project))
+    if ($testProject) { $cleanDirs += [System.IO.Path]::GetDirectoryName($testProject) }
+    foreach ($dir in $cleanDirs) {
+        foreach ($sub in @('bin', 'obj')) {
+            $p = Join-Path $dir $sub
+            if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force }
+        }
     }
 }
 
-Write-Step "Building ($Configuration)"
-dotnet build $project -c $Configuration -v minimal
-if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE)." }
-
 if ($Test) {
-    Write-Step "Running FormatCheck verification harness"
-    dotnet run --project $testProject -c $Configuration
-    if ($LASTEXITCODE -ne 0) { throw "FormatCheck reported failures (exit code $LASTEXITCODE)." }
+    if ($testProject -and (Test-Path -LiteralPath $testProject)) {
+        Write-Step 'Running verification harness'
+        dotnet run --project $testProject -c $Configuration
+        if ($LASTEXITCODE -ne 0) { throw "Verification harness reported failures (exit code $LASTEXITCODE)." }
+    }
+    else {
+        Write-Warning 'This trainer has no verification harness; -Test was ignored.'
+    }
 }
 
-if ($NoRun) {
-    Write-Step "Build complete. Skipping launch (-NoRun)."
-    Write-Host "Executable: $exePath"
+if ($Publish) {
+    Write-Step "Publishing ($Configuration, win-x64 self-contained single file)"
+    dotnet publish $project -c $Configuration -r win-x64 --self-contained true `
+        -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true @buildArgs -v minimal
+    if ($LASTEXITCODE -ne 0) { throw "Publish failed (exit code $LASTEXITCODE)." }
+    Write-Step 'Publish complete.'
     return
 }
 
-if (-not (Test-Path $exePath)) {
-    throw "Build succeeded but the executable was not found at '$exePath'."
+if (-not $NoBuild) {
+    Write-Step "Building ($Configuration)"
+    dotnet build $project -c $Configuration @buildArgs -v minimal
+    if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE)." }
 }
 
-Write-Step "Launching the trainer"
-Write-Host "A UAC prompt will appear — the trainer needs admin rights to access the game's memory." -ForegroundColor Yellow
-# Start-Process uses ShellExecute, which honours the app's requireAdministrator
-# manifest and triggers the elevation prompt automatically.
-Start-Process -FilePath $exePath
-Write-Step "Started. (Launch the game in your emulator, then Attach in the trainer.)"
+if ($NoRun) {
+    Write-Step 'Build complete. Skipping launch (-NoRun).'
+    $built = Resolve-Exe
+    if ($built) { Write-Host "Executable: $built" }
+    return
+}
+
+$exe = Resolve-Exe
+if (-not $exe) {
+    throw "Executable '$exeName' not found. Build the trainer first (drop -NoBuild)."
+}
+
+Write-Step 'Launching the trainer'
+Write-Host "A UAC prompt will appear - the trainer needs admin rights to access the game's memory." -ForegroundColor Yellow
+Start-Process -FilePath $exe
+Write-Step "Started. ($launchHint)"

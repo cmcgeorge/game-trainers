@@ -34,24 +34,46 @@ Each game lives in its own self-contained folder with its own solution/project, 
 
 ## Building and Running
 
-Work inside the folder of the game you want. All `Run.ps1` scripts share a common set of flags:
+Every trainer has its own `.\Run.ps1`, and they all expose the **same** options. Run one from
+inside its folder, or use the **root launcher** to pick one interactively.
+
+### Root launcher
+
+From the repository root, `.\Run.ps1` discovers every trainer (any top-level folder that has its
+own `Run.ps1`) and forwards the shared options to the one you choose:
+
+```powershell
+.\Run.ps1                         # menu: pick a trainer, then build and launch
+.\Run.ps1 -List                   # list the trainers and exit
+.\Run.ps1 -Trainer Shogun         # run a trainer by name (exact or unique partial)
+.\Run.ps1 -Trainer 4 -Clean       # run the 4th listed trainer, cleaning first
+```
+
+### Per-trainer
 
 ```powershell
 cd PoolOfRadianceTrainer
-.\Run.ps1                        # restore, build Release, and launch (UAC prompt)
-.\Run.ps1 -Configuration Debug   # debug build
-.\Run.ps1 -Clean                 # wipe bin/obj first, then build and launch
-.\Run.ps1 -NoRun                 # build only; print the exe path
-.\Run.ps1 -Test -NoRun           # build + run the verification harness, no GUI
+.\Run.ps1                         # restore, build Release, and launch (UAC prompt)
+.\Run.ps1 -Configuration Debug    # debug build
+.\Run.ps1 -Clean                  # wipe bin/obj first, then build and launch
+.\Run.ps1 -NoBuild                # skip the build, launch the existing exe
+.\Run.ps1 -NoRun                  # build only; print the exe path
+.\Run.ps1 -Test -NoRun            # run the verification harness, no GUI
+.\Run.ps1 -Publish                # publish a self-contained win-x64 exe, no launch
 ```
 
-Every trainer uses `.\Run.ps1`. Most scripts share the core flags (`-Configuration`, `-Clean`, `-NoRun`); the exceptions are listed below. Notable per-trainer variations:
+Shared options (identical for the root launcher and every trainer):
 
-- **`-Test`** (run the headless verification harness) is only on `BardsTale1Trainer`, `DragonWarsTrainer`, `MightAndMagic1Trainer`, and `PoolOfRadianceTrainer`.
-- **`ShogunTrainer`** adds `-Publish` to produce a self-contained single-file exe.
-- **`LordsOfTheRealmTrainer`** uses `-NoBuild` instead of `-NoRun` — it skips the build step and launches the existing binary directly.
-- **`KeefTrainer`** has no run script — build/run directly: `dotnet run --project KeefTrainer`.
-- **`SwordOfTheSamuraiTrainer`** uses a different flag set — `-Rebuild` (force a fresh build even if an exe already exists), `-NoBuild` (skip building and launch the existing binary), and `-Wait` (block until the trainer window closes) — instead of the standard `-Clean`/`-NoRun`. `.\Edit-SotsSave.ps1` handles offline save editing separately.
+- **`-Configuration Debug|Release`** — build configuration (default `Release`).
+- **`-Clean`** — remove `bin`/`obj` before building.
+- **`-NoBuild`** — skip building and launch the most recent build.
+- **`-NoRun`** — build only; do not launch.
+- **`-Test`** — run the trainer's verification harness (warns if it has none).
+- **`-Publish`** — publish a single self-contained win-x64 exe; skips launch.
+
+Only `BardsTale1Trainer`, `DragonWarsTrainer`, `MightAndMagic1Trainer`, `PoolOfRadianceTrainer`,
+and `SwordOfTheSamuraiTrainer` ship a verification harness; `-Test` warns and is ignored on the
+others. `SwordOfTheSamuraiTrainer` also has `.\Edit-SotsSave.ps1` for offline save editing.
 
 You can always build directly with the SDK:
 

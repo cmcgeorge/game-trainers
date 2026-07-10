@@ -1,88 +1,140 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Builds and runs the Autoduel Trainer WPF application.
+    Builds and launches the Autoduel trainer.
 
 .DESCRIPTION
-    Restores, builds, and launches the trainer found in the Trainer\ subfolder.
-    Attach it to a running DOSBox-X instance with AUTODUEL loaded (past the
-    title screen) to read and edit the live game state.
+    Restores/builds the WPF project with `dotnet build`, then starts the produced
+    executable. The app's manifest requests administrator rights (needed to
+    read/write the game process's memory), so Windows shows a UAC prompt on launch.
+
+    Attach it to a running DOSBox-X instance with AUTODUEL loaded (past the title
+    screen) to read and edit the live game state.
 
 .PARAMETER Configuration
-    Build configuration: Debug or Release (default Release).
-
-.PARAMETER NoRun
-    Build only; do not launch the application.
+    Build configuration: Debug or Release. Default: Release.
 
 .PARAMETER Clean
-    Remove bin\ and obj\ before building.
+    Delete bin/obj for the project before building.
+
+.PARAMETER NoBuild
+    Skip building; launch the most recent build directly.
+
+.PARAMETER NoRun
+    Build only; do not launch the app.
+
+.PARAMETER Test
+    Run the verification harness after building (warns if this trainer has none).
+
+.PARAMETER Publish
+    Publish a single self-contained win-x64 exe; skips launch.
 
 .EXAMPLE
     .\Run.ps1
-    Builds in Release and launches the trainer.
+    Builds Release and launches the trainer (a UAC prompt appears).
 
 .EXAMPLE
-    .\Run.ps1 -Configuration Debug
-    Builds in Debug and launches the trainer.
-
-.EXAMPLE
-    .\Run.ps1 -NoRun
-    Builds only, without launching.
+    .\Run.ps1 -Configuration Debug -NoRun
+    Builds a Debug binary without launching.
 #>
 [CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Release',
-
+    [switch]$Clean,
+    [switch]$NoBuild,
     [switch]$NoRun,
-
-    [switch]$Clean
+    [switch]$Test,
+    [switch]$Publish
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# ---- trainer-specific configuration ------------------------------------------
 $root        = $PSScriptRoot
-$projectDir  = Join-Path $root 'Trainer'
-$projectFile = Join-Path $projectDir 'AutoduelTrainer.csproj'
-$tfm         = 'net9.0-windows'
-$exePath     = Join-Path $projectDir "bin\$Configuration\$tfm\AutoduelTrainer.exe"
+$project     = Join-Path $root 'Trainer\AutoduelTrainer.csproj'
+$testProject = $null
+$exeName     = 'AutoduelTrainer.exe'
+$exePath     = Join-Path $root "Trainer\bin\$Configuration\net9.0-windows\AutoduelTrainer.exe"
+$binConfigDir = 'bin'
+$buildArgs   = @()
+$launchHint  = 'Launch AUTODUEL in DOSBox-X past the title screen, then Attach in the trainer.'
+# ------------------------------------------------------------------------------
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    throw "The .NET SDK ('dotnet') was not found on PATH. Install .NET 9 SDK from https://dotnet.microsoft.com/download"
+    throw "The .NET SDK ('dotnet') was not found on PATH. Install it from https://dotnet.microsoft.com/download"
 }
 
-if (-not (Test-Path -LiteralPath $projectFile)) {
-    throw "Project not found at '$projectFile'. Run this script from the solution root."
+if (-not (Test-Path -LiteralPath $project)) {
+    throw "Project not found at '$project'. Run this script from the repository root."
+}
+
+$binDir = Join-Path (Split-Path -Parent $project) (Join-Path $binConfigDir $Configuration)
+
+function Resolve-Exe {
+    if ($exePath -and (Test-Path -LiteralPath $exePath)) { return (Resolve-Path -LiteralPath $exePath).Path }
+    if ($binDir -and (Test-Path -LiteralPath $binDir)) {
+        $hit = Get-ChildItem -LiteralPath $binDir -Recurse -Filter $exeName -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($hit) { return $hit.FullName }
+    }
+    return $null
 }
 
 if ($Clean) {
-    Write-Step "Cleaning bin\ and obj\"
-    foreach ($dir in @('bin', 'obj')) {
-        $path = Join-Path $projectDir $dir
-        if (Test-Path -LiteralPath $path) {
-            Remove-Item -LiteralPath $path -Recurse -Force
+    Write-Step 'Cleaning bin/obj'
+    $cleanDirs = @([System.IO.Path]::GetDirectoryName($project))
+    if ($testProject) { $cleanDirs += [System.IO.Path]::GetDirectoryName($testProject) }
+    foreach ($dir in $cleanDirs) {
+        foreach ($sub in @('bin', 'obj')) {
+            $p = Join-Path $dir $sub
+            if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Recurse -Force }
         }
     }
 }
 
-Write-Step "Building ($Configuration)"
-dotnet build $projectFile -c $Configuration -v minimal
-if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE)." }
+if ($Test) {
+    if ($testProject -and (Test-Path -LiteralPath $testProject)) {
+        Write-Step 'Running verification harness'
+        dotnet run --project $testProject -c $Configuration
+        if ($LASTEXITCODE -ne 0) { throw "Verification harness reported failures (exit code $LASTEXITCODE)." }
+    }
+    else {
+        Write-Warning 'This trainer has no verification harness; -Test was ignored.'
+    }
+}
 
-if ($NoRun) {
-    Write-Step "Build complete. Skipping launch (-NoRun)."
-    Write-Host "Executable: $exePath"
+if ($Publish) {
+    Write-Step "Publishing ($Configuration, win-x64 self-contained single file)"
+    dotnet publish $project -c $Configuration -r win-x64 --self-contained true `
+        -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true @buildArgs -v minimal
+    if ($LASTEXITCODE -ne 0) { throw "Publish failed (exit code $LASTEXITCODE)." }
+    Write-Step 'Publish complete.'
     return
 }
 
-if (-not (Test-Path -LiteralPath $exePath)) {
-    throw "Build succeeded but the executable was not found at '$exePath'."
+if (-not $NoBuild) {
+    Write-Step "Building ($Configuration)"
+    dotnet build $project -c $Configuration @buildArgs -v minimal
+    if ($LASTEXITCODE -ne 0) { throw "Build failed (exit code $LASTEXITCODE)." }
 }
 
-Write-Step "Launching the trainer"
-Write-Host "A UAC prompt will appear — the trainer needs admin rights to access the game's memory." -ForegroundColor Yellow
-Start-Process -FilePath $exePath
-Write-Step "Started. (Launch AUTODUEL in DOSBox-X past the title screen, then Attach in the trainer.)"
+if ($NoRun) {
+    Write-Step 'Build complete. Skipping launch (-NoRun).'
+    $built = Resolve-Exe
+    if ($built) { Write-Host "Executable: $built" }
+    return
+}
+
+$exe = Resolve-Exe
+if (-not $exe) {
+    throw "Executable '$exeName' not found. Build the trainer first (drop -NoBuild)."
+}
+
+Write-Step 'Launching the trainer'
+Write-Host "A UAC prompt will appear - the trainer needs admin rights to access the game's memory." -ForegroundColor Yellow
+Start-Process -FilePath $exe
+Write-Step "Started. ($launchHint)"

@@ -16,10 +16,9 @@ Dot-prefixed dirs (`.docs/` teardown & strategy notes, `.data/` RAM dumps, `.gam
 
 ## Build, Test, and Development Commands
 
-Conventions vary per trainer — always check the local `README.md`. Run from inside a trainer's own folder:
-
-- `.\Run.ps1` — every trainer except `KeefTrainer` (use `dotnet run --project KeefTrainer`). Restores, builds Release, and launches; a UAC prompt appears because the app manifests request admin for `Read/WriteProcessMemory`.
-- Flags: most scripts accept `-Configuration Debug|Release`, `-Clean`, and `-NoRun`. Exceptions: `LordsOfTheRealmTrainer` uses `-NoBuild` instead of `-NoRun` (skip build, run the existing binary); `SwordOfTheSamuraiTrainer` uses an entirely different set (`-Rebuild`, `-NoBuild`, `-Wait`) with no `-Clean` or `-NoRun`. `-Test` (run the verification harness without the GUI) exists only on `BardsTale1Trainer`, `DragonWarsTrainer`, `MightAndMagic1Trainer`, and `PoolOfRadianceTrainer`; `ShogunTrainer` adds `-Publish`.
+- Root launcher: from the repo root run `.\Run.ps1` for an interactive menu of every trainer, or `.\Run.ps1 -Trainer <name|number>` to pick one directly (`-List` prints the menu and exits). It discovers any top-level folder that contains its own `Run.ps1` and forwards the shared options below to it.
+- Per-trainer: `.\Run.ps1` inside each trainer folder (including `KeefTrainer`, which now has one). Restores, builds Release, and launches; a UAC prompt appears because the app manifests request admin for `Read/WriteProcessMemory`.
+- Every `Run.ps1` (root and per-trainer) exposes the **same** options: `-Configuration Debug|Release` (default Release), `-Clean` (remove bin/obj first), `-NoBuild` (skip build, launch the existing exe), `-NoRun` (build only), `-Test` (run the verification harness; warns if the trainer has none), and `-Publish` (single self-contained win-x64 exe, skips launch).
 - Direct: `dotnet build <project>.csproj -c Release` / `dotnet run --project <test-project>`.
 
 ## Coding Style & Naming Conventions

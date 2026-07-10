@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Builds and launches the Shogun trainer.
+    Builds and launches the Keef the Thief trainer.
 
 .DESCRIPTION
     Restores/builds the WPF project with `dotnet build`, then starts the produced
@@ -31,8 +31,8 @@
     Builds Release and launches the trainer (a UAC prompt appears).
 
 .EXAMPLE
-    .\Run.ps1 -Publish
-    Publishes a single self-contained win-x64 exe.
+    .\Run.ps1 -Configuration Debug -NoRun
+    Builds a Debug binary without launching.
 #>
 [CmdletBinding()]
 param(
@@ -50,13 +50,13 @@ Set-StrictMode -Version Latest
 
 # ---- trainer-specific configuration ------------------------------------------
 $root        = $PSScriptRoot
-$project     = Join-Path $root 'src\ShogunTrainer\ShogunTrainer.csproj'
+$project     = Join-Path $root 'KeefTrainer\KeefTrainer.csproj'
 $testProject = $null
-$exeName     = 'ShogunTrainer.exe'
-$exePath     = Join-Path $root "src\ShogunTrainer\bin\$Configuration\net8.0-windows\ShogunTrainer.exe"
+$exeName     = 'KeefTrainer.exe'
+$exePath     = Join-Path $root "KeefTrainer\bin\$Configuration\net9.0-windows\KeefTrainer.exe"
 $binConfigDir = 'bin'
 $buildArgs   = @()
-$launchHint  = 'Launch the game in DOSBox-X, then Attach in the trainer.'
+$launchHint  = 'Launch Keef the Thief in DOSBox, then Attach in the trainer.'
 # ------------------------------------------------------------------------------
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
