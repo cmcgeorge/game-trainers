@@ -395,6 +395,29 @@
                         </ListBox>
                     </TabItem>
 
+                    <!-- Paragraphs -->
+                    <TabItem Header="Paragraphs">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Foreground="#555" TextWrapping="Wrap" Margin="2,2,2,6"
+                                       Text="A one-line summary of each numbered passage the game prompts you to &quot;read paragraph #N&quot; from the printed booklet. Summaries only — the booklet's own text is the game's copyrighted content and is not reproduced here."/>
+                            <ListBox ItemsSource="{Binding Paragraphs}" HorizontalContentAlignment="Stretch"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="50"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Label}" FontWeight="SemiBold"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Summary}" TextWrapping="Wrap" Foreground="#444"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </TabItem>
+
                     <!-- Strategy -->
                     <TabItem Header="Strategy">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
