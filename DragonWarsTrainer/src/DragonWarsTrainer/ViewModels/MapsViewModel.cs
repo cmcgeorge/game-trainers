@@ -1,9 +1,14 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows.Input;
+using Microsoft.Win32;
 using DragonWarsTrainer.Game;
 using DragonWarsTrainer.Memory;
 
 namespace DragonWarsTrainer.ViewModels;
+
+/// <summary>One drawable map square projected for the schematic: its grid position and terrain.</summary>
+public sealed record TerrainCell(int X, int Y, FloorKind Floor, WallKind West, WallKind North);
 
 /// <summary>
 /// Backs the 🗺 Maps tab: an offline area/location reference plus a live "where am I / teleport me
@@ -25,8 +30,15 @@ public sealed class MapsViewModel : ObservableObject
     private bool _isScanning;
     private CancellationTokenSource? _scanCts;
 
+    private DataArchive? _archive;
+    private BoardMap? _board;
+
     public IReadOnlyList<MapArea> Areas => MapBook.Areas;
     public ObservableCollection<MapLocation> Locations { get; } = new();
+
+    private IReadOnlyList<TerrainCell> _terrain = Array.Empty<TerrainCell>();
+    /// <summary>Drawable terrain squares (walls / water / abyss) for the selected area, if decoded.</summary>
+    public IReadOnlyList<TerrainCell> Terrain { get => _terrain; private set => SetField(ref _terrain, value); }
 
     public MapsViewModel(Func<ProcessMemory?> getMem)
     {
@@ -36,6 +48,8 @@ public sealed class MapsViewModel : ObservableObject
         ResetCommand = new RelayCommand(_ => ResetSearch(), _ => !_isScanning && (_candidates.Count > 0 || _lockedAddress != null));
         TeleportCommand = new RelayCommand(_ => Teleport(), _ => CanTeleport());
         SelectLocationCommand = new RelayCommand(p => { if (p is MapLocation l) SelectedLocation = l; });
+        LoadDataCommand = new RelayCommand(_ => LoadData());
+        TryAutoLoad();
         SelectedArea = Areas.FirstOrDefault();
     }
 
@@ -52,8 +66,16 @@ public sealed class MapsViewModel : ObservableObject
             Locations.Clear();
             if (value != null) foreach (var l in value.Locations) Locations.Add(l);
             SelectedLocation = Locations.FirstOrDefault();
+            RebuildTerrain();
         }
     }
+
+    /// <summary>
+    /// Grid dimensions used to size and Y-flip the schematic. Prefers the real decoded board size
+    /// when the data archive is loaded, otherwise falls back to the reference area size.
+    /// </summary>
+    public int GridWidth => _board?.Width ?? (_selectedArea?.GridWidth ?? 1);
+    public int GridHeight => _board?.Height ?? (_selectedArea?.GridHeight ?? 1);
 
     private MapLocation? _selectedLocation;
     public MapLocation? SelectedLocation
@@ -108,6 +130,104 @@ public sealed class MapsViewModel : ObservableObject
     public ICommand TeleportCommand { get; }
     public ICommand ApplyMoveCommand { get; }
     public ICommand SelectLocationCommand { get; }
+    public ICommand LoadDataCommand { get; }
+
+    // --- terrain (walls / water / abyss from DATA1+DATA2) --------------------
+    /// <summary>True once the data archive is loaded and terrain can be drawn.</summary>
+    public bool HasTerrain => _archive != null;
+
+    private string _dataStatus = "Terrain not loaded — click \"Load game folder\" and pick the folder holding DATA1 / DATA2 to draw walls and water.";
+    /// <summary>Human-readable state of the terrain data load.</summary>
+    public string DataStatus { get => _dataStatus; private set => SetField(ref _dataStatus, value); }
+
+    private void LoadData()
+    {
+        var dlg = new OpenFolderDialog
+        {
+            Title = "Select the Dragon Wars game folder (containing DATA1 and DATA2)",
+        };
+        if (dlg.ShowDialog() != true) return;
+        LoadDataFrom(dlg.FolderName);
+    }
+
+    private bool LoadDataFrom(string folder)
+    {
+        if (!DataArchive.TryLoadFromFolder(folder, out var archive, out var error))
+        {
+            DataStatus = error;
+            return false;
+        }
+        _archive = archive;
+        SavedDataPath = folder;
+        OnPropertyChanged(nameof(HasTerrain));
+        RebuildTerrain();
+        DataStatus = $"Terrain loaded from {folder}.";
+        return true;
+    }
+
+    private void TryAutoLoad()
+    {
+        var saved = SavedDataPath;
+        if (!string.IsNullOrEmpty(saved) && LoadDataFrom(saved)) return;
+
+        var dir = new DirectoryInfo(AppDomain.CurrentDomain.BaseDirectory);
+        for (int i = 0; i < 8 && dir != null; i++, dir = dir.Parent)
+        {
+            string candidate = Path.Combine(dir.FullName, ".game");
+            if (Directory.Exists(candidate) && LoadDataFrom(candidate)) return;
+        }
+    }
+
+    private void RebuildTerrain()
+    {
+        _board = null;
+        if (_archive != null && _selectedArea is { } area)
+        {
+            var chunk = _archive.GetChunk(0x46 + area.Id);
+            if (chunk != null) _board = BoardMap.TryParse(chunk);
+        }
+        var cells = new List<TerrainCell>();
+        if (_board is { } board)
+        {
+            for (int y = 0; y < board.Height; y++)
+            {
+                for (int x = 0; x < board.Width; x++)
+                {
+                    var sq = board.Square(x, y);
+                    if (sq.Floor == FloorKind.Normal && sq.West == WallKind.None && sq.North == WallKind.None)
+                        continue;
+                    cells.Add(new TerrainCell(x, y, sq.Floor, sq.West, sq.North));
+                }
+            }
+        }
+        Terrain = cells;
+        OnPropertyChanged(nameof(GridWidth));
+        OnPropertyChanged(nameof(GridHeight));
+    }
+
+    // --- remembered data folder ----------------------------------------------
+    private static string SettingsFile =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "DragonWarsTrainer", "datapath.txt");
+
+    private static string? SavedDataPath
+    {
+        get
+        {
+            try { return File.Exists(SettingsFile) ? File.ReadAllText(SettingsFile).Trim() : null; }
+            catch { return null; }
+        }
+        set
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(value)) return;
+                Directory.CreateDirectory(Path.GetDirectoryName(SettingsFile)!);
+                File.WriteAllText(SettingsFile, value);
+            }
+            catch { /* best effort — not critical */ }
+        }
+    }
 
     // --- position search -----------------------------------------------------
     private async void Snapshot()

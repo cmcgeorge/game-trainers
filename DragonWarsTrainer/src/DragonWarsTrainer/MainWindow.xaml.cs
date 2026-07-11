@@ -65,12 +65,12 @@ public partial class MainWindow : Window
     private void Map_Click(object sender, MouseButtonEventArgs e)
     {
         if (sender is not FrameworkElement map || map.DataContext is not MapsViewModel vm) return;
-        if (vm.SelectedArea is not { } area) return;
+        if (vm.SelectedArea is null) return;
 
         var p = e.GetPosition(map);
         int x = (int)Math.Floor(p.X / MapCell);
-        int y = area.GridHeight - 1 - (int)Math.Floor(p.Y / MapCell);
-        vm.TargetX = Math.Clamp(x, 0, area.GridWidth - 1);
-        vm.TargetY = Math.Clamp(y, 0, area.GridHeight - 1);
+        int y = vm.GridHeight - 1 - (int)Math.Floor(p.Y / MapCell);
+        vm.TargetX = Math.Clamp(x, 0, vm.GridWidth - 1);
+        vm.TargetY = Math.Clamp(y, 0, vm.GridHeight - 1);
     }
 }

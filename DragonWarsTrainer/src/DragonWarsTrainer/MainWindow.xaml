@@ -7,6 +7,8 @@
     <Window.Resources>
         <local:MapScaleConverter x:Key="MapScale" Cell="15"/>
         <local:MapFlipYConverter x:Key="MapFlipY" Cell="15"/>
+        <local:FloorBrushConverter x:Key="FloorBrush"/>
+        <local:WallBrushConverter x:Key="WallBrush"/>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
         <Style TargetType="TextBox">
             <Setter Property="Margin" Value="2"/>
@@ -449,7 +451,9 @@
                         <DockPanel>
                             <ComboBox DockPanel.Dock="Top" ItemsSource="{Binding Areas}"
                                       SelectedItem="{Binding SelectedArea}" DisplayMemberPath="Name" Margin="2"/>
-                            <ListBox ItemsSource="{Binding Locations}" SelectedItem="{Binding SelectedLocation}">
+                            <ListBox ItemsSource="{Binding Locations}" SelectedItem="{Binding SelectedLocation}"
+                                     HorizontalContentAlignment="Stretch"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel>
@@ -478,13 +482,17 @@
                             <GroupBox Header="Map" Margin="0,8,0,0">
                                 <StackPanel Margin="4">
                                     <TextBlock TextWrapping="Wrap" Foreground="#555"
-                                               Text="Schematic drawn from the location list — X across, Y up (origin bottom-left, matching the in-game map). Hover a marker for its name and notes. Click any square to set the teleport target (the blue outline), then use Teleport below; the green dot is your live position once located."/>
+                                               Text="Schematic drawn from the location list — X across, Y up (origin bottom-left, matching the in-game map). Load the game folder to draw the real walls, doors, water and abyss for every map. Hover a marker for its name and notes. Click any square to set the teleport target (the blue outline), then use Teleport below; the green dot is your live position once located."/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <Button Content="Load game folder…" Command="{Binding LoadDataCommand}"/>
+                                        <TextBlock Text="{Binding DataStatus}" Foreground="#777" VerticalAlignment="Center" Margin="8,0,0,0" TextWrapping="Wrap"/>
+                                    </StackPanel>
                                     <ScrollViewer MaxHeight="420" Margin="0,6,0,0"
                                                   HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                                         <Border BorderBrush="#CCC" BorderThickness="1" Background="#FBFBF5"
                                                 HorizontalAlignment="Left" VerticalAlignment="Top" ClipToBounds="True"
-                                                Width="{Binding SelectedArea.GridWidth, Converter={StaticResource MapScale}}"
-                                                Height="{Binding SelectedArea.GridHeight, Converter={StaticResource MapScale}}">
+                                                Width="{Binding GridWidth, Converter={StaticResource MapScale}}"
+                                                Height="{Binding GridHeight, Converter={StaticResource MapScale}}">
                                             <Grid MouseLeftButtonDown="Map_Click">
                                                 <Rectangle>
                                                     <Rectangle.Fill>
@@ -500,6 +508,38 @@
                                                     </Rectangle.Fill>
                                                 </Rectangle>
 
+                                                <ItemsControl ItemsSource="{Binding Terrain}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <Canvas/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemContainerStyle>
+                                                        <Style TargetType="ContentPresenter">
+                                                            <Setter Property="Canvas.Left" Value="{Binding X, Converter={StaticResource MapScale}}"/>
+                                                            <Setter Property="Canvas.Top">
+                                                                <Setter.Value>
+                                                                    <MultiBinding Converter="{StaticResource MapFlipY}">
+                                                                        <Binding Path="Y"/>
+                                                                        <Binding Path="DataContext.GridHeight" RelativeSource="{RelativeSource AncestorType=ItemsControl}"/>
+                                                                    </MultiBinding>
+                                                                </Setter.Value>
+                                                            </Setter>
+                                                        </Style>
+                                                    </ItemsControl.ItemContainerStyle>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Grid Width="15" Height="15">
+                                                                <Rectangle Fill="{Binding Floor, Converter={StaticResource FloorBrush}}"/>
+                                                                <Rectangle Width="2" HorizontalAlignment="Left"
+                                                                           Fill="{Binding West, Converter={StaticResource WallBrush}}"/>
+                                                                <Rectangle Height="2" VerticalAlignment="Top"
+                                                                           Fill="{Binding North, Converter={StaticResource WallBrush}}"/>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
                                                 <ItemsControl ItemsSource="{Binding Locations}">
                                                     <ItemsControl.ItemsPanel>
                                                         <ItemsPanelTemplate>
@@ -513,7 +553,7 @@
                                                                 <Setter.Value>
                                                                     <MultiBinding Converter="{StaticResource MapFlipY}">
                                                                         <Binding Path="Y"/>
-                                                                        <Binding Path="DataContext.SelectedArea.GridHeight" RelativeSource="{RelativeSource AncestorType=ItemsControl}"/>
+                                                                        <Binding Path="DataContext.GridHeight" RelativeSource="{RelativeSource AncestorType=ItemsControl}"/>
                                                                     </MultiBinding>
                                                                 </Setter.Value>
                                                             </Setter>
@@ -550,7 +590,7 @@
                                                         <Canvas.Top>
                                                             <MultiBinding Converter="{StaticResource MapFlipY}">
                                                                 <Binding Path="TargetY"/>
-                                                                <Binding Path="SelectedArea.GridHeight"/>
+                                                                <Binding Path="GridHeight"/>
                                                             </MultiBinding>
                                                         </Canvas.Top>
                                                     </Border>
@@ -563,7 +603,7 @@
                                                         <Canvas.Top>
                                                             <MultiBinding Converter="{StaticResource MapFlipY}">
                                                                 <Binding Path="LiveY"/>
-                                                                <Binding Path="SelectedArea.GridHeight"/>
+                                                                <Binding Path="GridHeight"/>
                                                             </MultiBinding>
                                                         </Canvas.Top>
                                                         <Ellipse Width="13" Height="13" HorizontalAlignment="Center" VerticalAlignment="Center"
