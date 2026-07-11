@@ -299,17 +299,20 @@ public sealed class MapsViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            return;   // detached/reset while scanning — OnDetached/ResetSearch already cleaned up
+            return;   // detached/reset while scanning — OnDetached/ResetSearch already set the status
         }
         catch (Exception ex)
         {
-            _isScanning = false;
             Status = "Snapshot error: " + ex.Message;
-            RaiseSearchState();
             return;
         }
-
-        _isScanning = false;
+        finally
+        {
+            // Always clear the busy flag and refresh command state on whatever path we leave by, so a
+            // cancellation can never strand the buttons disabled regardless of who cancelled us.
+            _isScanning = false;
+            RaiseSearchState();
+        }
 
         if (_getMem() != mem) return;   // detached/re-attached while scanning
 
@@ -345,17 +348,20 @@ public sealed class MapsViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            return;   // detached/reset while narrowing — cleanup already done
+            return;   // detached/reset while narrowing — OnDetached/ResetSearch already set the status
         }
         catch (Exception ex)
         {
-            _isScanning = false;
             Status = "Apply move error: " + ex.Message;
-            RaiseSearchState();
             return;
         }
-
-        _isScanning = false;
+        finally
+        {
+            // Always clear the busy flag and refresh command state on whatever path we leave by, so a
+            // cancellation can never strand the buttons disabled regardless of who cancelled us.
+            _isScanning = false;
+            RaiseSearchState();
+        }
 
         if (_getMem() != mem) return;   // detached/re-attached while narrowing
 
