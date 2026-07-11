@@ -32,6 +32,9 @@ public sealed class CharacterViewModel : ObservableObject
     private bool _freezePower;
     public bool FreezePower { get => _freezePower; set => SetField(ref _freezePower, value); }
 
+    private bool _freezeStatus;
+    public bool FreezeStatus { get => _freezeStatus; set => SetField(ref _freezeStatus, value); }
+
     private int _pointsFreezeValue;
     private bool _freezePoints;
     public bool FreezePoints
@@ -264,6 +267,8 @@ public sealed class CharacterViewModel : ObservableObject
         { Record.StunCurrent = Record.StunMax; Poke(RosterFormat.OffStunCur, 2); }
         if (FreezePower && Record.PowerCurrent != Record.PowerMax)
         { Record.PowerCurrent = Record.PowerMax; Poke(RosterFormat.OffPowerCur, 2); }
+        if (FreezeStatus && Record.Status != 0)
+        { Record.Status = 0; Poke(RosterFormat.OffStatus, 1); }
         if (FreezePoints && Record.UnspentPoints != _pointsFreezeValue)
         { Record.UnspentPoints = _pointsFreezeValue; Poke(RosterFormat.OffUnspentPoints, 1); }
     }

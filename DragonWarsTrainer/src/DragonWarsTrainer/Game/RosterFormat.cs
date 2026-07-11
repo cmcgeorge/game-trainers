@@ -93,6 +93,7 @@ public static class RosterFormat
     public const byte StatusChained = 0x02;
     public const byte StatusPoisoned = 0x04;
     public const byte StatusPoisonedDisplay = 0x20;
+    public const byte StatusStunned = 0x80;
 
     // --- lookup tables -------------------------------------------------------
     public static readonly string[] AttributeNames = { "Strength", "Dexterity", "Intelligence", "Spirit" };
@@ -135,9 +136,10 @@ public static class RosterFormat
         if (status == 0) return "Okay";
         var parts = new List<string>();
         if ((status & StatusDead) != 0) parts.Add("Dead");
+        if ((status & StatusStunned) != 0) parts.Add("Stunned");
         if ((status & StatusChained) != 0) parts.Add("Chained");
         if (((status & StatusPoisoned) != 0) || ((status & StatusPoisonedDisplay) != 0)) parts.Add("Poisoned");
-        int known = StatusDead | StatusChained | StatusPoisoned | StatusPoisonedDisplay;
+        int known = StatusDead | StatusStunned | StatusChained | StatusPoisoned | StatusPoisonedDisplay;
         int other = status & ~known;
         if (other != 0) parts.Add($"0x{other:X2}");
         return parts.Count == 0 ? $"0x{status:X2}" : string.Join(", ", parts);

@@ -27,8 +27,17 @@ public sealed class MapsViewModel : ObservableObject
     private List<(nuint Address, HeapReading Reading)> _candidates = new();
     private nuint? _lockedAddress;
     private int? _liveBoardId;
+    private int? _liveMaxX;
+    private int? _liveMaxY;
+    private int _staleReads;
     private bool _isScanning;
     private CancellationTokenSource? _scanCts;
+
+    // The Heap sits at a fixed address for the whole session, so a failed read of a locked address
+    // is almost always transient: the game rewrites the Heap non-atomically as a new map loads, and
+    // a poll can catch it mid-update. Ride out this many consecutive bad reads before giving up the
+    // lock, so simply crossing between maps no longer forces the user to re-locate.
+    private const int MaxStaleReads = 5;
 
     private DataArchive? _archive;
     private BoardMap? _board;
@@ -70,12 +79,36 @@ public sealed class MapsViewModel : ObservableObject
         }
     }
 
+    /// <summary>True when the schematic is showing the very board the located party stands on.</summary>
+    private bool IsLiveBoardSelected => _liveBoardId != null && _liveBoardId == _selectedArea?.Id;
+
     /// <summary>
-    /// Grid dimensions used to size and Y-flip the schematic. Prefers the real decoded board size
-    /// when the data archive is loaded, otherwise falls back to the reference area size.
+    /// Forgets the located board and its live dimensions (on reset/detach/lost lock) and re-sizes the
+    /// schematic back to its offline dimensions, so a stale live size (e.g. a 34×34 board) is not left
+    /// applied to the next map the user browses.
     /// </summary>
-    public int GridWidth => _board?.Width ?? (_selectedArea?.GridWidth ?? 1);
-    public int GridHeight => _board?.Height ?? (_selectedArea?.GridHeight ?? 1);
+    private void ClearLiveBoardState()
+    {
+        _liveBoardId = null;
+        _liveMaxX = null;
+        _liveMaxY = null;
+        _staleReads = 0;
+        OnPropertyChanged(nameof(GridWidth));
+        OnPropertyChanged(nameof(GridHeight));
+    }
+
+    /// <summary>
+    /// Grid dimensions used to size and Y-flip the schematic. When the party is located and we are
+    /// showing its live board, the authoritative live dimensions from the Heap win, so the green dot
+    /// lands on the right square even on a differently sized map and without offline terrain loaded.
+    /// Otherwise it prefers the real decoded board size, then the reference area size.
+    /// </summary>
+    public int GridWidth => IsLiveBoardSelected && _liveMaxX is > 0
+        ? _liveMaxX.Value
+        : _board?.Width ?? (_selectedArea?.GridWidth ?? 1);
+    public int GridHeight => IsLiveBoardSelected && _liveMaxY is > 0
+        ? _liveMaxY.Value
+        : _board?.Height ?? (_selectedArea?.GridHeight ?? 1);
 
     private MapLocation? _selectedLocation;
     public MapLocation? SelectedLocation
@@ -242,7 +275,7 @@ public sealed class MapsViewModel : ObservableObject
 
         _isScanning = true;
         _lockedAddress = null;
-        _liveBoardId = null;
+        ClearLiveBoardState();
         _candidates = new();
         StepsMoved = 1;
         Status = "Reading memory for every plausible position…";
@@ -343,7 +376,7 @@ public sealed class MapsViewModel : ObservableObject
         _isScanning = false;
         _candidates = new();
         _lockedAddress = null;
-        _liveBoardId = null;
+        ClearLiveBoardState();
         StepsMoved = 1;
         RaiseSearchState();
         Status = "Search reset. Click Snapshot memory to begin again.";
@@ -361,7 +394,7 @@ public sealed class MapsViewModel : ObservableObject
         _isScanning = false;
         _candidates = new();
         _lockedAddress = null;
-        _liveBoardId = null;
+        ClearLiveBoardState();
         LivePosition = "";
         RaiseSearchState();
         Status = "Detached. Attach on the Party tab, then Snapshot memory to locate the party again.";
@@ -391,18 +424,27 @@ public sealed class MapsViewModel : ObservableObject
         var reading = HeapLocator.Read(mem, _lockedAddress.Value);
         if (reading == null)
         {
+            // The locked address is stable for the whole session, so one unreadable poll is almost
+            // always the game rewriting the Heap mid map-load. Only surrender the lock once the
+            // failure persists, so crossing between maps no longer forces a re-locate.
+            if (++_staleReads < MaxStaleReads) return;
             _lockedAddress = null;
-            _liveBoardId = null;
+            ClearLiveBoardState();
             _candidates = new();
             LivePosition = "";
             RaiseSearchState();
-            Status = "Lost the position lock (map changed or DOSBox restarted). Click Snapshot memory to re-locate.";
+            Status = "Lost the position lock (DOSBox restarted or the party left the map for good). Click Snapshot memory to re-locate.";
             return;
         }
 
+        _staleReads = 0;
         var r = reading.Value;
         LiveX = r.X; LiveY = r.Y;
         LivePosition = $"{MapBook.MapName(r.BoardId)} — X {r.X} · Y {r.Y} facing {MapBook.FacingName(r.Facing)}";
+
+        bool dimsChanged = _liveMaxX != r.MaxX || _liveMaxY != r.MaxY;
+        _liveMaxX = r.MaxX;
+        _liveMaxY = r.MaxY;
 
         // Follow the party onto whatever board it is standing on so the green dot lands on the right
         // map — but only when the board actually changes, so we don't clobber a map the user is
@@ -412,6 +454,14 @@ public sealed class MapsViewModel : ObservableObject
             _liveBoardId = r.BoardId;
             var area = Areas.FirstOrDefault(a => a.Id == r.BoardId);
             if (area != null && !ReferenceEquals(area, SelectedArea)) SelectedArea = area;
+        }
+
+        // If the live board is a different size than the schematic assumed, resize/Y-flip it to the
+        // Heap's own dimensions so the green dot stays on the correct square across a map change.
+        if (dimsChanged && IsLiveBoardSelected)
+        {
+            OnPropertyChanged(nameof(GridWidth));
+            OnPropertyChanged(nameof(GridHeight));
         }
     }
 

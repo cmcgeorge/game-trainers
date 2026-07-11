@@ -76,6 +76,13 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         set { if (SetField(ref _freezePower, value)) { foreach (var c in Party) c.FreezePower = value; Status = value ? "Power frozen for the party." : "Power freeze OFF."; } }
     }
 
+    private bool _freezeStatus;
+    public bool FreezeStatus
+    {
+        get => _freezeStatus;
+        set { if (SetField(ref _freezeStatus, value)) { foreach (var c in Party) c.FreezeStatus = value; Status = value ? "Status frozen for the party (no death or stun)." : "Status freeze OFF."; } }
+    }
+
     private bool _freezePoints;
     public bool FreezePoints
     {
@@ -170,6 +177,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         _freezeHealth = false; OnPropertyChanged(nameof(FreezeHealth));
         _freezeStun = false; OnPropertyChanged(nameof(FreezeStun));
         _freezePower = false; OnPropertyChanged(nameof(FreezePower));
+        _freezeStatus = false; OnPropertyChanged(nameof(FreezeStatus));
         _freezePoints = false; OnPropertyChanged(nameof(FreezePoints));
         OnPropertyChanged(nameof(IsAttached));
         RaiseCommands();
@@ -197,6 +205,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             if (FreezeHealth) foreach (var c in Party) c.FreezeHealth = true;
             if (FreezeStun) foreach (var c in Party) c.FreezeStun = true;
             if (FreezePower) foreach (var c in Party) c.FreezePower = true;
+            if (FreezeStatus) foreach (var c in Party) c.FreezeStatus = true;
             if (FreezePoints) foreach (var c in Party) c.FreezePoints = true;
             Status = Party.Count == 0
                 ? "No party found. Make sure characters are loaded (past the title screen), then Re-scan."
@@ -254,6 +263,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     {
         _poll.Stop();
         _scanCts?.Cancel();
+        Maps.OnDetached();   // cancel any in-flight map snapshot/narrow before the process is disposed
         _scanCts?.Dispose();
         _mem?.Dispose();
     }

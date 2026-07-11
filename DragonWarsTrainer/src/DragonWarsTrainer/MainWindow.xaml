@@ -54,6 +54,8 @@
                 <CheckBox Content="Freeze Health" IsChecked="{Binding FreezeHealth}" VerticalAlignment="Center" Margin="4,0"/>
                 <CheckBox Content="Freeze Stun" IsChecked="{Binding FreezeStun}" VerticalAlignment="Center" Margin="4,0"/>
                 <CheckBox Content="Freeze Power" IsChecked="{Binding FreezePower}" VerticalAlignment="Center" Margin="4,0"/>
+                <CheckBox Content="Freeze Status" IsChecked="{Binding FreezeStatus}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="Keeps the whole party at status Okay — no death or stun."/>
                 <CheckBox Content="Freeze Points" IsChecked="{Binding FreezePoints}" VerticalAlignment="Center" Margin="4,0"/>
                 <Separator Style="{x:Null}" Width="12"/>
                 <Button Content="Heal Party" Command="{Binding HealPartyCommand}"/>
