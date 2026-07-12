@@ -19,12 +19,13 @@ Each game lives in its own self-contained folder with its own solution/project, 
 | `ShogunTrainer/` | James Clavell's Shōgun (1987) | net8.0-windows |
 | `SwordOfTheSamuraiTrainer/` | Sword of the Samurai | net8.0-windows |
 | `SyndicatePlusTrainer/` | Syndicate | net8.0-windows |
+| `WarOfTheLanceTrainer/` | War of the Lance (SSI, 1989) | net8.0-windows |
 
 `MightAndMagic1Trainer` is the architectural template most of the others were ported from.
 
 ### Shared library
 
-`GameTrainers.Common/` is a small shared library holding the game-agnostic plumbing that used to be copied between trainers: the process/guest-memory access layer (`GameTrainers.Common.Memory`) and the hand-rolled MVVM base types (`GameTrainers.Common.Mvvm`). The MM1-family trainers — `MightAndMagic1Trainer`, `BardsTale1Trainer`, and `PoolOfRadianceTrainer` — reference it instead of duplicating that code, as do `DragonWarsTrainer` and `MinesOfTitanTrainer`; each keeps only its own game-specific locators and scanners. The remaining trainers are still self-contained.
+`GameTrainers.Common/` is a small shared library holding the game-agnostic plumbing that used to be copied between trainers: the process/guest-memory access layer (`GameTrainers.Common.Memory`) and the hand-rolled MVVM base types (`GameTrainers.Common.Mvvm`). The MM1-family trainers — `MightAndMagic1Trainer`, `BardsTale1Trainer`, and `PoolOfRadianceTrainer` — reference it instead of duplicating that code, as do `DragonWarsTrainer`, `MinesOfTitanTrainer`, and `WarOfTheLanceTrainer`; each keeps only its own game-specific locators and scanners. The remaining trainers are still self-contained.
 
 ## Prerequisites
 
@@ -73,8 +74,8 @@ Shared options (identical for the root launcher and every trainer):
 - **`-Publish`** — publish a single self-contained win-x64 exe; skips launch.
 
 Only `BardsTale1Trainer`, `DragonWarsTrainer`, `MightAndMagic1Trainer`, `MinesOfTitanTrainer`,
-`PoolOfRadianceTrainer`, and `SwordOfTheSamuraiTrainer` ship a verification harness; `-Test` warns
-and is ignored on the others. `SwordOfTheSamuraiTrainer` also has `.\Edit-SotsSave.ps1` for offline save editing.
+`PoolOfRadianceTrainer`, `SwordOfTheSamuraiTrainer`, and `WarOfTheLanceTrainer` ship a verification
+harness; `-Test` warns and is ignored on the others. `SwordOfTheSamuraiTrainer` also has `.\Edit-SotsSave.ps1` for offline save editing.
 
 You can always build directly with the SDK:
 

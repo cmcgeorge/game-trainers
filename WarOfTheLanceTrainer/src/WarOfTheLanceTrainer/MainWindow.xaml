@@ -1,0 +1,64 @@
+<Window x:Class="WarOfTheLanceTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="War of the Lance Trainer" Height="640" Width="820"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Background="#EEE" Padding="6">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Process:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <ComboBox Width="300" ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                          SelectedItem="{Binding SelectedProcess}"/>
+                <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                <Button Content="Re-scan" Command="{Binding ScanCommand}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Global actions -->
+        <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+            <StackPanel Orientation="Horizontal">
+                <CheckBox Content="Freeze all strengths" IsChecked="{Binding FreezeAll}"
+                          VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="Re-writes each unit's strength every poll so combat losses can't lower it."/>
+                <Button Content="Max all (240)" Command="{Binding MaxAllCommand}"/>
+                <Button Content="Restore base" Command="{Binding RestoreAllCommand}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+        </Border>
+
+        <!-- Located units -->
+        <DataGrid ItemsSource="{Binding Units}" SelectedItem="{Binding SelectedUnit}"
+                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                  HeadersVisibility="Column" Margin="6">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="#" Binding="{Binding Index}" IsReadOnly="True" Width="40"/>
+                <DataGridTextColumn Header="Side" Binding="{Binding Side}" IsReadOnly="True" Width="100"/>
+                <DataGridTextColumn Header="Nation" Binding="{Binding Nation}" IsReadOnly="True" Width="120"/>
+                <DataGridTextColumn Header="Unit" Binding="{Binding UnitType}" IsReadOnly="True" Width="*"/>
+                <DataGridTextColumn Header="Base" Binding="{Binding BaseNumber}" IsReadOnly="True" Width="60"/>
+                <DataGridTextColumn Header="Strength"
+                                    Binding="{Binding Strength, UpdateSourceTrigger=PropertyChanged}" Width="90"/>
+                <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Freeze}" Width="60"/>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</Window>
