@@ -14,6 +14,7 @@ Each game lives in its own self-contained folder with its own solution/project, 
 | `KeefTrainer/` | Keef the Thief (EA / Naughty Dog, 1989) | net9.0-windows |
 | `LordsOfTheRealmTrainer/` | Lords of the Realm | net9.0-windows |
 | `MightAndMagic1Trainer/` | Might & Magic Book One (1986) | net8.0-windows |
+| `MinesOfTitanTrainer/` | Mines of Titan (Westwood Associates, 1989) | net8.0-windows |
 | `PoolOfRadianceTrainer/` | Pool of Radiance (1988) | net8.0-windows |
 | `ShogunTrainer/` | James Clavell's Shōgun (1987) | net8.0-windows |
 | `SwordOfTheSamuraiTrainer/` | Sword of the Samurai | net8.0-windows |
@@ -23,7 +24,7 @@ Each game lives in its own self-contained folder with its own solution/project, 
 
 ### Shared library
 
-`GameTrainers.Common/` is a small shared library holding the game-agnostic plumbing that used to be copied between trainers: the process/guest-memory access layer (`GameTrainers.Common.Memory`) and the hand-rolled MVVM base types (`GameTrainers.Common.Mvvm`). The MM1-family trainers — `MightAndMagic1Trainer`, `BardsTale1Trainer`, and `PoolOfRadianceTrainer` — reference it instead of duplicating that code, as does `DragonWarsTrainer`; each keeps only its own game-specific locators and scanners. The remaining trainers are still self-contained.
+`GameTrainers.Common/` is a small shared library holding the game-agnostic plumbing that used to be copied between trainers: the process/guest-memory access layer (`GameTrainers.Common.Memory`) and the hand-rolled MVVM base types (`GameTrainers.Common.Mvvm`). The MM1-family trainers — `MightAndMagic1Trainer`, `BardsTale1Trainer`, and `PoolOfRadianceTrainer` — reference it instead of duplicating that code, as do `DragonWarsTrainer` and `MinesOfTitanTrainer`; each keeps only its own game-specific locators and scanners. The remaining trainers are still self-contained.
 
 ## Prerequisites
 
@@ -71,9 +72,9 @@ Shared options (identical for the root launcher and every trainer):
 - **`-Test`** — run the trainer's verification harness (warns if it has none).
 - **`-Publish`** — publish a single self-contained win-x64 exe; skips launch.
 
-Only `BardsTale1Trainer`, `DragonWarsTrainer`, `MightAndMagic1Trainer`, `PoolOfRadianceTrainer`,
-and `SwordOfTheSamuraiTrainer` ship a verification harness; `-Test` warns and is ignored on the
-others. `SwordOfTheSamuraiTrainer` also has `.\Edit-SotsSave.ps1` for offline save editing.
+Only `BardsTale1Trainer`, `DragonWarsTrainer`, `MightAndMagic1Trainer`, `MinesOfTitanTrainer`,
+`PoolOfRadianceTrainer`, and `SwordOfTheSamuraiTrainer` ship a verification harness; `-Test` warns
+and is ignored on the others. `SwordOfTheSamuraiTrainer` also has `.\Edit-SotsSave.ps1` for offline save editing.
 
 You can always build directly with the SDK:
 
