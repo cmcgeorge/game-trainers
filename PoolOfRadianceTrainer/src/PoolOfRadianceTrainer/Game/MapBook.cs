@@ -13,6 +13,12 @@ public sealed record MapArea(string Name, int Width, int Height, string Notes, I
 {
     public string Size => $"{Width}×{Height}";
     public string Header => $"{Name}   ({Size} grid)";
+
+    /// <summary>Schematic width — the declared grid, widened if a keyed location sits past its edge.</summary>
+    public int GridWidth => Locations.Count == 0 ? Width : Math.Max(Width, Locations.Max(l => l.X) + 1);
+
+    /// <summary>Schematic height — the declared grid, heightened if a keyed location sits past its edge.</summary>
+    public int GridHeight => Locations.Count == 0 ? Height : Math.Max(Height, Locations.Max(l => l.Y) + 1);
 }
 
 /// <summary>

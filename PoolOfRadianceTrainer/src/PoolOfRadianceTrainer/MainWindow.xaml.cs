@@ -37,6 +37,23 @@ public partial class MainWindow : Window
     private void MaxEverything_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxEverything();
     private void RandomizeIconColors_Click(object sender, RoutedEventArgs e) => Vm(sender)?.RandomizeIconColors();
 
+    // Cell size (px) of the Maps schematic — must match the MapScale/MapFlipY converters' Cell in
+    // App.xaml. Clicking a square sets the teleport target to that grid cell; the schematic is drawn
+    // with (0,0) at the top-left (Y increasing down), matching the game's own coordinates.
+    private const double MapCell = 18;
+
+    private void Map_Click(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement map || map.DataContext is not MapsViewModel vm) return;
+        if (vm.SelectedArea is null) return;
+
+        var p = e.GetPosition(map);
+        int x = (int)System.Math.Floor(p.X / MapCell);
+        int y = (int)System.Math.Floor(p.Y / MapCell);
+        vm.TargetX = System.Math.Clamp(x, 0, vm.GridWidth - 1);
+        vm.TargetY = System.Math.Clamp(y, 0, vm.GridHeight - 1);
+    }
+
     // Folder picker for the offline save-editor tab.
     private void BrowseSaveFolder_Click(object sender, RoutedEventArgs e)
     {

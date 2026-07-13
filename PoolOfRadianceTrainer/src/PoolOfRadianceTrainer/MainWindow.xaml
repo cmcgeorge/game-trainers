@@ -716,12 +716,141 @@
                                          DisplayMemberPath="Header"/>
                             </DockPanel>
 
-                            <!-- Right: selected area detail + its keyed locations -->
+                            <!-- Right: selected area detail + schematic + its keyed locations -->
                             <DockPanel Grid.Column="1">
                                 <TextBlock DockPanel.Dock="Top" Text="{Binding SelectedArea.Header}"
                                            FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
                                 <TextBlock DockPanel.Dock="Top" Text="{Binding SelectedArea.Notes}"
                                            Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,2,0,8"/>
+
+                                <!-- Schematic: X across, Y down (origin top-left, matching the game's own
+                                     coordinates). Click a square to set the teleport target (gold outline);
+                                     the green dot is your live position once the X/Y addresses are pasted. -->
+                                <TextBlock DockPanel.Dock="Top" Text="MAP (click a square to set the teleport target)"
+                                           Style="{StaticResource Section}"/>
+                                <ScrollViewer DockPanel.Dock="Top" MaxHeight="400" Margin="0,0,0,8"
+                                              HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                    <Border BorderBrush="{StaticResource Line}" BorderThickness="1" Background="#12141A"
+                                            HorizontalAlignment="Left" VerticalAlignment="Top" ClipToBounds="True"
+                                            Width="{Binding GridWidth, Converter={StaticResource MapScale}}"
+                                            Height="{Binding GridHeight, Converter={StaticResource MapScale}}">
+                                        <Grid MouseLeftButtonDown="Map_Click">
+                                            <Rectangle>
+                                                <Rectangle.Fill>
+                                                    <DrawingBrush TileMode="Tile" Viewport="0,0,18,18" ViewportUnits="Absolute">
+                                                        <DrawingBrush.Drawing>
+                                                            <GeometryDrawing Geometry="M0,0 L18,0 18,18 0,18 Z">
+                                                                <GeometryDrawing.Pen>
+                                                                    <Pen Brush="#2A2F3B" Thickness="1"/>
+                                                                </GeometryDrawing.Pen>
+                                                            </GeometryDrawing>
+                                                        </DrawingBrush.Drawing>
+                                                    </DrawingBrush>
+                                                </Rectangle.Fill>
+                                            </Rectangle>
+
+                                            <ItemsControl ItemsSource="{Binding Terrain}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <Canvas/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemContainerStyle>
+                                                    <Style TargetType="ContentPresenter">
+                                                        <Setter Property="Canvas.Left" Value="{Binding X, Converter={StaticResource MapScale}}"/>
+                                                        <Setter Property="Canvas.Top">
+                                                            <Setter.Value>
+                                                                <MultiBinding Converter="{StaticResource MapFlipY}">
+                                                                    <Binding Path="Y"/>
+                                                                </MultiBinding>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </ItemsControl.ItemContainerStyle>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Width="18" Height="18">
+                                                            <Rectangle Fill="{Binding Floor, Converter={StaticResource FloorBrush}}"/>
+                                                            <Rectangle Width="2" HorizontalAlignment="Left"
+                                                                       Fill="{Binding West, Converter={StaticResource WallBrush}}"/>
+                                                            <Rectangle Height="2" VerticalAlignment="Top"
+                                                                       Fill="{Binding North, Converter={StaticResource WallBrush}}"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <ItemsControl ItemsSource="{Binding Locations}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <Canvas/>
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemContainerStyle>
+                                                    <Style TargetType="ContentPresenter">
+                                                        <Setter Property="Canvas.Left" Value="{Binding X, Converter={StaticResource MapScale}}"/>
+                                                        <Setter Property="Canvas.Top">
+                                                            <Setter.Value>
+                                                                <MultiBinding Converter="{StaticResource MapFlipY}">
+                                                                    <Binding Path="Y"/>
+                                                                </MultiBinding>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </ItemsControl.ItemContainerStyle>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Width="18" Height="18" Background="Transparent" Cursor="Hand">
+                                                            <Grid.InputBindings>
+                                                                <MouseBinding MouseAction="LeftClick"
+                                                                              Command="{Binding DataContext.SelectLocationCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                              CommandParameter="{Binding}"/>
+                                                            </Grid.InputBindings>
+                                                            <Grid.ToolTip>
+                                                                <StackPanel MaxWidth="260">
+                                                                    <TextBlock FontWeight="Bold">
+                                                                        <Run Text="{Binding Coord, Mode=OneWay}"/>
+                                                                        <Run Text="  "/>
+                                                                        <Run Text="{Binding Name, Mode=OneWay}"/>
+                                                                    </TextBlock>
+                                                                    <TextBlock Text="{Binding Notes}" TextWrapping="Wrap" Foreground="{StaticResource FgDim}"/>
+                                                                </StackPanel>
+                                                            </Grid.ToolTip>
+                                                            <Ellipse Width="12" Height="12" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                                     Fill="{StaticResource Danger}" Stroke="White" StrokeThickness="1"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+
+                                            <Canvas>
+                                                <Border Width="18" Height="18" BorderBrush="{StaticResource Accent}" BorderThickness="2"
+                                                        Canvas.Left="{Binding TargetX, Converter={StaticResource MapScale}}">
+                                                    <Canvas.Top>
+                                                        <MultiBinding Converter="{StaticResource MapFlipY}">
+                                                            <Binding Path="TargetY"/>
+                                                        </MultiBinding>
+                                                    </Canvas.Top>
+                                                </Border>
+                                            </Canvas>
+
+                                            <Canvas>
+                                                <Grid Width="18" Height="18" ToolTip="Your live position"
+                                                      Visibility="{Binding HasLock, Converter={StaticResource BoolToVis}}"
+                                                      Canvas.Left="{Binding LiveX, Converter={StaticResource MapScale}}">
+                                                    <Canvas.Top>
+                                                        <MultiBinding Converter="{StaticResource MapFlipY}">
+                                                            <Binding Path="LiveY"/>
+                                                        </MultiBinding>
+                                                    </Canvas.Top>
+                                                    <Ellipse Width="14" Height="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                             Fill="{StaticResource Good}" Stroke="White" StrokeThickness="2"/>
+                                                </Grid>
+                                            </Canvas>
+                                        </Grid>
+                                    </Border>
+                                </ScrollViewer>
+
                                 <TextBlock DockPanel.Dock="Top" Text="LOCATIONS (select one to set the teleport target)"
                                            Style="{StaticResource Section}"/>
                                 <DataGrid ItemsSource="{Binding Locations}" SelectedItem="{Binding SelectedLocation}"

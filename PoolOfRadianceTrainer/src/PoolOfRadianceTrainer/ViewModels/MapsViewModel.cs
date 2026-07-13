@@ -7,11 +7,17 @@ using PoolOfRadianceTrainer.Mvvm;
 
 namespace PoolOfRadianceTrainer.ViewModels;
 
+/// <summary>One drawable map square projected for the schematic: its grid position and terrain.</summary>
+public sealed record TerrainCell(int X, int Y, FloorKind Floor, WallKind West, WallKind North);
+
 /// <summary>
-/// The 🗺 Maps tab: an offline area/location reference plus a manual teleport helper. The party's
-/// map X/Y is NOT in the character record and its address changes every session, so the workflow is:
-/// find the X (and Y) address once with the 🔍 Memory scanner, paste them here, pick a location (or
-/// type target X/Y), and Teleport pokes the coordinates. Do it while exploring, never mid-combat.
+/// The 🗺 Maps tab: an offline area/location reference, a Dragon-Wars-style graphical schematic
+/// (grid + keyed-location markers + click-to-set target + a live green "you are here" dot), and a
+/// manual teleport helper. The party's map X/Y is NOT in the character record and its address
+/// changes every session, so the workflow is: find the X (and Y) address once with the 🔍 Memory
+/// scanner, paste them here, pick a location or click a square, and Teleport pokes the coordinates.
+/// Once the addresses are pasted, <see cref="Tick"/> (called from the main poll loop) reads them so
+/// the green dot tracks the party live. Do it while exploring, never mid-combat.
 /// </summary>
 public sealed class MapsViewModel : ObservableObject
 {
@@ -20,9 +26,14 @@ public sealed class MapsViewModel : ObservableObject
     public IReadOnlyList<MapArea> Areas => MapBook.Areas;
     public ObservableCollection<MapLocation> Locations { get; } = new();
 
+    private IReadOnlyList<TerrainCell> _terrain = Array.Empty<TerrainCell>();
+    /// <summary>Drawable terrain squares (walls / water) for the selected area, once a decoder exists.</summary>
+    public IReadOnlyList<TerrainCell> Terrain { get => _terrain; private set => SetProperty(ref _terrain, value); }
+
     public MapsViewModel()
     {
         TeleportCommand = new RelayCommand(_ => Teleport(), _ => CanTeleport());
+        SelectLocationCommand = new RelayCommand(p => { if (p is MapLocation l) SelectedLocation = l; });
         SelectedArea = Areas.FirstOrDefault();
     }
 
@@ -36,8 +47,14 @@ public sealed class MapsViewModel : ObservableObject
             Locations.Clear();
             if (value != null) foreach (var l in value.Locations) Locations.Add(l);
             SelectedLocation = Locations.FirstOrDefault();
+            OnPropertyChanged(nameof(GridWidth));
+            OnPropertyChanged(nameof(GridHeight));
         }
     }
+
+    /// <summary>Grid dimensions used to size the schematic and place markers.</summary>
+    public int GridWidth => _selectedArea?.GridWidth ?? 1;
+    public int GridHeight => _selectedArea?.GridHeight ?? 1;
 
     private MapLocation? _selectedLocation;
     public MapLocation? SelectedLocation
@@ -62,11 +79,23 @@ public sealed class MapsViewModel : ObservableObject
     private int _targetY;
     public int TargetY { get => _targetY; set => SetProperty(ref _targetY, Math.Clamp(value, 0, 255)); }
 
+    // --- live position (drives the green dot on the schematic) ---------------
+    private int _liveX;
+    public int LiveX { get => _liveX; private set => SetProperty(ref _liveX, value); }
+
+    private int _liveY;
+    public int LiveY { get => _liveY; private set => SetProperty(ref _liveY, value); }
+
+    private bool _hasLock;
+    /// <summary>True while the pasted X/Y addresses are readable, so the live dot is meaningful.</summary>
+    public bool HasLock { get => _hasLock; private set => SetProperty(ref _hasLock, value); }
+
     private string _status =
         "Reference only until attached. To teleport: scan for the party's X (and Y) on the 🔍 Memory tab, paste the addresses here, pick a location, and Teleport (while exploring — never in combat).";
     public string Status { get => _status; set => SetProperty(ref _status, value); }
 
     public ICommand TeleportCommand { get; }
+    public ICommand SelectLocationCommand { get; }
 
     public void Attach(ProcessMemory mem)
     {
@@ -78,8 +107,34 @@ public sealed class MapsViewModel : ObservableObject
     public void Detach()
     {
         _mem = null;
+        HasLock = false;
         Status = "Detached — reference only. Re-attach and re-scan the X/Y addresses to teleport.";
         RaiseCanTeleport();
+    }
+
+    /// <summary>
+    /// Polled from the main loop: once the party's X/Y addresses are pasted, reads the two bytes so
+    /// the green live dot tracks the party on the schematic. Cheap (two 1-byte reads) and silent —
+    /// it never touches the status text or the teleport target, so an in-progress edit isn't
+    /// clobbered. Clears the lock if either read fails (the addresses move between maps/sessions).
+    /// </summary>
+    public void Tick()
+    {
+        if (_mem is not { IsOpen: true } || !TryHex(XAddress, out var xa) || !TryHex(YAddress, out var ya))
+        {
+            HasLock = false;
+            return;
+        }
+        var bx = _mem.Read((nuint)xa, 1);
+        var by = _mem.Read((nuint)ya, 1);
+        if (bx.Length < 1 || by.Length < 1)
+        {
+            HasLock = false;
+            return;
+        }
+        LiveX = bx[0];
+        LiveY = by[0];
+        HasLock = true;
     }
 
     private bool CanTeleport() =>

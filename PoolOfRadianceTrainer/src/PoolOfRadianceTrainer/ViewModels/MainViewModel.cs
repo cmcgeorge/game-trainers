@@ -324,6 +324,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         }
         LiveInventory.ApplyFreeze();
         MemorySearch.RefreshValues();
+        Maps.Tick();
     }
 
     // --- global hotkeys ------------------------------------------------------
