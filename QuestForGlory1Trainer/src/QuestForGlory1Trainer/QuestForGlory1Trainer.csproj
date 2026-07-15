@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>QuestForGlory1Trainer</AssemblyName>
+    <RootNamespace>QuestForGlory1Trainer</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\GameTrainers.Common\GameTrainers.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="GameTrainers.Common.Memory" />
+    <Using Include="GameTrainers.Common.Mvvm" />
+    <Using Include="System.Collections.ObjectModel" />
+    <Using Include="QuestForGlory1Trainer.ViewModels" />
+    <Using Include="QuestForGlory1Trainer.Memory" />
+    <Using Include="QuestForGlory1Trainer.Game" />
+  </ItemGroup>
+
+</Project>

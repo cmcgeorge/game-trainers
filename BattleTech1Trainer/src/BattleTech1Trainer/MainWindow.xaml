@@ -1,0 +1,166 @@
+<Window x:Class="BattleTech1Trainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="BattleTech: The Crescent Hawk's Inception — Trainer" Height="720" Width="900"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Background="#EEE" Padding="6">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Process:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <ComboBox Width="300" ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                          SelectedItem="{Binding SelectedProcess}"/>
+                <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                <Button Content="Detect game" Command="{Binding DetectGameCommand}"
+                        ToolTip="Signature-scan the attached process to confirm BattleTech is running."/>
+            </StackPanel>
+        </Border>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+        </Border>
+
+        <TabControl Margin="6">
+            <!-- Value Scanner -->
+            <TabItem Header="Value Scanner">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <ComboBox Width="80" ItemsSource="{Binding Widths}"
+                                          SelectedItem="{Binding SelectedWidth}"
+                                          IsEnabled="{Binding NotScanning}"
+                                          ToolTip="Byte, 16-bit or 32-bit value. Changing this starts a new scan."/>
+                                <TextBlock Text="Value:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Width="120" Text="{Binding ScanText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Decimal (350000) or hex (0x55730). Leave blank for an unknown-value first scan."/>
+                                <Button Content="First Scan" Command="{Binding FirstScanCommand}"/>
+                                <Button Content="New Scan" Command="{Binding NewScanCommand}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="Guides:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <Button Content="C-Bills" Command="{Binding CBillsGuideCommand}"
+                                        ToolTip="Step-by-step to pin your C-Bill total (Int32)."/>
+                                <Button Content="Health / Armor" Command="{Binding HealthArmorGuideCommand}"
+                                        ToolTip="Step-by-step to pin a character's Health or Armor (Byte)."/>
+                                <Button Content="Skill" Command="{Binding SkillGuideCommand}"
+                                        ToolTip="Step-by-step to pin a skill's 0–4 ordinal (Byte)."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="Narrow:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <Button Content="Exact" Command="{Binding NextScanCommand}" CommandParameter="Exact"/>
+                                <Button Content="Increased" Command="{Binding NextScanCommand}" CommandParameter="Increased"/>
+                                <Button Content="Decreased" Command="{Binding NextScanCommand}" CommandParameter="Decreased"/>
+                                <Button Content="Changed" Command="{Binding NextScanCommand}" CommandParameter="Changed"/>
+                                <Button Content="Unchanged" Command="{Binding NextScanCommand}" CommandParameter="Unchanged"/>
+                                <TextBlock Text="{Binding MatchCount}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                           FontWeight="Bold"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Bottom" Background="#F6F6F6" Padding="6">
+                        <Button Content="Pin selected →" Command="{Binding PinCommand}" HorizontalAlignment="Left"
+                                ToolTip="Add the selected candidate to the Freezes tab to edit or freeze it."/>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                              IsReadOnly="True" HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="220"/>
+                            <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Freezes -->
+            <TabItem Header="Freezes">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Freeze all" Command="{Binding FreezeAllCommand}"/>
+                            <Button Content="Remove selected" Command="{Binding RemoveFrozenCommand}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
+                                       Text="Edit Target to poke a value; tick Freeze to re-write it every ~200 ms."/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Frozen}" SelectedItem="{Binding SelectedFrozen}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                              HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Label" Binding="{Binding Label}" IsReadOnly="True" Width="110"/>
+                            <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" IsReadOnly="True" Width="180"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding WidthLabel}" IsReadOnly="True" Width="60"/>
+                            <DataGridTextColumn Header="Live" Binding="{Binding Live}" IsReadOnly="True" Width="90"/>
+                            <DataGridTextColumn Header="Target"
+                                                Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="*"/>
+                            <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="60"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Mechs -->
+            <TabItem Header="'Mechs">
+                <DataGrid ItemsSource="{Binding Mechs}" AutoGenerateColumns="False" CanUserAddRows="False"
+                          CanUserDeleteRows="False" IsReadOnly="True" HeadersVisibility="Column">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="'Mech" Binding="{Binding Name}" Width="90"/>
+                        <DataGridTextColumn Header="Chassis" Binding="{Binding Chassis}" Width="70"/>
+                        <DataGridTextColumn Header="Tons" Binding="{Binding Tons}" Width="50"/>
+                        <DataGridTextColumn Header="Armor" Binding="{Binding Armor}" Width="55"/>
+                        <DataGridTextColumn Header="Jump" Binding="{Binding Jump}" Width="60"/>
+                        <DataGridTextColumn Header="Weapons" Binding="{Binding Weapons}" Width="*"/>
+                        <DataGridTextColumn Header="Role" Binding="{Binding Role}" Width="200"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <!-- Weapons -->
+            <TabItem Header="Weapons">
+                <DataGrid ItemsSource="{Binding Weapons}" AutoGenerateColumns="False" CanUserAddRows="False"
+                          CanUserDeleteRows="False" IsReadOnly="True" HeadersVisibility="Column">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Weapon" Binding="{Binding Name}" Width="130"/>
+                        <DataGridTextColumn Header="Scale" Binding="{Binding Scale}" Width="110"/>
+                        <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+
+            <!-- Skills -->
+            <TabItem Header="Skills">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <TextBlock TextWrapping="Wrap" Foreground="#555"
+                                   Text="Each skill is stored as a 0–4 ordinal: 0 Unskilled · 1 Amateur · 2 Adequate · 3 Good · 4 Excellent. Use the Skill guide on the Value Scanner tab to pin one."/>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Skills}" AutoGenerateColumns="False" CanUserAddRows="False"
+                              CanUserDeleteRows="False" IsReadOnly="True" HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="40"/>
+                            <DataGridTextColumn Header="Skill" Binding="{Binding Name}" Width="140"/>
+                            <DataGridTextColumn Header="Governs" Binding="{Binding Governs}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

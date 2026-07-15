@@ -1,0 +1,302 @@
+<Window x:Class="QuestForGlory1Trainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Quest for Glory I — Trainer" Height="740" Width="980"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Background="#EEE" Padding="6">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Process:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <ComboBox Width="300" ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                          SelectedItem="{Binding SelectedProcess}"/>
+                <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                <Button Content="Detach" Command="{Binding DetachCommand}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+        </Border>
+
+        <TabControl Margin="6">
+
+            <!-- ═══ Value Scanner ═══ -->
+            <TabItem Header="Value Scanner">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <ComboBox Width="80" ItemsSource="{Binding Widths}"
+                                          SelectedItem="{Binding SelectedWidth}"
+                                          IsEnabled="{Binding NotScanning}"
+                                          ToolTip="Byte, Int16 or Int32. Use Int16 for SCI0 global variables. Changing the type starts a new scan."/>
+                                <TextBlock Text="Value:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Width="120" Text="{Binding ScanText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Decimal (13) or hex (0x0D). Leave blank for an unknown-value first scan."/>
+                                <Button Content="First Scan" Command="{Binding FirstScanCommand}"/>
+                                <Button Content="New Scan" Command="{Binding NewScanCommand}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="Guided:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <Button Content="HP" Command="{Binding HpGuideCommand}"
+                                        ToolTip="Locate your current Health Points (Int16)."/>
+                                <Button Content="Stamina" Command="{Binding StaminaGuideCommand}"
+                                        ToolTip="Locate your current Stamina (Int16)."/>
+                                <Button Content="Mana" Command="{Binding MagicGuideCommand}"
+                                        ToolTip="Locate your current Magic Points (Int16, 0 if not a Magic-user)."/>
+                                <Button Content="Gold" Command="{Binding GoldGuideCommand}"
+                                        ToolTip="Locate your Gold Coins count (Int16)."/>
+                                <Button Content="Game Clock" Command="{Binding ClockGuideCommand}"
+                                        ToolTip="Locate the game-clock tick counter (Int16, 0–3599). Needed for the Day/Time tab."/>
+                                <Button Content="Game Day" Command="{Binding DayGuideCommand}"
+                                        ToolTip="Locate the game-day counter (Int16, starts at 1). Needed for the Day/Time tab."/>
+                                <Button Content="Room Number" Command="{Binding RoomGuideCommand}"
+                                        ToolTip="Locate the current room number (Int16). Needed for the Teleport tab."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="Narrow:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <Button Content="Exact"     Command="{Binding NextScanCommand}" CommandParameter="Exact"/>
+                                <Button Content="Increased" Command="{Binding NextScanCommand}" CommandParameter="Increased"/>
+                                <Button Content="Decreased" Command="{Binding NextScanCommand}" CommandParameter="Decreased"/>
+                                <Button Content="Changed"   Command="{Binding NextScanCommand}" CommandParameter="Changed"/>
+                                <Button Content="Unchanged" Command="{Binding NextScanCommand}" CommandParameter="Unchanged"/>
+                                <TextBlock Text="{Binding MatchCount}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                           FontWeight="Bold"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Bottom" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Pin selected →" Command="{Binding PinCommand}"
+                                    ToolTip="Add to the Freezes tab for editing or freezing."/>
+                            <Button Content="Pin As Clock" Command="{Binding PinAsClockCommand}"
+                                    ToolTip="Designate this Int16 address as the game-clock (enables Day/Time tab presets). Requires Int16 scan type."/>
+                            <Button Content="Pin As Day" Command="{Binding PinAsDayCommand}"
+                                    ToolTip="Designate this Int16 address as the game-day counter (enables Day/Time tab day write). Requires Int16 scan type."/>
+                            <Button Content="Pin As Room" Command="{Binding PinAsRoomCommand}"
+                                    ToolTip="Designate this Int16 address as the room number (enables Teleport tab). Requires Int16 scan type."/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                              IsReadOnly="True" HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="220"/>
+                            <DataGridTextColumn Header="Value"   Binding="{Binding Value}"      Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ═══ Hero Stats ═══ -->
+            <TabItem Header="Hero Stats">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12">
+                        <TextBlock FontWeight="Bold" FontSize="14"
+                                   Text="Find &amp; Freeze Your Hero (works in combat)"/>
+                        <TextBlock TextWrapping="Wrap" Margin="0,4,0,12" Foreground="#555"
+                                   Text="Quest for Glory I runs on Sierra's SCI0 interpreter, which keeps the hero's data on a heap that is allocated fresh every session, so the trainer cannot reliably auto-locate it. Instead, pinpoint each value with a quick guided scan, Pin it, then Freeze it. A frozen value is re-written every ~200 ms, so it holds even during combat."/>
+
+                        <TextBlock FontWeight="Bold" Foreground="#444" Margin="0,0,0,6"
+                                   Text="How to find &amp; freeze a value"/>
+                        <TextBlock TextWrapping="Wrap" Margin="0,0,0,12" Foreground="#666"
+                                   Text="1. Click a button below — it starts a fresh Int16 scan and switches focus to the Value Scanner.  2. On the Value Scanner tab, read the value in-game, type it, and click First Scan.  3. Change it in-game (take a hit, run, cast a spell), type the new value, and click Exact; repeat until one row remains.  4. Click 'Pin selected →'.  5. On the Freezes tab, edit Target to set a value and tick Freeze to hold it — this keeps working in combat."/>
+
+                        <Border Background="#F6F6F6" Padding="10" Margin="0,0,0,8">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Health (HP)" FontWeight="Bold" Width="130" VerticalAlignment="Center"/>
+                                <Button Content="Start HP Scan" Command="{Binding HpGuideCommand}"
+                                        ToolTip="Begin a guided Int16 scan for your current Health. Take a hit to change it and narrow the results."/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#F6F6F6" Padding="10" Margin="0,0,0,8">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Stamina" FontWeight="Bold" Width="130" VerticalAlignment="Center"/>
+                                <Button Content="Start Stamina Scan" Command="{Binding StaminaGuideCommand}"
+                                        ToolTip="Begin a guided Int16 scan for your current Stamina. Run or fight to change it and narrow the results."/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#F6F6F6" Padding="10" Margin="0,0,0,8">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Mana" FontWeight="Bold" Width="130" VerticalAlignment="Center"/>
+                                <Button Content="Start Mana Scan" Command="{Binding MagicGuideCommand}"
+                                        ToolTip="Begin a guided Int16 scan for your current Magic points. Cast a spell to change it and narrow the results."/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Background="#F6F6F6" Padding="10" Margin="0,0,0,8">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Gold coins" FontWeight="Bold" Width="130" VerticalAlignment="Center"/>
+                                <Button Content="Start Gold Scan" Command="{Binding GoldGuideCommand}"
+                                        ToolTip="Begin a guided Int16 scan for your Gold Coins. Spend or earn some to change it and narrow the results."/>
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock TextWrapping="Wrap" Margin="0,8,0,0" Foreground="#888" FontSize="11"
+                                   Text="Tip: to top a value up just once (not freeze it), edit its Target on the Freezes tab without ticking Freeze. Base stats and skills can be found the same way with a guided Exact scan once you have a value to search for."/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══ Day / Time ═══ -->
+            <TabItem Header="Day / Time">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="8">
+                        <StackPanel>
+                            <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,6"
+                                       Text="Clock and day are located automatically when you Attach. If the addresses below show 'Not pinned', click Re-scan (after loading a save). The Value Scanner tab also has Guided Scan buttons as a manual fallback."/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Text="Clock:" VerticalAlignment="Center" Width="40"/>
+                                <TextBlock Text="{Binding ClockPinSummary}" VerticalAlignment="Center" Foreground="#333" FontStyle="Italic"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Day:" VerticalAlignment="Center" Width="40"/>
+                                <TextBlock Text="{Binding DayPinSummary}" VerticalAlignment="Center" Foreground="#333" FontStyle="Italic"/>
+                            </StackPanel>
+                            <Separator Margin="0,0,0,8"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Set Day:" VerticalAlignment="Center" Width="70"/>
+                                <TextBox Width="60"
+                                         Text="{Binding TargetDay, UpdateSourceTrigger=LostFocus}"
+                                         ToolTip="Game day number (1–65535). Written when you click Set."/>
+                                <TextBlock Text="  Hour (0–23):" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Width="50"
+                                         Text="{Binding TargetHour, UpdateSourceTrigger=LostFocus}"
+                                         ToolTip="In-game hour 0–23. Written as hour × 150 ticks."/>
+                                <Button Content="Set" Command="{Binding SetTimeCommand}"
+                                        ToolTip="Write the day and/or time to the pinned addresses."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Presets:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <ItemsControl ItemsSource="{Binding TimePresets}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Content="{Binding Label}"
+                                                    Command="{Binding DataContext.SetTimePresetCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip="{Binding Tooltip}"
+                                                    Margin="2"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <TextBlock Margin="8" TextWrapping="Wrap" Foreground="#777"
+                               Text="Time-of-day changes take effect immediately (lighting, NPC schedules, shop hours). Day changes update the in-game day counter. Many quests are time-gated — advancing past Day ~15 may leave the game unwinnable."/>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ═══ Teleport ═══ -->
+            <TabItem Header="Teleport">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="8">
+                        <StackPanel>
+                            <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,6"
+                                       Text="Room address is located automatically when you Attach. If 'Room pin' shows 'Not pinned', click Re-scan after loading a save. Writing the room number queues the next load — walk through any door or use ALT-T to trigger it. Rooms marked * are unconfirmed — save first."/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                <TextBlock Text="Room pin:" VerticalAlignment="Center" Width="70"/>
+                                <TextBlock Text="{Binding RoomPinSummary}" VerticalAlignment="Center" Foreground="#333" FontStyle="Italic"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <TextBlock Text="Current room:" VerticalAlignment="Center" Width="90"/>
+                                <TextBlock Text="{Binding CurrentRoomDisplay}" VerticalAlignment="Center" FontWeight="Bold"/>
+                            </StackPanel>
+                            <Separator Margin="0,0,0,8"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Destination:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <ComboBox Width="420" ItemsSource="{Binding Rooms}"
+                                          DisplayMemberPath="Display"
+                                          SelectedItem="{Binding SelectedRoom}"
+                                          ToolTip="Rooms marked * are unconfirmed — save before teleporting."/>
+                                <Button Content="Teleport" Command="{Binding TeleportCommand}"
+                                        ToolTip="Write the chosen room number to the pinned address."/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Rooms}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True"
+                              HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#"    Binding="{Binding Number}" Width="55"/>
+                            <DataGridTextColumn Header="Room" Binding="{Binding Name}"   Width="*"/>
+                            <DataGridCheckBoxColumn Header="OK" Binding="{Binding Confirmed, Mode=OneWay}" Width="45"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ═══ Freezes ═══ -->
+            <TabItem Header="Freezes">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Freeze all"      Command="{Binding FreezeAllCommand}"/>
+                            <Button Content="Remove selected" Command="{Binding RemoveFrozenCommand}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
+                                       Text="Pin any value here via the Value Scanner tab. Edit Target to poke a value; tick Freeze to re-write it every ~200 ms (this holds through combat). Use the Hero Stats tab to start a guided HP/Stamina/Mana/Gold scan."/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Frozen}" SelectedItem="{Binding SelectedFrozen}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                              HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Label"   Binding="{Binding Label}"      IsReadOnly="True" Width="100"/>
+                            <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" IsReadOnly="True" Width="180"/>
+                            <DataGridTextColumn Header="Type"    Binding="{Binding WidthLabel}" IsReadOnly="True" Width="60"/>
+                            <DataGridTextColumn Header="Live"    Binding="{Binding Live}"       IsReadOnly="True" Width="80"/>
+                            <DataGridTextColumn Header="Target"
+                                                Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="*"/>
+                            <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="60"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ═══ Reference — Stats ═══ -->
+            <TabItem Header="Stats">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <TextBlock TextWrapping="Wrap" Foreground="#555"
+                                   Text="Reference: Quest for Glory I character stats. Use the Hero Stats tab to find &amp; freeze HP/Stamina/Mana with a guided value scan. Maximum value for all stats is 200."/>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Stats}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True"
+                              HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="ID"          Binding="{Binding Id}"         Width="40"/>
+                            <DataGridTextColumn Header="Stat"        Binding="{Binding Name}"        Width="130"/>
+                            <DataGridCheckBoxColumn Header="All"     Binding="{Binding AllClasses, Mode=OneWay}"  Width="45"/>
+                            <DataGridTextColumn Header="Notes"       Binding="{Binding Notes}"       Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+        </TabControl>
+    </DockPanel>
+</Window>
