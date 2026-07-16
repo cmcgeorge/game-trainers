@@ -64,11 +64,22 @@ public sealed class MapsViewModel : ObservableObject
     }
 
     // --- teleport target -----------------------------------------------------
+    // Clamp to the grid, and when the clamp rewrites an out-of-range entry to the value already held
+    // (e.g. typing 100 while the target is already 63), force a notification so the text box snaps back
+    // to the clamped value instead of showing an input the model won't teleport to.
     private int _targetX;
-    public int TargetX { get => _targetX; set => SetField(ref _targetX, Math.Clamp(value, 0, GridSize - 1)); }
+    public int TargetX
+    {
+        get => _targetX;
+        set { int v = Math.Clamp(value, 0, GridSize - 1); if (!SetField(ref _targetX, v) && v != value) OnPropertyChanged(); }
+    }
 
     private int _targetY;
-    public int TargetY { get => _targetY; set => SetField(ref _targetY, Math.Clamp(value, 0, GridSize - 1)); }
+    public int TargetY
+    {
+        get => _targetY;
+        set { int v = Math.Clamp(value, 0, GridSize - 1); if (!SetField(ref _targetY, v) && v != value) OnPropertyChanged(); }
+    }
 
     // --- live position (drives the green dot on the schematic) ---------------
     private int _liveX;

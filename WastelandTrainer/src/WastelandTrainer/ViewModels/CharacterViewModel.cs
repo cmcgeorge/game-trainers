@@ -89,11 +89,21 @@ public sealed class CharacterViewModel : ObservableObject
             // The locator identifies an occupied slot by a name that is at least two characters,
             // starts with an ASCII letter, and is NUL-terminated. A name that fails that test would
             // drop this ranger — or, mid-roster, the whole party — out of the next scan, so reject it
-            // and revert the text box to the current stored name.
+            // and revert the text box to the current stored name. Validate the bytes that will
+            // actually be stored: WastelandText masks each character to 7 bits, so a pasted non-ASCII
+            // character can mask to NUL/control (e.g. 'Ā' U+0100 → 0x00) and silently shorten or
+            // corrupt the name — checking the raw string alone would let that through.
             string s = value ?? "";
-            char first = s.Length > 0 ? s[0] : '\0';
-            bool startsWithLetter = (first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z');
-            if (s.Length < 2 || !startsWithLetter) { OnPropertyChanged(); return; }
+            int storeLen = Math.Min(s.Length, CharacterFormat.NameLength - 1);   // Encode keeps one byte for the NUL
+            bool valid = storeLen >= 2;
+            for (int i = 0; valid && i < storeLen; i++)
+            {
+                int ch = s[i] & 0x7F;   // the byte Encode will actually write
+                valid = i == 0
+                    ? (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')   // first char: a letter
+                    : ch is >= 0x20 and <= 0x7E;                             // rest: printable ASCII
+            }
+            if (!valid) { OnPropertyChanged(); return; }
             Record.Name = s; Poke(CharacterFormat.OffName, CharacterFormat.NameLength); OnPropertyChanged(); RaiseDerived();
         }
     }
@@ -211,18 +221,28 @@ public sealed class CharacterViewModel : ObservableObject
     }
 
     // --- freeze / live refresh ----------------------------------------------
-    /// <summary>Called each poll tick: re-pin frozen constitution to its max in live memory.</summary>
+    /// <summary>
+    /// Called each poll tick after <see cref="RefreshLiveSummary"/> has copied in the latest bytes:
+    /// re-pin frozen constitution to its max in live memory. Running on the just-read bytes (rather
+    /// than the previous tick's snapshot) restores a CON drop the same tick it happens instead of one
+    /// poll interval later; the display is refreshed so it never lingers on the momentary drop.
+    /// </summary>
     public void ApplyFreeze()
     {
         if (!_host.IsAttached) return;
         if (FreezeHealth && Record.Con != Record.MaxCon)
-        { Record.Con = Record.MaxCon; Poke(CharacterFormat.OffCon, 2); }
+        {
+            Record.Con = Record.MaxCon;
+            Poke(CharacterFormat.OffCon, 2);
+            OnPropertyChanged(nameof(Con));
+            RaiseDerived();
+        }
     }
 
     /// <summary>
     /// Called each poll tick after <see cref="RefreshLiveSummary"/> has copied in the latest inventory
-    /// bytes: top every ammo-bearing item up to <see cref="CharacterFormat.MaxAmmo"/>. Runs on the fresh
-    /// bytes (unlike <see cref="ApplyFreeze"/>), then pokes back just the single quantity byte of each
+    /// bytes: top every ammo-bearing item up to <see cref="CharacterFormat.MaxAmmo"/>. Runs on the just-read
+    /// bytes (as does <see cref="ApplyFreeze"/>), then pokes back just the single quantity byte of each
     /// slot it raised and re-raises only those rows — so the Inventory tab shows the topped-up amount,
     /// without snapping back a quantity being typed into an unrelated row. Writing one byte per raised
     /// slot (rather than the whole block) both follows the "poke only the changed range" rule and can't

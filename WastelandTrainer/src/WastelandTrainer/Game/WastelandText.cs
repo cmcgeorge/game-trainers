@@ -33,7 +33,7 @@ public static class WastelandText
         int max = Math.Max(0, maxLength - 1);   // always leave room for the NUL terminator
         string s = value ?? "";
         if (s.Length > max) s = s[..max];
-        for (int i = 0; i < maxLength; i++)
+        for (int i = 0; i < maxLength && offset + i < buffer.Length; i++)   // guard the destination like Decode
             buffer[offset + i] = i < s.Length ? (byte)(s[i] & 0x7F) : (byte)0;
     }
 }

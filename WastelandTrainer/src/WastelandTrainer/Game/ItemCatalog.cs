@@ -137,8 +137,9 @@ public static class ItemCatalog
         new(94, "Cash",               "Gear & Quest"),
     };
 
-    private static readonly Dictionary<int, ItemInfo> ById = Items
-        .GroupBy(i => i.Id).ToDictionary(g => g.Key, g => g.First());
+    // Ids are unique, so key straight off the id (matching SkillBook); this fails fast if a duplicate
+    // id is ever introduced into the hand-written table rather than silently keeping the first.
+    private static readonly Dictionary<int, ItemInfo> ById = Items.ToDictionary(i => i.Id);
 
     public static string ItemName(int id) =>
         id == 0 ? None.Name : ById.TryGetValue(id, out var i) ? i.Name : $"Item #{id}";
@@ -163,23 +164,27 @@ public static class ItemCatalog
 
     /// <summary>
     /// Parses an entry typed into (or picked from) the inventory drop-down into an item id. A blank
-    /// string is the empty slot (0); a leading number — bare, or the "13  Name" label form — is that
-    /// raw id when it fits a byte (0..255); otherwise a case-insensitive item-name match wins. Returns
-    /// -1 when the text matches nothing, so the caller can leave the slot untouched. This is what lets
-    /// the editable drop-down reach any item id without a separate id box.
+    /// string is the empty slot (0); next a case-insensitive item-name match wins (so a catalog name
+    /// that begins with a digit — "45 clip" (30), "7.62mm clip" (31) — resolves to that item rather
+    /// than being misread as a raw id); failing a name match, a leading number — bare, or the
+    /// "13  Name" label form — is that raw id when it fits a byte (0..255). Returns -1 when the text
+    /// matches nothing, so the caller can leave the slot untouched. This is what lets the editable
+    /// drop-down reach any item id without a separate id box.
     /// </summary>
     public static int ParseSelection(string? text)
     {
         if (string.IsNullOrWhiteSpace(text)) return 0;
         string s = text.Trim();
 
-        var m = LeadingId.Match(s);
-        if (m.Success && int.TryParse(m.Groups[1].Value, out int id) && id is >= 0 and <= 255)
-            return id;
-
+        // Name match first: a real item name such as "45 clip" (id 30) starts with digits followed by
+        // a word boundary, so the leading-id rule would otherwise mis-resolve it to id 45 (Crowbar).
         foreach (var i in Items)
             if (string.Equals(i.Name, s, StringComparison.OrdinalIgnoreCase))
                 return i.Id;
+
+        var m = LeadingId.Match(s);
+        if (m.Success && int.TryParse(m.Groups[1].Value, out int id) && id is >= 0 and <= 255)
+            return id;
 
         return -1;
     }

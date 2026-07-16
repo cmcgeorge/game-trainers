@@ -68,7 +68,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public bool FreezeAmmo
     {
         get => _freezeAmmo;
-        set { if (SetField(ref _freezeAmmo, value)) { foreach (var c in Party) c.FreezeAmmo = value; Status = value ? $"Ammo topped up to {CharacterFormat.MaxAmmo} and frozen for the party." : "Ammo freeze OFF."; } }
+        set { if (SetField(ref _freezeAmmo, value)) { foreach (var c in Party) c.FreezeAmmo = value; Status = value ? $"Ammo freeze ON — topping every ammo-bearing item up to {CharacterFormat.MaxAmmo} each tick." : "Ammo freeze OFF."; } }
     }
 
     // --- commands ------------------------------------------------------------
@@ -226,11 +226,15 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         if (_mem == null) return;
         foreach (var c in Party)
         {
-            c.ApplyFreeze();
+            // Re-read first, then apply both freezes to the just-read bytes so a CON or ammo drop is
+            // restored the same tick it happens (freezing the previous tick's snapshot would let the
+            // value sit dropped for one poll interval). A failed re-read means the record is
+            // momentarily unreadable, so skip the pokes this tick rather than write blind.
             if (PartyLocator.Reread(_mem, c.Address, _pollBuf))
             {
                 c.RefreshLiveSummary(_pollBuf);
-                c.ApplyAmmoFreeze();   // runs on the just-read inventory bytes
+                c.ApplyFreeze();       // re-pin CON on the fresh bytes
+                c.ApplyAmmoFreeze();   // top ammo on the fresh inventory bytes
             }
         }
         Maps.Tick();

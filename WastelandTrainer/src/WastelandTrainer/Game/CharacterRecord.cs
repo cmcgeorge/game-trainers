@@ -67,8 +67,12 @@ public sealed class CharacterRecord
 
     // --- identity / progression ----------------------------------------------
     public long Money { get => U24(CharacterFormat.OffMoney); set => U24(CharacterFormat.OffMoney, value); }
-    public int Gender { get => U8(CharacterFormat.OffGender); set => U8(CharacterFormat.OffGender, value); }
-    public int Nationality { get => U8(CharacterFormat.OffNationality); set => U8(CharacterFormat.OffNationality, value); }
+    // Gender and nationality clamp to the ranges the locator's occupancy test accepts (0/1 and 0..4),
+    // so — like the attribute and CON setters — no edit through this layer can push the value out of
+    // range and drop the ranger from the next scan. (The UI ComboBoxes already only offer valid
+    // values; this keeps the invariant true for any other write path too.)
+    public int Gender { get => U8(CharacterFormat.OffGender); set => U8(CharacterFormat.OffGender, Math.Clamp(value, 0, 1)); }
+    public int Nationality { get => U8(CharacterFormat.OffNationality); set => U8(CharacterFormat.OffNationality, Math.Clamp(value, 0, 4)); }
     public int ArmorClass { get => U8(CharacterFormat.OffArmorClass); set => U8(CharacterFormat.OffArmorClass, value); }
     // MAXCON is clamped to 1..MaxPlausibleCon so an edited ranger always stays within the range the
     // locator treats as a real record — a wildly out-of-range MAXCON would make the whole roster
@@ -192,41 +196,57 @@ public sealed class CharacterRecord
     public string NationalityName => CharacterFormat.NationalityName(Nationality);
 
     /// <summary>
-    /// True when this slot holds a real character. Kept in step with the scanner's
-    /// <c>PartyLocator.IsValidCharacter</c>: a 2+-char NUL-terminated printable-ASCII name starting
-    /// with a letter, seven attributes in 1..100, a plausible MAXCON, current CON not exceeding
-    /// MAXCON, gender 0/1 and nationality 0..4. The extra field checks reject stray byte runs that a
-    /// name-plus-attributes-only test would mistake for a member.
+    /// True when this slot holds a real character — a thin wrapper over <see cref="IsValidRecord"/>,
+    /// the single occupancy test shared with the structural scanner (<c>PartyLocator</c>).
     /// </summary>
-    public bool IsOccupied
+    public bool IsOccupied => IsValidRecord(Bytes, 0);
+
+    /// <summary>
+    /// The one raw-buffer occupancy test used by both the instance <see cref="IsOccupied"/> and the
+    /// structural <c>PartyLocator</c> scan, so the editor's clamps, the locator's gate and the
+    /// re-scan validity check can never drift apart. True when the <see cref="CharacterFormat.RecordSize"/>-byte
+    /// record at <paramref name="offset"/> in <paramref name="buffer"/> has a well-formed name
+    /// (2..13 printable-ASCII bytes, NUL-terminated, starting with a letter), seven attribute bytes
+    /// in 1..100, a plausible MAXCON, current CON not exceeding MAXCON, gender 0/1 and nationality
+    /// 0..4. The extra field checks reject stray byte runs that a name-plus-attributes-only test would
+    /// mistake for a member.
+    /// </summary>
+    public static bool IsValidRecord(byte[] buffer, int offset)
     {
-        get
+        if (offset < 0 || buffer.Length - offset < CharacterFormat.RecordSize) return false;
+
+        int nameOff = offset + CharacterFormat.OffName;
+        byte first = buffer[nameOff];
+        // Names are plain 7-bit ASCII, so the first byte must itself be a letter (no high-bit masking:
+        // the printable-range loop below rejects any byte > 0x7E anyway).
+        if (!((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z'))) return false;
+
+        int len = 0;
+        bool terminated = false;
+        for (int i = 0; i < CharacterFormat.NameLength; i++)
         {
-            byte first = Bytes[CharacterFormat.OffName];
-            char c = (char)(first & 0x7F);
-            if (!((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) return false;
-            // name must be printable ASCII, NUL-terminated, and at least two characters
-            int len = 0;
-            bool terminated = false;
-            for (int i = 0; i < CharacterFormat.NameLength; i++)
-            {
-                byte b = Bytes[CharacterFormat.OffName + i];
-                if (b == 0) { terminated = true; break; }
-                if (b < 0x20 || b > 0x7E) return false;
-                len++;
-            }
-            if (!terminated || len < 2) return false;
-            for (int i = 0; i < CharacterFormat.AttributeCount; i++)
-            {
-                int a = GetAttribute(i);
-                if (a < 1 || a > 100) return false;
-            }
-            if (MaxCon is <= 0 || MaxCon > CharacterFormat.MaxPlausibleCon) return false;
-            if (Con > MaxCon) return false;        // current CON can't exceed its max
-            if (Gender > 1) return false;          // 0 = Male, 1 = Female
-            if (Nationality > 4) return false;     // 0..4
-            return true;
+            byte b = buffer[nameOff + i];
+            if (b == 0) { terminated = true; break; }
+            if (b < 0x20 || b > 0x7E) return false;
+            len++;
         }
+        if (!terminated || len < 2) return false;
+
+        for (int k = 0; k < CharacterFormat.AttributeCount; k++)
+        {
+            int a = buffer[offset + CharacterFormat.OffAttributes + k];
+            if (a < 1 || a > 100) return false;
+        }
+
+        int maxCon = buffer[offset + CharacterFormat.OffMaxCon] | (buffer[offset + CharacterFormat.OffMaxCon + 1] << 8);
+        if (maxCon <= 0 || maxCon > CharacterFormat.MaxPlausibleCon) return false;
+
+        int con = buffer[offset + CharacterFormat.OffCon] | (buffer[offset + CharacterFormat.OffCon + 1] << 8);
+        if (con > maxCon) return false;                               // current CON can't exceed its max
+
+        if (buffer[offset + CharacterFormat.OffGender] > 1) return false;       // 0 = Male, 1 = Female
+        if (buffer[offset + CharacterFormat.OffNationality] > 4) return false;  // 0..4
+        return true;
     }
 
     public CharacterRecord Clone() => new(Bytes);

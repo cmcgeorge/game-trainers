@@ -16,7 +16,11 @@ using WastelandTrainer.Memory;
 // running emulator instead of the embedded fixture.
 if (args.Length >= 2 && args[0] == "--live")
 {
-    int livePid = int.Parse(args[1]);
+    if (!int.TryParse(args[1], out int livePid))
+    {
+        Console.WriteLine("Usage: FormatCheck --live <pid>   (pid must be a number)");
+        return 2;
+    }
     using var liveMem = ProcessMemory.Open(livePid);
     Console.WriteLine($"Attached to pid {livePid} (IsOpen={liveMem.IsOpen}). Running PartyLocator.Find…");
     int regionCount = 0;
@@ -133,6 +137,11 @@ Check("known name", ItemCatalog.ParseSelection("Knife"), 4);
 Check("name is case-insensitive", ItemCatalog.ParseSelection("rope"), 54);
 Check("id past a byte rejected", ItemCatalog.ParseSelection("999"), -1);
 Check("gibberish rejected", ItemCatalog.ParseSelection("zzz"), -1);
+// A catalog name that begins with a digit must resolve to that item, not to the leading number as a
+// raw id (regression: "45 clip" once parsed as id 45 = Crowbar, "7.62mm clip" as id 7 = explosive).
+Check("digit-leading name '45 clip' -> item 30", ItemCatalog.ParseSelection("45 clip"), 30);
+Check("digit-leading name '7.62mm clip' -> item 31", ItemCatalog.ParseSelection("7.62mm clip"), 31);
+Check("digit-leading name is case-insensitive", ItemCatalog.ParseSelection("9MM CLIP"), 32);
 Console.WriteLine();
 
 Console.WriteLine("Name encode / decode round-trip (a NUL terminator is always reserved):");
@@ -150,9 +159,11 @@ Console.WriteLine("Occupancy discriminators (reject stray byte runs the scanner 
 Check("2-char name occupied", MakeValid("Bo").IsOccupied, true);
 Check("13-char name occupied", MakeValid("ThirteenChar!").IsOccupied, true);
 Check("1-char name rejected", MakeValid("A").IsOccupied, false);
-var badGender = MakeValid("Test"); badGender.Gender = 4;
+// Force the out-of-range value at the byte level: the setters now clamp gender/nationality to the
+// locatable ranges (0/1 and 0..4), so assigning 4/79 through them would be clamped, not rejected.
+var badGender = MakeValid("Test"); badGender.Bytes[CharacterFormat.OffGender] = 4;
 Check("gender 4 rejected", badGender.IsOccupied, false);
-var badNat = MakeValid("Test"); badNat.Nationality = 79;
+var badNat = MakeValid("Test"); badNat.Bytes[CharacterFormat.OffNationality] = 79;
 Check("nationality 79 rejected", badNat.IsOccupied, false);
 var conOverMax = MakeValid("Test");                                  // CON == MAXCON by construction
 conOverMax.Bytes[CharacterFormat.OffCon] = 0xFF;                     // force CON above MAXCON at the byte level
@@ -170,7 +181,17 @@ Check("attribute clamped to >= 1", edited.GetAttribute(1), 1);
 for (int a = 2; a < CharacterFormat.AttributeCount; a++) edited.SetAttribute(a, 10);
 edited.MaxCon = 20000;         // over-range → clamped to the plausibility ceiling
 Check("MaxCon clamped to MaxPlausibleCon", edited.MaxCon, CharacterFormat.MaxPlausibleCon);
+edited.Gender = 4;             // over-range → clamped into the locatable 0/1 range
+Check("Gender clamped to 0/1", edited.Gender, 1);
+edited.Nationality = 79;       // over-range → clamped into the locatable 0..4 range
+Check("Nationality clamped to 0..4", edited.Nationality, 4);
 Check("edited record stays occupied", edited.IsOccupied, true);
+// IsOccupied and the scanner share one validator (CharacterRecord.IsValidRecord); confirm the
+// instance property and the static test agree on the same bytes so they can't drift apart.
+Check("IsOccupied matches IsValidRecord (occupied)",
+    edited.IsOccupied, CharacterRecord.IsValidRecord(edited.Bytes, 0));
+Check("IsValidRecord rejects an empty record",
+    CharacterRecord.IsValidRecord(new byte[CharacterFormat.RecordSize], 0), false);
 Console.WriteLine();
 
 Console.WriteLine("IsOccupied (occupied slots pack from 0; the rest are empty):");

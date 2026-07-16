@@ -118,6 +118,13 @@ public static class PartyLocator
             int readLen = (int)Math.Min((nuint)(want + overlap), remaining);
             int read = mem.Read(start, buf, readLen);
 
+            // The overlap tail reaches into the following page(s); if one of those is unreadable the
+            // all-or-nothing read fails outright and this page would be skipped even though a roster
+            // wholly inside it is still readable. Retry without the overlap so the readable page is
+            // salvaged (a roster straddling into the unreadable page genuinely can't be read anyway).
+            if (read == 0 && readLen > want)
+                read = mem.Read(start, buf, want);
+
             for (int i = 0; i + RosterBytes <= read; i++)
             {
                 if (!IsValidCharacter(buf, i)) continue;
@@ -160,47 +167,13 @@ public static class PartyLocator
     private static bool IsEmptySlot(byte[] buf, int off) => buf[off + CharacterFormat.OffName] == 0x00;
 
     /// <summary>
-    /// The raw-buffer occupancy test the scan runs on every candidate offset (kept in step with
-    /// <see cref="CharacterRecord.IsOccupied"/>): a well-formed name (2..13 printable ASCII,
-    /// NUL-terminated, starting with a letter), seven attribute bytes in 1..100, a plausible MAXCON,
-    /// current CON not exceeding MAXCON, gender 0/1 and nationality 0..4. The extra field checks
-    /// reject stray byte runs (e.g. a lone letter followed by unrelated numbers) that a name-plus-
-    /// attributes-only test would mistake for a one-member roster.
+    /// The raw-buffer occupancy test the scan runs on every candidate offset. Delegates to
+    /// <see cref="CharacterRecord.IsValidRecord"/> — the single shared occupancy test — so the scan
+    /// gate and <see cref="CharacterRecord.IsOccupied"/> can never fall out of step: a well-formed
+    /// name (2..13 printable ASCII, NUL-terminated, starting with a letter), seven attribute bytes in
+    /// 1..100, a plausible MAXCON, current CON not exceeding MAXCON, gender 0/1 and nationality 0..4.
     /// </summary>
-    private static bool IsValidCharacter(byte[] b, int o)
-    {
-        int nameOff = o + CharacterFormat.OffName;
-        byte first = b[nameOff];
-        char c0 = (char)(first & 0x7F);
-        if (!((c0 >= 'A' && c0 <= 'Z') || (c0 >= 'a' && c0 <= 'z'))) return false;
-
-        int len = 0;
-        bool terminated = false;
-        for (int i = 0; i < CharacterFormat.NameLength; i++)
-        {
-            byte ch = b[nameOff + i];
-            if (ch == 0) { terminated = true; break; }
-            if (ch < 0x20 || ch > 0x7E) return false;
-            len++;
-        }
-        if (!terminated || len < 2) return false;
-
-        for (int k = 0; k < CharacterFormat.AttributeCount; k++)
-        {
-            int a = b[o + CharacterFormat.OffAttributes + k];
-            if (a < 1 || a > 100) return false;
-        }
-
-        int maxCon = b[o + CharacterFormat.OffMaxCon] | (b[o + CharacterFormat.OffMaxCon + 1] << 8);
-        if (maxCon <= 0 || maxCon > CharacterFormat.MaxPlausibleCon) return false;
-
-        int con = b[o + CharacterFormat.OffCon] | (b[o + CharacterFormat.OffCon + 1] << 8);
-        if (con > maxCon) return false;                        // current CON can't exceed its max
-
-        if (b[o + CharacterFormat.OffGender] > 1) return false;       // 0 = Male, 1 = Female
-        if (b[o + CharacterFormat.OffNationality] > 4) return false;  // 0..4 (US/Russian/Mexican/Indian/Chinese)
-        return true;
-    }
+    private static bool IsValidCharacter(byte[] b, int o) => CharacterRecord.IsValidRecord(b, o);
 
     /// <summary>Re-reads a single record into a caller-supplied scratch buffer for the poll loop.</summary>
     public static bool Reread(ProcessMemory mem, nuint address, byte[] buffer) =>

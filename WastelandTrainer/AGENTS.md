@@ -85,9 +85,11 @@ The roster is seven 256-byte slots; occupied slots pack from 0 and are validated
 letter-leading ASCII name, seven attribute bytes in `1..100`, a plausible MAXCON, CON ≤ MAXCON,
 gender 0/1 and nationality 0..4 (the locator and `IsOccupied` share these checks; editors clamp to
 the same ranges so an edit never makes a ranger un-locatable). Names are **plain ASCII**
-(not high-bit encoded like Dragon Wars) — encode/decode through `WastelandText`. Skills and
-inventory are packed `(id, value)` arrays read to a `0x00` id terminator; edit skills by id
-(reuse-or-append into 30 slots). The live map position and 12-byte map name live in the 256-byte
+(not high-bit encoded like Dragon Wars) — encode/decode through `WastelandText`. Skills are a packed
+`(id, value)` array read to a `0x00` id terminator; edit skills by id (reuse-or-append into 30 slots).
+Inventory is 30 fixed `(id, qty)` slots read by index and kept gap-free by `CompactInventory` after
+each edit, so the running game (which reads the list only up to the first empty slot) still sees every
+carried item. The live map position and 12-byte map name live in the 256-byte
 party-state header at `rosterBase − 0x100` (X at header `0x08`, Y at `0x09`); teleport writes only
 those two bytes and only moves the party within the current map. The weapon/equip byte (`0x1F`) and
 unidentified padding are left untouched. Setting values to the trainer's "max" caps is safe; the
