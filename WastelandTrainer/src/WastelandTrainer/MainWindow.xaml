@@ -49,8 +49,10 @@
         <!-- Party-wide actions -->
         <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
             <StackPanel Orientation="Horizontal">
-                <CheckBox Content="Freeze CON" IsChecked="{Binding FreezeHealth}" VerticalAlignment="Center" Margin="4,0"
-                          ToolTip="Keeps the whole party pinned to full constitution while exploring."/>
+                <CheckBox Content="Freeze Health (CON)" IsChecked="{Binding FreezeHealth}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="Keeps the whole party pinned to full constitution (CON = hit points) while exploring."/>
+                <CheckBox Content="Freeze Ammo" IsChecked="{Binding FreezeAmmo}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="Tops every ranger's ammo — weapon rounds, clips, charges — up to 99 each tick, so it never runs low. Only weapons and ammo are touched; armor and quest items are left alone."/>
                 <Separator Style="{x:Null}" Width="12"/>
                 <Button Content="Heal Party" Command="{Binding HealPartyCommand}"/>
                 <Button Content="Max Attributes" Command="{Binding MaxAttributesPartyCommand}"/>

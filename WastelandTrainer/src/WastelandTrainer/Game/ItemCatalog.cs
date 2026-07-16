@@ -145,6 +145,20 @@ public static class ItemCatalog
 
     public static ItemInfo? Find(int id) => ById.TryGetValue(id, out var i) ? i : null;
 
+    // Categories whose second inventory byte is ammunition the Freeze Ammo action tops up: weapons
+    // that fire (firearm, energy weapon, thrown/explosive) and clips/shells/power packs. Melee weapons,
+    // armor and gear/quest items are excluded — their second byte is unused or a status byte, so forcing
+    // it to a max could corrupt the item.
+    private static readonly HashSet<string> AmmoCategories =
+        new(StringComparer.Ordinal) { "Firearm", "Energy Weapon", "Thrown / Explosive", "Ammo" };
+
+    /// <summary>
+    /// True when an item's quantity byte is ammunition Freeze Ammo should top up (a firearm, energy
+    /// weapon, thrown/explosive, or a clip/shell/power pack). Unknown ids and non-ammo items are false,
+    /// so the freeze never touches a melee weapon, a worn armor, or a quest item's status byte.
+    /// </summary>
+    public static bool IsAmmoItem(int id) => Find(id) is { } i && AmmoCategories.Contains(i.Category);
+
     private static readonly Regex LeadingId = new(@"^\s*(\d{1,3})\b", RegexOptions.Compiled);
 
     /// <summary>

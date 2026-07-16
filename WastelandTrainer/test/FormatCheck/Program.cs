@@ -26,7 +26,17 @@ if (args.Length >= 2 && args[0] == "--live")
     if (party == null) { Console.WriteLine("No party located."); return 2; }
     Console.WriteLine($"Found roster at 0x{(ulong)party.RosterBase:X} with {party.Members.Count} character(s).");
     foreach (var lc in party.Members)
-        Console.WriteLine($"  slot {lc.Slot}: {lc.Record.Name} @ 0x{(ulong)lc.Address:X} (CON {lc.Record.Con}/{lc.Record.MaxCon})");
+    {
+        var r = lc.Record;
+        Console.WriteLine($"  slot {lc.Slot}: {r.Name} @ 0x{(ulong)lc.Address:X} (CON {r.Con}/{r.MaxCon}, weaponByte 0x{r.Bytes[CharacterFormat.OffWeaponState]:X2})");
+        for (int s = 0; s < CharacterFormat.ItemSlots; s++)
+        {
+            int id = r.GetItemId(s);
+            if (id == 0) continue;
+            int qty = r.GetItemQty(s);
+            Console.WriteLine($"      inv[{s,2}] id {id,3} qty {qty,3} (0x{qty:X2}){(qty >= 0x80 ? " JAMMED?" : "")}  {ItemCatalog.ItemName(id)}");
+        }
+    }
     return party.Members.Count == 0 ? 2 : 0;
 }
 
@@ -84,6 +94,35 @@ inv.CompactInventory();
 Check("middle clear keeps later items", inv.ItemCount, 2);
 Check("order preserved after clear: slot 0", inv.GetItemId(0), 30);
 Check("order preserved after clear: slot 1", inv.GetItemId(1), 4);
+Console.WriteLine();
+
+Console.WriteLine("Ammo freeze tops ammo-bearing items to the max, leaving other items alone:");
+var af = new CharacterRecord(new byte[CharacterFormat.RecordSize]);
+af.SetItem(0, 13, 7);    // M1911A1 (Firearm), 7 rounds  -> topped to MaxAmmo
+af.SetItem(1, 30, 0);    // 45 clip (Ammo)               -> topped to MaxAmmo
+af.SetItem(2, 54, 1);    // Rope (Gear & Quest)          -> left untouched
+af.SetItem(3,  4, 0);    // Knife (Melee)                -> left untouched
+af.SetItem(4, 38, 0);    // Leather jacket (Armor)       -> left untouched
+var topped = new List<int>();
+Check("top-up reports it raised something", AmmoFreeze.TopUp(af, topped), true);
+Check("firearm topped to the max", af.GetItemQty(0), CharacterFormat.MaxAmmo);
+Check("clip topped to the max", af.GetItemQty(1), CharacterFormat.MaxAmmo);
+Check("rope (gear) left alone", af.GetItemQty(2), 1);
+Check("knife (melee) left alone", af.GetItemQty(3), 0);
+Check("armor left alone", af.GetItemQty(4), 0);
+Check("only the two ammo slots were raised", topped.Count == 2 && topped.Contains(0) && topped.Contains(1), true);
+Check("second pass is a no-op once full", AmmoFreeze.TopUp(af), false);
+Console.WriteLine();
+
+Console.WriteLine("Ammo freeze never lowers ammo and preserves the jammed-weapon flag (qty byte bit 7):");
+var jr = new CharacterRecord(new byte[CharacterFormat.RecordSize]);
+jr.SetItem(0, 29, 120);                                        // Meson cannon (Energy Weapon) already above the max
+Check("above-max ammo is not reduced", AmmoFreeze.TopUp(jr), false);
+Check("above-max value kept", jr.GetItemQty(0), 120);
+jr.SetItem(0, 29, CharacterFormat.InventoryJammedFlag | 10);   // jammed, 10 charges (below the max)
+Check("tops up a jammed weapon", AmmoFreeze.TopUp(jr), true);
+Check("count raised to the max", jr.GetItemQty(0) & CharacterFormat.InventoryCountMask, CharacterFormat.MaxAmmo);
+Check("jam flag preserved", jr.GetItemQty(0) & CharacterFormat.InventoryJammedFlag, CharacterFormat.InventoryJammedFlag);
 Console.WriteLine();
 
 Console.WriteLine("Drop-down parsing (pick a name or type a raw id; the separate id box is gone):");

@@ -17,7 +17,10 @@ Three projects in `WastelandTrainer.sln`: the WPF app, its test harness, and the
     ASCII names via `WastelandText`, and the packed `(id, value)` skill/inventory arrays read to a
     `0x00` terminator). `SkillBook`/`ItemCatalog`/`MapBook`/`Walkthrough` are reference tables;
     `ParagraphBook` parses the game's own `paragraphs.txt` at runtime (the copyrighted booklet text
-    is never embedded).
+    is never embedded). `AmmoFreeze` is a pure, stateless helper (no process/UI dependency) backing the
+    Freeze Ammo toggle — each tick it tops every ammo-bearing item (weapons that fire, clips/shells; see
+    `ItemCatalog.IsAmmoItem`) up to `CharacterFormat.MaxAmmo` (99), preserving the jammed-weapon flag
+    (the quantity byte's high bit) and leaving non-ammo items untouched; `FormatCheck` covers it.
   - `Memory/` — `PartyLocator.cs` finds the party by **structure**, not by an anchor: Wasteland has
     no stable byte-run adjacent to the roster, so it scans for an array of seven contiguous 256-byte
     records where occupied slots pack from slot 0. Each occupied slot must pass a strict validity
@@ -28,8 +31,9 @@ Three projects in `WastelandTrainer.sln`: the WPF app, its test harness, and the
     The generic process-memory wrapper (`ProcessMemory`/`MemoryRegion`) comes from
     `GameTrainers.Common.Memory` (imported via csproj `<Using>` items), not a local copy.
   - `ViewModels/` — hand-rolled MVVM. `MainViewModel` (attach/scan/detach, poll loop, party-wide
-    actions, and the party-header address it hands to the maps VM), `CharacterViewModel`
-    (per-ranger editable fields, CON freeze, max actions), `MapsViewModel` (reads the party-state
+    actions including the Freeze Health/Freeze Ammo toggles, and the party-header address it hands to
+    the maps VM), `CharacterViewModel` (per-ranger editable fields, CON/health freeze, ammo freeze via
+    `AmmoFreeze`, max actions), `MapsViewModel` (reads the party-state
     header for the live map/X/Y and teleports by writing the two position bytes),
     `ReferenceViewModel` (skills/items/paragraphs/strategy), and the row VMs
     (`NamedValueViewModel`, `SkillRowViewModel`, `ItemRowViewModel`) plus `ICharacterHost` (the
@@ -87,4 +91,7 @@ inventory are packed `(id, value)` arrays read to a `0x00` id terminator; edit s
 party-state header at `rosterBase − 0x100` (X at header `0x08`, Y at `0x09`); teleport writes only
 those two bytes and only moves the party within the current map. The weapon/equip byte (`0x1F`) and
 unidentified padding are left untouched. Setting values to the trainer's "max" caps is safe; the
-game UI may render very large numbers oddly (cosmetic).
+game UI may render very large numbers oddly (cosmetic). The two poll-loop freezes each rewrite only
+their own field: Freeze Health re-pins the CON u16 (`0x1D`), and Freeze Ammo tops the quantity
+byte of ammo-bearing items (weapons that fire, clips/shells) up to 99 inside the 60-byte block at
+`0xBD`+, preserving each byte's jammed-weapon high bit — never item ids, non-ammo items, or `0x1F`.

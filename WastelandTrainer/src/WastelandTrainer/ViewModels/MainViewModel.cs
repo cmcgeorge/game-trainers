@@ -56,12 +56,19 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     private string _status = "Launch Wasteland in DOSBox, then pick the process and Attach.";
     public string Status { get => _status; set => SetField(ref _status, value); }
 
-    // --- party-wide freeze toggle -------------------------------------------
+    // --- party-wide freeze toggles ------------------------------------------
     private bool _freezeHealth;
     public bool FreezeHealth
     {
         get => _freezeHealth;
-        set { if (SetField(ref _freezeHealth, value)) { foreach (var c in Party) c.FreezeHealth = value; Status = value ? "Constitution frozen for the party." : "CON freeze OFF."; } }
+        set { if (SetField(ref _freezeHealth, value)) { foreach (var c in Party) c.FreezeHealth = value; Status = value ? "Health (CON) frozen for the party." : "Health freeze OFF."; } }
+    }
+
+    private bool _freezeAmmo;
+    public bool FreezeAmmo
+    {
+        get => _freezeAmmo;
+        set { if (SetField(ref _freezeAmmo, value)) { foreach (var c in Party) c.FreezeAmmo = value; Status = value ? $"Ammo topped up to {CharacterFormat.MaxAmmo} and frozen for the party." : "Ammo freeze OFF."; } }
     }
 
     // --- commands ------------------------------------------------------------
@@ -150,6 +157,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         SelectedCharacter = null;
         Maps.OnDetached();
         _freezeHealth = false; OnPropertyChanged(nameof(FreezeHealth));
+        _freezeAmmo = false; OnPropertyChanged(nameof(FreezeAmmo));
         OnPropertyChanged(nameof(IsAttached));
         RaiseCommands();
         Status = "Detached.";
@@ -187,6 +195,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             }
             SelectedCharacter = Party.FirstOrDefault();
             if (FreezeHealth) foreach (var c in Party) c.FreezeHealth = true;
+            if (FreezeAmmo) foreach (var c in Party) c.FreezeAmmo = true;
             Status = Party.Count == 0
                 ? "No party found. Make sure characters are loaded (past the title screen), then Re-scan."
                 : $"Found {Party.Count} character(s).";
@@ -218,7 +227,11 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         foreach (var c in Party)
         {
             c.ApplyFreeze();
-            if (PartyLocator.Reread(_mem, c.Address, _pollBuf)) c.RefreshLiveSummary(_pollBuf);
+            if (PartyLocator.Reread(_mem, c.Address, _pollBuf))
+            {
+                c.RefreshLiveSummary(_pollBuf);
+                c.ApplyAmmoFreeze();   // runs on the just-read inventory bytes
+            }
         }
         Maps.Tick();
     }

@@ -25,8 +25,16 @@ public sealed class CharacterViewModel : ObservableObject
     public string[] NationalityOptions => CharacterFormat.Nationalities;
 
     private bool _freezeHealth;
-    /// <summary>Re-pins current constitution to its max every poll tick while set.</summary>
+    /// <summary>Re-pins current constitution (the ranger's hit points) to its max every poll tick while set.</summary>
     public bool FreezeHealth { get => _freezeHealth; set => SetField(ref _freezeHealth, value); }
+
+    private readonly List<int> _toppedAmmoSlots = new();
+    private bool _freezeAmmo;
+    /// <summary>
+    /// Tops every ammo-bearing item (weapon rounds, clips, charges) up to
+    /// <see cref="CharacterFormat.MaxAmmo"/> each poll tick while set, so ammo never runs low.
+    /// </summary>
+    public bool FreezeAmmo { get => _freezeAmmo; set => SetField(ref _freezeAmmo, value); }
 
     public CharacterViewModel(ICharacterHost host, LocatedCharacter located)
     {
@@ -209,6 +217,27 @@ public sealed class CharacterViewModel : ObservableObject
         if (!_host.IsAttached) return;
         if (FreezeHealth && Record.Con != Record.MaxCon)
         { Record.Con = Record.MaxCon; Poke(CharacterFormat.OffCon, 2); }
+    }
+
+    /// <summary>
+    /// Called each poll tick after <see cref="RefreshLiveSummary"/> has copied in the latest inventory
+    /// bytes: top every ammo-bearing item up to <see cref="CharacterFormat.MaxAmmo"/>. Runs on the fresh
+    /// bytes (unlike <see cref="ApplyFreeze"/>), then pokes back just the single quantity byte of each
+    /// slot it raised and re-raises only those rows — so the Inventory tab shows the topped-up amount,
+    /// without snapping back a quantity being typed into an unrelated row. Writing one byte per raised
+    /// slot (rather than the whole block) both follows the "poke only the changed range" rule and can't
+    /// clobber a concurrent in-game compaction, since it never rewrites item ids or other slots.
+    /// </summary>
+    public void ApplyAmmoFreeze()
+    {
+        if (!_host.IsAttached || !FreezeAmmo) return;
+        if (!AmmoFreeze.TopUp(Record, _toppedAmmoSlots)) return;
+        foreach (int slot in _toppedAmmoSlots)
+        {
+            // +1 = the quantity byte of the (id, qty) pair; the id byte is never rewritten.
+            Poke(CharacterFormat.OffInventory + slot * CharacterFormat.SlotSize + 1, 1);
+            Items[slot].Refresh();
+        }
     }
 
     /// <summary>

@@ -4,8 +4,9 @@ A WPF (.NET 8) trainer for the 1988 Interplay / Electronic Arts post-apocalyptic
 **Wasteland**. It attaches to the running game (inside DOSBox / DOSBox-X), locates the party
 roster in the emulated memory, and lets you edit every ranger live — the seven attributes, all
 35 skills, constitution (CON), money, experience, level, skill points, armour class, name,
-gender and nationality — with a party-wide **Freeze CON** toggle and one-click **max** actions,
-both per-character and party-wide. A **Maps** tab reads the party's live map and X/Y from memory
+gender and nationality — with party-wide **Freeze Health (CON)** and **Freeze Ammo** toggles and
+one-click **max** actions, both per-character and party-wide. A **Maps** tab reads the party's live
+map and X/Y from memory
 and **teleports** the squad within the current map; a **References** tab lists skills, item ids,
 the game's own **paragraph** book, and a condensed **strategy** guide.
 
@@ -58,11 +59,17 @@ The trainer decodes the full **256-byte** Wasteland character record:
   inside the run the game scans — items pack to the top, so a new one may jump to the first free row.
   The item table is decoded from `WL.EXE` itself (see below).
 
-### Freeze toggle
+### Freeze toggles
 
-The toolbar has a party-wide **Freeze CON** checkbox. While it is on the poll loop re-pins each
-ranger's current constitution to its max every tick, so it never drops in play. Toggle it off to
-let CON move again.
+The toolbar has two party-wide freeze checkboxes; each runs off the same poll loop.
+
+- **Freeze Health (CON)** — re-pins every ranger's current constitution (CON, the hit-point stat) to
+  its max each tick, so it never drops in play. Toggle it off to let CON move again.
+- **Freeze Ammo** — tops every *ammo-bearing* item (a weapon that fires, or a clip/shell/power pack)
+  up to **99** each tick, so ammo never runs low. Only weapons and ammunition are touched — melee
+  weapons, armour, and gear/quest items are left alone (their second byte is unused or a status byte,
+  so forcing it could corrupt them). A count already above 99 is never reduced, and the jammed-weapon
+  flag (the quantity byte's high bit) is preserved. Only the quantity byte is written, never item ids.
 
 ### Quick actions
 
