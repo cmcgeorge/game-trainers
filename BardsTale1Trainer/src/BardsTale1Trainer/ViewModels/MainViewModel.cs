@@ -329,7 +329,9 @@ public sealed class MainViewModel : ObservableObject
         {
             nuint addr = loc.SlotAddress(slot);
             var buf = _mem.Read(addr, PartyFormat.RecordSize);
-            if (buf.Length < PartyFormat.RecordSize) break;
+            // Skip a slot whose read came up short rather than breaking — a transient partial
+            // read on one slot must not truncate the rest of the party (mirrors the snapshot reader).
+            if (buf.Length < PartyFormat.RecordSize) continue;
             var rec = new CharacterRecord(buf) { Address = addr, Slot = slot };
 
             nuint nameAddr = loc.RowAddress(slot);
@@ -544,7 +546,11 @@ public sealed class MainViewModel : ObservableObject
         MapReference.Tick();
 
         if (!IsAttached) return;
-        foreach (var c in Characters) c.ApplyFreezes();
+        // ApplyFreezes writes to memory and, when it re-pins a dropped value, raises
+        // PropertyChanged on the bound field — which would overwrite a value the user is
+        // mid-typing. So, like the two re-reads below, it pauses while the editor has focus.
+        if (!EditorHasFocus)
+            foreach (var c in Characters) c.ApplyFreezes();
         // Both the per-tick LiveRefresh and the periodic auto re-read below re-read the
         // selected character and raise PropertyChanged on its bound fields, which would
         // overwrite a value the user is mid-typing — so both pause while the editor has focus.

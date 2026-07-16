@@ -18,7 +18,7 @@ public static class HuffmanDecoder
         if (raw.Length < 2) throw new InvalidDataException("Chunk is too small to hold a length header.");
         var reader = new BitReader(raw);
         int size = reader.ReadByteAligned() | (reader.ReadByteAligned() << 8);
-        var tree = BuildTree(reader, new List<(int Run, int Value)>(), run: 0, index: new int[1]);
+        var tree = BuildTree(reader, new List<(int Run, int Value)>(), run: 0, index: new int[1], depth: 0);
 
         var outp = new byte[size];
         int count = size;
@@ -38,8 +38,16 @@ public static class HuffmanDecoder
         return outp;
     }
 
-    private static Node BuildTree(BitReader reader, List<(int Run, int Value)> traces, int run, int[] index)
+    private static Node BuildTree(BitReader reader, List<(int Run, int Value)> traces, int run, int[] index, int depth)
     {
+        // Bound the true recursion depth. `depth` increments on every call (both the left `run+1`
+        // spine and the right `run:0` branch), so it tracks actual C# stack usage — unlike `run`,
+        // which resets on each right branch and so wouldn't catch a right-leaning "comb" tree. A
+        // canonical Huffman tree over a 256-symbol (byte) alphabet can't exceed height 255, so any
+        // greater depth means the bitstream is corrupt. Throwing (caught by DataArchive.GetChunk)
+        // degrades a bad chunk to "absent" instead of an uncatchable StackOverflowException.
+        if (depth > 256) throw new InvalidDataException("Huffman tree is too deep — corrupt data chunk.");
+
         (int Run, int Value) Peek()
         {
             while (index[0] >= traces.Count)
@@ -58,8 +66,8 @@ public static class HuffmanDecoder
             index[0]++;
             return new Node(value);
         }
-        var left = BuildTree(reader, traces, run + 1, index);
-        var right = BuildTree(reader, traces, 0, index);
+        var left = BuildTree(reader, traces, run + 1, index, depth + 1);
+        var right = BuildTree(reader, traces, 0, index, depth + 1);
         return new Node(left, right);
     }
 

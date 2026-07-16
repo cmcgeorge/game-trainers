@@ -248,6 +248,13 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     {
         if (_searcher == null || IsScanning) return;
         bool hasValue = ScanValue.TryParse(ScanText, out long value);
+        // Blank means "unknown-value scan"; a non-blank value that won't parse is a typo, not an
+        // unknown scan — report it rather than silently running an unknown-value first scan.
+        if (!hasValue && !string.IsNullOrWhiteSpace(ScanText))
+        {
+            Status = "Enter a number, or clear the box to scan for an unknown value.";
+            return;
+        }
         if (hasValue && !ScanValue.FitsWidth(value, SelectedWidth))
         {
             Status = $"{value} does not fit a {SelectedWidth} scan — pick a wider type or a smaller value.";
@@ -341,6 +348,7 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     private void NewScan()
     {
         _scanCts?.Cancel();
+        _pendingPinLabel = "";   // a plain/manual scan makes unlabeled pins; guides set the label afterwards
         if (_mem != null) _searcher = new MemorySearcher(_mem, SelectedWidth);
         Results.Clear();
         SelectedResult = null;
@@ -383,11 +391,11 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     /// <summary>Switches to <paramref name="width"/> (starting a fresh scan) and labels the next pin.</summary>
     private void BeginGuide(ScanWidth width, string label)
     {
-        _pendingPinLabel = label;
         // Assigning a new width already starts a fresh scan via the setter; only call NewScan directly
-        // when the width is already what we want.
+        // when the width is already what we want. Both clear _pendingPinLabel, so set the label after.
         if (_selectedWidth != width) SelectedWidth = width;
         else NewScan();
+        _pendingPinLabel = label;
     }
 
     private void ShowCBillsGuide()

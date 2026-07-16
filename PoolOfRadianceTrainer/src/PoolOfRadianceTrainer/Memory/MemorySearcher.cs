@@ -115,7 +115,16 @@ public sealed class MemorySearcher
             {
                 bufBase = a;
                 bufLen = _mem.Read(a, buf, ChunkSize);
-                if (bufLen < stride) { values[i] = Unreadable; continue; }
+                if (bufLen < stride)
+                {
+                    // The 1 MiB bulk read can straddle the end of this candidate's committed region
+                    // and fail wholesale; the value itself still fits (ScanAll only keeps addresses
+                    // with a full stride inside a region), so retry just its width before giving up —
+                    // otherwise valid candidates in a region's last ~1 MiB are silently dropped when
+                    // narrowing, and the real target can be narrowed away and never seen again.
+                    bufLen = _mem.Read(a, buf, stride);
+                    if (bufLen < stride) { values[i] = Unreadable; continue; }
+                }
             }
             values[i] = ReadValue(buf, (int)(a - bufBase), Width);
         }

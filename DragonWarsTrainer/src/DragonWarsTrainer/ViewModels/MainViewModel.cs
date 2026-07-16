@@ -237,8 +237,11 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         if (_mem == null) return;
         foreach (var c in Party)
         {
-            c.ApplyFreeze();
+            // Re-read the live bytes first, then freeze, so the freeze re-pins against this tick's
+            // vitals rather than last tick's — a hit that dropped HP is corrected now, not up to one
+            // poll interval later (which could miss a death the freeze was meant to prevent).
             if (RosterLocator.Reread(_mem, c.Address, _pollBuf)) c.RefreshLiveSummary(_pollBuf);
+            c.ApplyFreeze();
         }
         Maps.Tick();
     }

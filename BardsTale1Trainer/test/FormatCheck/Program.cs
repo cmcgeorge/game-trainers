@@ -1,8 +1,8 @@
 using BardsTale1Trainer.Game;
 
 // Headless verification of the Bard's Tale 1 record format and the extracted game
-// tables. Runs against the two bundled .TPW sample characters in docs\, and — if the
-// large DOSBox-X memory dump is present in testdata\ — against the live party array
+// tables. Runs against the two bundled .TPW sample characters in .docs\, and — if the
+// large DOSBox-X memory dump is present in .data\ — against the live party array
 // and the data-segment string anchors too. Needs neither admin nor the game running.
 
 int failures = 0;
@@ -18,8 +18,10 @@ void Check(string label, bool ok, string? detail = null)
 }
 
 string repoRoot = FindRepoRoot();
-string docs = Path.Combine(repoRoot, "docs");
-string testdata = Path.Combine(repoRoot, "testdata");
+// Fixtures live in the repo's dot-prefixed (git-ignored) dirs: .docs/ for the sample
+// characters, .data/ for the captured DOSBox-X dump.
+string docs = Path.Combine(repoRoot, ".docs");
+string testdata = Path.Combine(repoRoot, ".data");
 
 Console.WriteLine("=== Static tables ===");
 Check("Item table has 126 entries", ItemBook.ItemNames.Length == 126,

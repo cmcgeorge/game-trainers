@@ -583,7 +583,10 @@ public sealed class MainViewModel : ObservableObject
             {
                 var target = Characters.FirstOrDefault(c => c.Record.Slot == slot);
                 if (target == null) { skipped++; continue; }   // no such character any more
-                target.Record.Load(record);
+                // Normalise the record's stored slot byte to its new home, exactly as Copy/Swap do,
+                // so a hand-edited or cross-arranged snapshot can't leave a record claiming a slot it
+                // isn't in. For a snapshot built from a normal party this is a no-op.
+                target.Record.Load(WithSlotByte(record, slot));
                 target.PushAll();      // live characters are written to the game right away
                 target.RaiseAll();
                 restored++;
