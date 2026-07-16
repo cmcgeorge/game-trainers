@@ -1,6 +1,7 @@
 using GameTrainers.Common.Memory;
 using WastelandTrainer.Game;
 using WastelandTrainer.Memory;
+using WastelandTrainer.ViewModels;
 
 // Headless verification harness for the Wasteland roster parser. It decodes a captured 7-record
 // slice of the live party roster — the default party (Hell Razor, Angela Deth, Thrasher,
@@ -11,6 +12,37 @@ using WastelandTrainer.Memory;
 //
 // The slice was cut from dosbox-x-16124-20260715-112525-175.bin (party inside the Ranger Center),
 // starting at roster slot 0 (Hell Razor's name); see .data/extract.ps1.
+
+// Optional live smoke test for the create-screen roller:
+//   FormatCheck --createscan <pid> <STR IQ LCK SPD AGL DEX CHR> [MAXCON] [SKP]
+// runs CreationScanner.Find against a running emulator sitting on the Ranger Center create screen and
+// reports where the temporary roll buffer was located (and whether the record shape was confirmed).
+if (args.Length >= 9 && args[0] == "--createscan")
+{
+    if (!int.TryParse(args[1], out int scanPid))
+    {
+        Console.WriteLine("Usage: FormatCheck --createscan <pid> <STR IQ LCK SPD AGL DEX CHR> [MAXCON] [SKP]");
+        return 2;
+    }
+    var attrs = new int[CharacterFormat.AttributeCount];
+    for (int k = 0; k < attrs.Length; k++) attrs[k] = int.Parse(args[2 + k]);
+    int maxCon = args.Length >= 10 ? int.Parse(args[9]) : 0;
+    int skp = args.Length >= 11 ? int.Parse(args[10]) : -1;
+
+    using var scanMem = ProcessMemory.Open(scanPid);
+    Console.WriteLine($"Attached to pid {scanPid} (IsOpen={scanMem.IsOpen}). Scanning for the create-screen roll "
+        + $"[{string.Join(" ", attrs)}] MAXCON={maxCon} SKP={skp}…");
+    var found = CreationScanner.Find(scanMem, attrs, maxCon, skp);
+    Console.WriteLine($"CreationScanner.Find returned {found.Count} match(es):");
+    foreach (var m in found)
+    {
+        var v = new int[CharacterFormat.AttributeCount];
+        CreationScanner.TryReadAttributes(scanMem, m.Address, v);
+        CreationScanner.TryReadMaxCon(scanMem, m.Address, out int mc);
+        Console.WriteLine($"  0x{(ulong)m.Address:X}  structural={m.Structural,-5}  attrs=[{string.Join(" ", v)}]  MAXCON@+{CreationScanner.AttrToMaxCon}={mc}");
+    }
+    return found.Count == 0 ? 2 : 0;
+}
 
 // Optional live smoke test: FormatCheck --live <pid> runs the structural PartyLocator against a
 // running emulator instead of the embedded fixture.
@@ -227,6 +259,122 @@ Check("inventory block fits the record",
     CharacterFormat.OffInventory + CharacterFormat.ItemBlockBytes <= CharacterFormat.RecordSize, true);
 Console.WriteLine();
 
+Console.WriteLine("Roll target text binding (an emptied minimum box must clear the target to null):");
+var lck = new RollStatViewModel("LCK", CreationScanner.MaxAttr);
+lck.MinimumText = "15";
+Check("typed 15 -> Minimum 15", lck.Minimum, 15);
+lck.MinimumText = "";
+Check("cleared box -> Minimum null", lck.Minimum, null);
+lck.MinimumText = "50";                                        // over the cap
+Check("over-cap value clamps to MaxAttr", lck.Minimum, CreationScanner.MaxAttr);
+Check("MinimumText reflects the clamp", lck.MinimumText, CreationScanner.MaxAttr.ToString());
+lck.MinimumText = "abc";
+Check("non-numeric text -> Minimum null", lck.Minimum, null);
+lck.Minimum = 12;
+Check("setting Minimum updates MinimumText", lck.MinimumText, "12");
+Console.WriteLine();
+
+Console.WriteLine("Capture text bindings (the on-screen boxes clear to null the same way the minimums do):");
+var cap = new RollStatViewModel("STR", CreationScanner.MaxAttr);
+cap.CapturedText = "12";
+Check("typed captured 12 -> Captured 12", cap.Captured, 12);
+cap.CapturedText = "";                         // clearing must null it (not linger like a raw int? binding)
+Check("cleared captured box -> Captured null", cap.Captured, null);
+cap.CapturedText = "xyz";
+Check("non-numeric captured -> Captured null", cap.Captured, null);
+cap.Captured = 9;
+Check("setting Captured updates CapturedText", cap.CapturedText, "9");
+var svm = new CharacterRollerViewModel(() => null, () => null, _ => { });
+svm.CapturedSkpText = "4";
+Check("typed SKP 4 -> CapturedSkp 4", svm.CapturedSkp, 4);
+svm.CapturedSkpText = "";
+Check("cleared SKP box -> CapturedSkp null", svm.CapturedSkp, null);
+Console.WriteLine();
+
+Console.WriteLine("Attribute total display (sum of the seven attributes; excludes SKP and MAXCON):");
+var roller = new CharacterRollerViewModel(() => null, () => null, _ => { });
+Check("captured total blank until all seven entered", roller.CapturedTotalText, "—");
+int[] roll = { 12, 4, 12, 6, 10, 11, 7 };   // sums to 62
+for (int i = 0; i < roller.Stats.Count; i++) roller.Stats[i].Captured = roll[i];
+roller.MaxCon.Captured = 29;                 // MAXCON must NOT count toward the attribute total
+roller.CapturedSkp = 4;                       // SKP must NOT count either
+Check("captured total sums only the seven attributes", roller.CapturedTotalText, "62");
+Check("live total blank until locked", roller.LiveTotalText, "—");
+for (int i = 0; i < roller.Stats.Count; i++) roller.Stats[i].Live = roll[i];
+Check("live total sums the seven live attributes", roller.LiveTotalText, "62");
+roller.Stats[0].Captured = null;              // clearing one box drops the captured total back to "—"
+Check("captured total blank again if a box is cleared", roller.CapturedTotalText, "—");
+Console.WriteLine();
+
+Console.WriteLine("Total-points target (an optional minimum on the attribute total):");
+var tvm = new CharacterRollerViewModel(() => null, () => null, _ => { });
+Check("total target blank by default", tvm.TotalMinimumText, "");
+tvm.TotalMinimumText = "80";
+Check("typed 80 -> TotalMinimum 80", tvm.TotalMinimum, 80);
+Check("criteria lists the total target", tvm.CriteriaText.Contains("total ≥ 80"), true);
+tvm.TotalMinimumText = "";                     // clearing the box must drop the target (the nullable-int trap)
+Check("cleared box -> TotalMinimum null", tvm.TotalMinimum, null);
+Check("criteria drops the total once cleared", tvm.CriteriaText.Contains("total"), false);
+tvm.TotalMinimumText = (7 * CreationScanner.MaxAttr + 50).ToString();
+Check("over-cap total clamps to 7 * MaxAttr", tvm.TotalMinimum, 7 * CreationScanner.MaxAttr);
+tvm.Stats[1].Minimum = 15;                     // set a per-stat + total target, then Clear all targets
+tvm.TotalMinimum = 80;
+tvm.ClearMinimumsCommand.Execute(null);
+Check("Clear all targets clears the total", tvm.TotalMinimum, null);
+Check("Clear all targets clears the per-stat minimum too", tvm.Stats[1].Minimum, null);
+// A MAXCON minimum persists like the others and stays clearable even when MAXCON isn't tracked.
+tvm.MaxCon.Minimum = 30;
+Check("a MAXCON minimum alone enables 'Clear all targets'", tvm.ClearMinimumsCommand.CanExecute(null), true);
+tvm.ClearMinimumsCommand.Execute(null);
+Check("Clear all targets clears the MAXCON minimum", tvm.MaxCon.Minimum, null);
+Console.WriteLine();
+
+Console.WriteLine("Roll odds (each attribute modelled as fair 3d6; per-stat and total combined):");
+CheckClose("P(3d6 >= 15) = 20/216", RollOdds.PAtLeast(15), 20.0 / 216, 1e-12);
+CheckClose("P(3d6 >= 3) = 1", RollOdds.PAtLeast(3), 1.0, 1e-12);
+CheckClose("P(3d6 >= 19) = 0", RollOdds.PAtLeast(19), 0.0, 1e-12);
+CheckClose("no constraints -> 1", RollOdds.PMeetsTarget(new int[7], 0), 1.0, 1e-9);
+CheckClose("total >= 21 (min possible) always met", RollOdds.PMeetsTarget(new int[7], 21), 1.0, 1e-9);
+CheckClose("three stats >= 15 -> P(>=15)^3", RollOdds.PMeetsTarget(new[] { 0, 15, 0, 0, 15, 15, 0 }, 0),
+    Math.Pow(20.0 / 216, 3), 1e-9);
+Check("per-stat min above 18 is impossible", RollOdds.PMeetsTarget(new[] { 19, 0, 0, 0, 0, 0, 0 }, 0), 0.0);
+Check("total above 126 is impossible", RollOdds.PMeetsTarget(new int[7], 127), 0.0);
+Check("higher total floor is never more likely",
+    RollOdds.PMeetsTarget(new int[7], 90) <= RollOdds.PMeetsTarget(new int[7], 80), true);
+Check("adding a total floor never raises the odds",
+    RollOdds.PMeetsTarget(new[] { 15, 0, 0, 0, 0, 0, 0 }, 80) <= RollOdds.PMeetsTarget(new[] { 15, 0, 0, 0, 0, 0, 0 }, 0), true);
+Console.WriteLine();
+
+Console.WriteLine("Odds readout shown in the target section:");
+var ovm = new CharacterRollerViewModel(() => null, () => null, _ => { });
+Check("no minimums -> every roll qualifies", ovm.OddsText.Contains("every roll qualifies"), true);
+ovm.Stats[1].Minimum = 15; ovm.Stats[4].Minimum = 15; ovm.Stats[5].Minimum = 15;   // IQ, AGL, DEX >= 15
+Console.WriteLine($"  e.g. IQ/AGL/DEX >= 15 -> {ovm.OddsText}");
+Check("odds cites the 3d6 model", ovm.OddsText.Contains("3d6"), true);
+Check("odds gives a 95% roll count", ovm.OddsText.Contains("95% chance"), true);
+ovm.Stats[1].Minimum = 19;
+Check("impossible per-stat is flagged out of reach", ovm.OddsText.Contains("Out of reach"), true);
+Console.WriteLine();
+
+Console.WriteLine("Attribute reference (one entry per attribute, aligned with the record order):");
+Check("attribute count", AttributeBook.Attributes.Count, CharacterFormat.AttributeCount);
+for (int i = 0; i < AttributeBook.Attributes.Count; i++)
+{
+    var a = AttributeBook.Attributes[i];
+    // The book must line up with CharacterFormat.AttributeNames so tooltips match the row they annotate
+    // and ByIndex agrees with CharacterRecord.GetAttribute.
+    Check($"attr[{i}] index", a.Index, i);
+    Check($"attr[{i}] abbr aligns with record order", a.Abbr, CharacterFormat.AttributeNames[i]);
+    Check($"attr[{i}] has a name", a.Name.Length > 0, true);
+    Check($"attr[{i}] has role text", a.Role.Length > 0, true);
+    Check($"attr[{i}] has in-play text", a.InPlay.Length > 0, true);
+    Check($"attr[{i}] description mentions its name", a.Description.Contains(a.Name), true);
+}
+Check("CHR is Charisma", AttributeBook.ByIndex(6)?.Name, "Charisma");
+Check("ByIndex out of range is null", AttributeBook.ByIndex(7), null);
+Check("DescriptionOf out of range is empty", AttributeBook.DescriptionOf(-1), "");
+Console.WriteLine();
+
 Console.WriteLine("Reference tables:");
 Check("skill count", SkillBook.Skills.Count, 35);
 Check("skill 1 name", SkillBook.SkillName(1), "Brawling");
@@ -248,6 +396,47 @@ Console.WriteLine("Party-state header offsets (X/Y are adjacent inside the heade
 Check("Party X at 0x08", CharacterFormat.HeaderPartyX, 0x08);
 Check("Party Y at 0x09", CharacterFormat.HeaderPartyY, 0x09);
 Check("Y immediately follows X", CharacterFormat.HeaderPartyY, CharacterFormat.HeaderPartyX + 1);
+Console.WriteLine();
+
+Console.WriteLine("Create-screen roll scanner (locate the temporary create buffer by its attribute bytes):");
+// A record-shaped scratch buffer holding the user's create-screen roll: STR 12 IQ 4 LK 12 SP 6 AGL 10
+// DEX 11 CHR 7, MAXCON 29, SKP 4 (== IQ on a fresh roll). The create buffer is a character record, so
+// the scanner's offsets are exercised against the real record layout.
+int[] rollAttrs = { 12, 4, 12, 6, 10, 11, 7 };
+var probe = new CharacterRecord(new byte[CharacterFormat.RecordSize]);
+probe.Name = "Roller";
+for (int a = 0; a < CharacterFormat.AttributeCount; a++) probe.SetAttribute(a, rollAttrs[a]);
+probe.MaxCon = 29; probe.Con = 29; probe.SkillPoints = 4;
+byte[] probeBytes = probe.Bytes;
+byte[] attrBytes = rollAttrs.Select(x => (byte)x).ToArray();
+
+var hits = CreationScanner.FindInBuffer(probeBytes, attrBytes).ToList();
+Check("attribute run found once", hits.Count, 1);
+Check("attribute run at OffAttributes", hits.Count > 0 ? hits[0] : -1, CharacterFormat.OffAttributes);
+Check("MAXCON offset from attr base", CreationScanner.AttrToMaxCon, CharacterFormat.OffMaxCon - CharacterFormat.OffAttributes);
+Check("SKP offset from attr base", CreationScanner.AttrToSkp, CharacterFormat.OffSkillPoints - CharacterFormat.OffAttributes);
+Check("structural: matching MAXCON + SKP confirms", CreationScanner.IsStructural(probeBytes, CharacterFormat.OffAttributes, 29, 4), true);
+Check("structural: wrong MAXCON rejected", CreationScanner.IsStructural(probeBytes, CharacterFormat.OffAttributes, 30, 4), false);
+Check("structural: wrong SKP rejected", CreationScanner.IsStructural(probeBytes, CharacterFormat.OffAttributes, 29, 5), false);
+Check("structural: out-of-bounds window rejected", CreationScanner.IsStructural(probeBytes, CharacterFormat.RecordSize - 2, 29, 4), false);
+Check("InRange accepts a plausible roll", CreationScanner.InRange(rollAttrs), true);
+Check("InRange rejects a zero byte", CreationScanner.InRange(new[] { 12, 0, 12, 6, 10, 11, 7 }), false);
+Check("InRange rejects an over-range byte", CreationScanner.InRange(new[] { 12, 4, 12, 6, 10, 11, 200 }), false);
+Console.WriteLine();
+
+Console.WriteLine("Roll tally (per-stat and total averages; consecutive duplicate reads are dropped):");
+var tally = new RollTally(CharacterFormat.AttributeCount);
+Check("first roll accepted", tally.Add(new[] { 12, 4, 12, 6, 10, 11, 7 }), true);      // total 62
+Check("duplicate read dropped", tally.Add(new[] { 12, 4, 12, 6, 10, 11, 7 }), false);
+Check("changed roll accepted", tally.Add(new[] { 14, 6, 12, 6, 10, 11, 7 }), true);    // total 66
+var snap = tally.Snapshot();
+Check("tally counted two fresh rolls", snap.Count, 2);
+Check("STR average of 12 and 14", snap.StatMean[0], 13.0);
+Check("STR min", snap.StatMin[0], 12);
+Check("STR max", snap.StatMax[0], 14);
+Check("total min (62)", snap.TotalMin, 62);
+Check("total max (66)", snap.TotalMax, 66);
+Check("total mean (64.0)", snap.TotalMean, 64.0);
 Console.WriteLine();
 
 Console.WriteLine(failures == 0
@@ -303,4 +492,11 @@ void Check<T>(string label, T actual, T expected)
     bool ok = EqualityComparer<T>.Default.Equals(actual, expected);
     if (!ok) failures++;
     Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] {label,-24} = {actual}" + (ok ? "" : $"   (expected {expected})"));
+}
+
+void CheckClose(string label, double actual, double expected, double tol)
+{
+    bool ok = Math.Abs(actual - expected) <= tol;
+    if (!ok) failures++;
+    Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] {label,-24} = {actual:0.#######}" + (ok ? "" : $"   (expected {expected:0.#######})"));
 }

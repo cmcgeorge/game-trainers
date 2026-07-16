@@ -9,13 +9,14 @@ using WastelandTrainer.Game;
 namespace WastelandTrainer.ViewModels;
 
 /// <summary>
-/// Backs the References tab's read-only sub-tabs (Skills, Items, Paragraphs, Strategy). Skills,
-/// items and the strategy notes are static reference tables from the <c>Game/</c> layer (items
-/// grouped by category). Paragraphs are loaded at runtime from the game's own <c>paragraphs.txt</c>
+/// Backs the References tab's read-only sub-tabs (Attributes, Skills, Items, Paragraphs, Strategy).
+/// Attributes, skills, items and the strategy notes are static reference tables from the <c>Game/</c>
+/// layer (items grouped by category). Paragraphs are loaded at runtime from the game's own <c>paragraphs.txt</c>
 /// — the trainer never embeds the copyrighted booklet text. Drives no memory writes.
 /// </summary>
 public sealed class ReferenceViewModel : ObservableObject
 {
+    public IReadOnlyList<AttributeInfo> Attributes => AttributeBook.Attributes;
     public IReadOnlyList<SkillInfo> Skills => SkillBook.Skills;
     public IReadOnlyList<WalkthroughSection> Strategy => Walkthrough.Sections;
     public ICollectionView Items { get; }

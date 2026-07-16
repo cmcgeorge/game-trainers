@@ -5,10 +5,12 @@ A WPF (.NET 8) trainer for the 1988 Interplay / Electronic Arts post-apocalyptic
 roster in the emulated memory, and lets you edit every ranger live — the seven attributes, all
 35 skills, constitution (CON), money, experience, level, skill points, armour class, name,
 gender and nationality — with party-wide **Freeze Health (CON)** and **Freeze Ammo** toggles and
-one-click **max** actions, both per-character and party-wide. A **Maps** tab reads the party's live
-map and X/Y from memory
-and **teleports** the squad within the current map; a **References** tab lists skills, item ids,
-the game's own **paragraph** book, and a condensed **strategy** guide.
+one-click **max** actions, both per-character and party-wide. A **Create** tab **auto-re-rolls a new
+ranger** on the Ranger Center create screen until it meets the minimums you set. A **Maps** tab reads
+the party's live map and X/Y from memory
+and **teleports** the squad within the current map; a **References** tab explains what each
+**attribute** does, and lists skills, item ids, the game's own **paragraph** book, and a condensed
+**strategy** guide.
 
 > Single-player cheat tool for your own game. Nothing here touches other machines or online services.
 
@@ -47,7 +49,9 @@ If the scan finds nothing, make sure a party is actually loaded, then click **Re
 The trainer decodes the full **256-byte** Wasteland character record:
 
 - **Identity** — name (plain ASCII), gender, nationality, level, experience, money.
-- **Attributes** — Strength, IQ, Luck, Speed, Agility, Dexterity, Charisma.
+- **Attributes** — Strength, IQ, Luck, Speed, Agility, Dexterity, Charisma. Hover any attribute (on the
+  character sheet or the Create tab) for a tooltip on what it does; the **References ▸ Attributes** tab
+  has the full write-up.
 - **Constitution** — current CON and MAXCON.
 - **Progression** — unspent skill points (SKP), armour class.
 - **Skills** — all 35 skill ranks (Brawling … Cyborg Tech), edited by id (reuse or append into the
@@ -81,6 +85,45 @@ The toolbar has two party-wide freeze checkboxes; each runs off the same poll lo
 "Max Skills" raises the skills a ranger **already knows** to the trainer's max — adding brand-new
 skills is left to the per-skill editor so the 30-slot list never overflows. "Max" targets are
 conservative caps (attributes 99, skills 10, money 16,777,215).
+
+---
+
+## Roll a ranger (auto re-roll on the create screen)
+
+At the Ranger Center, "Create a character" rolls seven attributes and derives MAXCON and SKP; the
+manual's own instruction is to **press the spacebar to re-roll** until you like them, then Return to
+accept. The **Create** tab automates that grind: it taps the spacebar for you, reads each fresh roll
+straight from the game's memory, and stops the moment your target is hit.
+
+That roll isn't a saved ranger yet (the record only joins the roster once you accept, name, and pick
+skills), so the party scan can't see it — the trainer locates the temporary buffer by **signature**:
+
+1. **Capture** — type the numbers currently on the create screen. The seven attributes are enough to
+   find the buffer; adding **MAXCON** and **SKP** lets the trainer confirm it found the real record
+   (the create buffer is a scratch character record, so MAXCON and SKP sit at their usual record
+   offsets), which also unlocks re-rolling for a minimum **MAXCON** (hit points). SKP always equals
+   IQ on a fresh roll, so it's only used for that confirmation, never as a target.
+2. **Lock onto roll** — signature-scans committed memory for those bytes and pins the address,
+   re-rolling a few times to disambiguate if more than one candidate matches.
+3. **Set your target** — a minimum (≥) for each stat you care about; leave the rest blank. You can also
+   set a minimum on the **total** attribute points (the sum of the seven attributes) — handy for "any
+   spread, as long as it adds up to ≥ 80" — and, once the record is confirmed, on MAXCON. All the
+   minimums combine (the roller stops only when every one is met). As you set them, the trainer shows
+   the **estimated odds** — "about 1 in N rolls … allow about K rolls for a 95% chance" — modelling each
+   attribute as fair 3d6 (a model the live statistics confirm), so you know up front whether a target is
+   a few seconds or a few hours of rolling and can set the roll limit accordingly.
+4. **Roll until target met** — the game window comes forward for each re-roll; the trainer stops on
+   the first roll that clears every minimum (or when you click Stop, or the roll limit is reached),
+   surfaces the game, and prompts you to press Return to accept. A **Statistics** panel tallies the
+   averages and ranges seen this session.
+
+The capture panel also shows the **total attribute points** of the current roll (the seven attributes,
+excluding SKP and MAXCON) live as it re-rolls, and the Statistics panel tracks that total's running
+average and range — handy for judging a roll at a glance (a fair roll averages ~73–74).
+
+Only reading and the spacebar tap touch the game — the roller never writes to memory, so a bad target
+just means more re-rolls, never a corrupt character. (This mirrors the Might and Magic 1 trainer's
+"Roll a Hero" feature, adapted to Wasteland's spacebar re-roll and attribute set.)
 
 ---
 
@@ -149,15 +192,18 @@ src/WastelandTrainer/
   Game/        CharacterFormat.cs   the validated 256-byte offset table + party-header offsets
                CharacterRecord.cs   typed, mutable view over a 256-byte buffer (packed skill/inventory arrays)
                WastelandText.cs     the plain-ASCII name/rank codec
+               AttributeBook.cs     the 7 attributes (what each does + a build note), for tooltips & References
                SkillBook.cs         the 35 skills (id → name, min-IQ)
                ItemCatalog.cs       the full 91-item table (id → name, category), decoded from WL.EXE
                MapBook.cs           area/landmark reference + the live map-name reader
                ParagraphBook.cs     runtime loader for the game's own paragraphs.txt
                Walkthrough.cs       condensed strategy sections (References ▸ Strategy)
+               RollTally.cs         pure per-stat/total running averages for the create-screen roller
   Memory/      PartyLocator.cs      structural scanner → the seven roster slots
-               (shared)             ProcessMemory / MemoryRegion — from GameTrainers.Common.Memory
-  ViewModels/  MainViewModel, CharacterViewModel, MapsViewModel, ReferenceViewModel, ICharacterHost,
-               NamedValueViewModel, SkillRowViewModel, ItemRowViewModel
+               CreationScanner.cs   signature scanner → the temporary create-screen roll buffer
+               (shared)             ProcessMemory / MemoryRegion / KeyboardSender — from GameTrainers.Common.Memory
+  ViewModels/  MainViewModel, CharacterViewModel, CharacterRollerViewModel, MapsViewModel,
+               ReferenceViewModel, ICharacterHost, NamedValueViewModel, SkillRowViewModel, ItemRowViewModel
   App.xaml, MainWindow.xaml         the WPF UI
 test/FormatCheck/                   headless verification against ground-truth party bytes
 .data/         DOSBox-X memory dumps + region CSVs (memdump.md describes them), extract/scan scripts

@@ -155,7 +155,8 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <StackPanel Orientation="Horizontal" Margin="4">
-                                                    <TextBlock Text="{Binding Name}" Width="40" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Name}" Width="40" VerticalAlignment="Center"
+                                                               ToolTip="{Binding Description}"/>
                                                     <TextBox Width="60" Text="{Binding Value}"/>
                                                 </StackPanel>
                                             </DataTemplate>
@@ -256,6 +257,34 @@
             <!-- ======================= REFERENCES ======================= -->
             <TabItem Header="References">
                 <TabControl Margin="6" DataContext="{Binding Reference}">
+                    <!-- Attributes -->
+                    <TabItem Header="Attributes">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Foreground="#555" TextWrapping="Wrap" Margin="2,2,2,6"
+                                       Text="What each of the seven attributes does in the game, and how it matters when building a ranger. 'Role' follows the game manual; 'In play' follows the bundled strategy guide."/>
+                            <ListBox ItemsSource="{Binding Attributes}" HorizontalContentAlignment="Stretch"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,3">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="55"/>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Abbr}" FontWeight="SemiBold" VerticalAlignment="Top"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="#777" VerticalAlignment="Top"/>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="{Binding Role}" TextWrapping="Wrap" Foreground="#444"/>
+                                                <TextBlock Text="{Binding InPlay}" TextWrapping="Wrap" Foreground="#1565C0" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </TabItem>
+
                     <!-- Skills -->
                     <TabItem Header="Skills">
                         <ListBox ItemsSource="{Binding Skills}" HorizontalContentAlignment="Stretch"
@@ -467,6 +496,251 @@
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
+            </TabItem>
+
+            <!-- ======================= CREATE (auto re-roll on the Ranger Center create screen) ======================= -->
+            <TabItem Header="🎲 Create" DataContext="{Binding Roller}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+                    <StackPanel Margin="6" MaxWidth="620" HorizontalAlignment="Left">
+                        <TextBlock Text="Roll a ranger" Style="{StaticResource RefHeader}"/>
+                        <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,8"
+                                   Text="Automates the Ranger Center 'Create a character' re-roll: it taps the spacebar for you and reads each fresh roll straight from the game's memory, stopping when your target is hit. The freshly-rolled stats aren't a saved ranger yet, so the trainer first has to find them — type the numbers currently on the create screen, click Lock onto roll, then set a target and Roll. Attach to the game and open the create screen first."/>
+
+                        <!-- 1 · capture the on-screen roll to locate it in memory -->
+                        <GroupBox Header="1 · Capture the current roll" Margin="0,4,0,0">
+                            <StackPanel Margin="4">
+                                <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,6"
+                                           Text="Enter the values exactly as they show on the create screen. 'Live' fills in once locked, and updates on every roll. MAXCON and SKP are optional but let the trainer confirm the record and re-roll for hit points too (SKP always equals IQ on a fresh roll)."/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Stat" Foreground="#777"/>
+                                    <TextBlock Grid.Column="1" Text="On screen" Foreground="#777"/>
+                                    <TextBlock Grid.Column="2" Text="Live" Foreground="#777"/>
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Stats}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="90"/>
+                                                    <ColumnDefinition Width="90"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                                           ToolTip="{Binding Description}"/>
+                                                <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                         Text="{Binding CapturedText, UpdateSourceTrigger=LostFocus}"/>
+                                                <TextBlock Grid.Column="2" Text="{Binding LiveText}" VerticalAlignment="Center"
+                                                           FontFamily="Consolas" Foreground="#1565C0"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <!-- Total of the seven attributes (excludes SKP and MAXCON). -->
+                                <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Margin="0,2"/>
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"
+                                               ToolTip="Sum of the seven attributes (STR, IQ, LCK, SPD, AGL, DEX, CHR); excludes SKP and MAXCON."/>
+                                    <TextBlock Grid.Column="1" Text="{Binding CapturedTotalText}" VerticalAlignment="Center" Foreground="#555"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding LiveTotalText}" VerticalAlignment="Center"
+                                               FontFamily="Consolas" FontWeight="SemiBold" Foreground="#1565C0"/>
+                                </Grid>
+                                <!-- SKP then MAXCON, matching the order the game shows them on the create screen. -->
+                                <!-- SKP (captured only, to confirm the record — never a target) -->
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="SKP" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                             Text="{Binding CapturedSkpText, UpdateSourceTrigger=LostFocus}"/>
+                                    <TextBlock Grid.Column="2" Text="(= IQ)" VerticalAlignment="Center" Foreground="#999"/>
+                                </Grid>
+                                <!-- MAXCON (own row: a u16, tracked only when the record shape is confirmed) -->
+                                <Grid Margin="0,1" DataContext="{Binding MaxCon}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                               ToolTip="{Binding Description}"/>
+                                    <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                             Text="{Binding CapturedText, UpdateSourceTrigger=LostFocus}"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding LiveText}" VerticalAlignment="Center"
+                                               FontFamily="Consolas" Foreground="#1565C0"/>
+                                </Grid>
+
+                                <WrapPanel Margin="0,8,0,0">
+                                    <Button Content="🎯 Lock onto roll" Command="{Binding LockCommand}"/>
+                                    <Button Content="↻ Read current roll" Command="{Binding ReadOnceCommand}"/>
+                                    <Button Content="✕ Reset lock" Command="{Binding ResetLockCommand}"/>
+                                </WrapPanel>
+                                <TextBlock Text="{Binding LockInfo}" Foreground="#555" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- 2 · target -->
+                        <GroupBox Header="2 · Set your target" Margin="0,8,0,0">
+                            <StackPanel Margin="4">
+                                <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,6"
+                                           Text="Set a minimum for each stat you care about. The roller stops once every stat is at or above its minimum. Leave a stat blank to ignore it."/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Stat" Foreground="#777"/>
+                                    <TextBlock Grid.Column="1" Text="Minimum (≥)" Foreground="#777"/>
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Stats}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="90"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                                           ToolTip="{Binding Description}"/>
+                                                <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                         Text="{Binding MinimumText, UpdateSourceTrigger=PropertyChanged}"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <!-- Optional target on the attribute total (sum of the seven attributes). -->
+                                <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Margin="0,2"/>
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"
+                                               ToolTip="Minimum for the sum of the seven attributes (STR, IQ, LCK, SPD, AGL, DEX, CHR); excludes SKP and MAXCON. A fair roll averages ~73–74."/>
+                                    <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                             Text="{Binding TotalMinimumText, UpdateSourceTrigger=PropertyChanged}"/>
+                                </Grid>
+                                <Grid Margin="0,1" DataContext="{Binding MaxCon}" IsEnabled="{Binding DataContext.MaxConAvailable, RelativeSource={RelativeSource AncestorType=TabItem}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                               ToolTip="{Binding Description}"/>
+                                    <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                             Text="{Binding MinimumText, UpdateSourceTrigger=PropertyChanged}"/>
+                                </Grid>
+                                <TextBlock Text="{Binding MaxConNote}" Foreground="#999" TextWrapping="Wrap" FontSize="11" Margin="0,2,0,0"/>
+                                <Button Content="🗑 Clear all targets" Command="{Binding ClearMinimumsCommand}"
+                                        HorizontalAlignment="Left" Margin="0,6,0,0"
+                                        ToolTip="Reset every minimum back to blank (no requirement)."/>
+                                <TextBlock Text="{Binding CriteriaText}" Foreground="#1565C0" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                <TextBlock Text="{Binding OddsText}" Foreground="#555" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- 3 · roll -->
+                        <GroupBox Header="3 · Roll" Margin="0,8,0,0">
+                            <StackPanel Margin="4">
+                                <WrapPanel>
+                                    <Button Content="🎲 Roll until target met" Command="{Binding StartCommand}"/>
+                                    <Button Content="⏹ Stop" Command="{Binding StopCommand}"/>
+                                </WrapPanel>
+                                <TextBlock Text="{Binding AttemptsText}" Foreground="#555" Margin="0,6,0,0"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <TextBlock Text="Best so far: " Foreground="#555"/>
+                                    <TextBlock Text="{Binding BestText}"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" Foreground="#1565C0" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- 4 · statistics -->
+                        <GroupBox Header="4 · Statistics" Margin="0,8,0,0">
+                            <StackPanel Margin="4">
+                                <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,4"
+                                           Text="Tallies every fresh roll read this session — Wasteland's create roll uses its own distribution, so these are plain averages and ranges, not a fairness judgement."/>
+                                <TextBlock Text="{Binding SamplesText}" Margin="0,0,0,4"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Stat" Foreground="#777"/>
+                                    <TextBlock Grid.Column="1" Text="Average (min–max)" Foreground="#777"/>
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Stats}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="90"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding AvgText}" VerticalAlignment="Center"
+                                                           FontFamily="Consolas" Foreground="#1565C0"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <!-- Attribute total (the seven attributes; excludes SKP and MAXCON). -->
+                                <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Margin="0,2"/>
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding TotalAvgText}" VerticalAlignment="Center"
+                                               FontFamily="Consolas" FontWeight="SemiBold" Foreground="#1565C0"/>
+                                </Grid>
+                                <Grid Margin="0,1" DataContext="{Binding MaxCon}"
+                                      Visibility="{Binding DataContext.MaxConAvailable, RelativeSource={RelativeSource AncestorType=TabItem}, Converter={StaticResource BoolToVis}}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding AvgText}" VerticalAlignment="Center"
+                                               FontFamily="Consolas" Foreground="#1565C0"/>
+                                </Grid>
+                                <Button Content="🗑 Clear statistics" Command="{Binding ClearStatsCommand}"
+                                        HorizontalAlignment="Left" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <Expander Header="Advanced timing" Margin="0,8,0,0" Foreground="#555">
+                            <WrapPanel Margin="0,6,0,0">
+                                <StackPanel Margin="0,0,16,6">
+                                    <Label Content="Max rolls"/>
+                                    <TextBox Width="90" Text="{Binding MaxAttempts, UpdateSourceTrigger=LostFocus}"/>
+                                </StackPanel>
+                                <StackPanel Margin="0,0,16,6">
+                                    <Label Content="Settle after space (ms)"/>
+                                    <TextBox Width="90" Text="{Binding SettleDelayMs, UpdateSourceTrigger=LostFocus}"
+                                             ToolTip="Pause after each re-roll so the game updates memory before the trainer reads it. Raise this if rolls read stale."/>
+                                </StackPanel>
+                                <StackPanel Margin="0,0,16,6">
+                                    <Label Content="Focus pause (ms)"/>
+                                    <TextBox Width="90" Text="{Binding FocusDelayMs, UpdateSourceTrigger=LostFocus}"/>
+                                </StackPanel>
+                            </WrapPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
     </DockPanel>

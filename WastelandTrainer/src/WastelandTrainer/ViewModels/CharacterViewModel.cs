@@ -48,7 +48,8 @@ public sealed class CharacterViewModel : ObservableObject
             int idx = i;
             Attributes.Add(new NamedValueViewModel(CharacterFormat.AttributeNames[i],
                 () => Record.GetAttribute(idx),
-                v => { Record.SetAttribute(idx, v); Poke(CharacterFormat.OffAttributes + idx, 1); }));
+                v => { Record.SetAttribute(idx, v); Poke(CharacterFormat.OffAttributes + idx, 1); },
+                AttributeBook.DescriptionOf(idx)));
         }
 
         foreach (var info in SkillBook.Skills)

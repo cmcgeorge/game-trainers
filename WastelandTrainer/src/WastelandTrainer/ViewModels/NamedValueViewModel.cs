@@ -11,11 +11,16 @@ public sealed class NamedValueViewModel : ObservableObject
 
     public string Name { get; }
 
-    public NamedValueViewModel(string name, Func<int> get, Action<int> set)
+    /// <summary>Optional tooltip text explaining what this value does (e.g. an attribute's role);
+    /// empty when the row has no description.</summary>
+    public string Description { get; }
+
+    public NamedValueViewModel(string name, Func<int> get, Action<int> set, string description = "")
     {
         Name = name;
         _get = get;
         _set = set;
+        Description = description;
     }
 
     public int Value
