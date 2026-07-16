@@ -1,0 +1,258 @@
+using System.Collections.ObjectModel;
+using WastelandTrainer.Game;
+using WastelandTrainer.Memory;
+
+namespace WastelandTrainer.ViewModels;
+
+/// <summary>
+/// Editable view over a single located Wasteland character record. Every setter mutates the backing
+/// <see cref="Record"/> buffer and, when attached, writes just the changed field back to the game's
+/// live memory (read-validate-write) so edits take effect immediately.
+/// </summary>
+public sealed class CharacterViewModel : ObservableObject
+{
+    private readonly ICharacterHost _host;
+
+    public nuint Address { get; }
+    public int Slot { get; }
+    public CharacterRecord Record { get; }
+
+    public ObservableCollection<NamedValueViewModel> Attributes { get; } = new();
+    public ObservableCollection<SkillRowViewModel> Skills { get; } = new();
+    public ObservableCollection<ItemRowViewModel> Items { get; } = new();
+
+    public string[] GenderOptions => CharacterFormat.Genders;
+    public string[] NationalityOptions => CharacterFormat.Nationalities;
+
+    private bool _freezeHealth;
+    /// <summary>Re-pins current constitution to its max every poll tick while set.</summary>
+    public bool FreezeHealth { get => _freezeHealth; set => SetField(ref _freezeHealth, value); }
+
+    public CharacterViewModel(ICharacterHost host, LocatedCharacter located)
+    {
+        _host = host;
+        Address = located.Address;
+        Slot = located.Slot;
+        Record = located.Record;
+
+        for (int i = 0; i < CharacterFormat.AttributeCount; i++)
+        {
+            int idx = i;
+            Attributes.Add(new NamedValueViewModel(CharacterFormat.AttributeNames[i],
+                () => Record.GetAttribute(idx),
+                v => { Record.SetAttribute(idx, v); Poke(CharacterFormat.OffAttributes + idx, 1); }));
+        }
+
+        foreach (var info in SkillBook.Skills)
+        {
+            var skill = info;
+            Skills.Add(new SkillRowViewModel(skill,
+                () => Record.GetSkillLevel(skill.Id),
+                v => { Record.SetSkillLevel(skill.Id, v); Poke(CharacterFormat.OffSkills, CharacterFormat.SkillBlockBytes); }));
+        }
+
+        for (int i = 0; i < CharacterFormat.ItemSlots; i++)
+            Items.Add(new ItemRowViewModel(i, Record, RewriteInventory));
+    }
+
+    public int ItemCount => Record.ItemCount;
+
+    /// <summary>
+    /// Commits an inventory edit: compact the list to the gap-free, terminated form the game reads,
+    /// push the whole 60-byte block back to live memory, then re-raise every row (compaction may have
+    /// shifted items up into different slots). Writing the whole block rather than a single slot keeps
+    /// the in-game list well-formed no matter which row the user touched.
+    /// </summary>
+    private void RewriteInventory()
+    {
+        Record.CompactInventory();
+        Poke(CharacterFormat.OffInventory, CharacterFormat.ItemBlockBytes);
+        foreach (var it in Items) it.Refresh();
+        OnPropertyChanged(nameof(ItemCount));
+        RaiseDerived();
+    }
+
+    // --- identity / summary --------------------------------------------------
+    public string Name
+    {
+        get => Record.Name;
+        set
+        {
+            // The locator identifies an occupied slot by a name that is at least two characters,
+            // starts with an ASCII letter, and is NUL-terminated. A name that fails that test would
+            // drop this ranger — or, mid-roster, the whole party — out of the next scan, so reject it
+            // and revert the text box to the current stored name.
+            string s = value ?? "";
+            char first = s.Length > 0 ? s[0] : '\0';
+            bool startsWithLetter = (first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z');
+            if (s.Length < 2 || !startsWithLetter) { OnPropertyChanged(); return; }
+            Record.Name = s; Poke(CharacterFormat.OffName, CharacterFormat.NameLength); OnPropertyChanged(); RaiseDerived();
+        }
+    }
+
+    public string Title =>
+        $"{Record.Name}  —  L{Record.Level} {Record.GenderName}, {Record.NationalityName}" +
+        (string.IsNullOrWhiteSpace(Record.Rank) ? "" : $"  ({Record.Rank})");
+
+    public string Summary =>
+        $"CON {Record.Con}/{Record.MaxCon}   XP {Record.Experience}   ${Record.Money}   " +
+        $"SKP {Record.SkillPoints}   AC {Record.ArmorClass}   Items {Record.ItemCount}";
+
+    public string ListLabel => $"{Record.Name}  (L{Record.Level})";
+
+    public int GenderIndex
+    {
+        get => Record.Gender;
+        set { Record.Gender = value; Poke(CharacterFormat.OffGender, 1); OnPropertyChanged(); RaiseDerived(); }
+    }
+
+    public int NationalityIndex
+    {
+        get => Record.Nationality;
+        set { Record.Nationality = value; Poke(CharacterFormat.OffNationality, 1); OnPropertyChanged(); RaiseDerived(); }
+    }
+
+    public int Level
+    {
+        get => Record.Level;
+        set { Record.Level = value; Poke(CharacterFormat.OffLevel, 1); OnPropertyChanged(); RaiseDerived(); }
+    }
+
+    public long Experience
+    {
+        get => Record.Experience;
+        set { Record.Experience = value; Poke(CharacterFormat.OffExperience, 3); OnPropertyChanged(); RaiseDerived(); }
+    }
+
+    public long Money
+    {
+        get => Record.Money;
+        set { Record.Money = value; Poke(CharacterFormat.OffMoney, 3); OnPropertyChanged(); RaiseDerived(); }
+    }
+
+    public int SkillPoints
+    {
+        get => Record.SkillPoints;
+        set { Record.SkillPoints = value; Poke(CharacterFormat.OffSkillPoints, 1); OnPropertyChanged(); RaiseDerived(); }
+    }
+
+    public int ArmorClass
+    {
+        get => Record.ArmorClass;
+        set { Record.ArmorClass = value; Poke(CharacterFormat.OffArmorClass, 1); OnPropertyChanged(); RaiseDerived(); }
+    }
+
+    // --- vitals (constitution) ----------------------------------------------
+    public int Con
+    {
+        get => Record.Con;
+        set { Record.Con = value; Poke(CharacterFormat.OffCon, 2); OnPropertyChanged(); RaiseDerived(); }
+    }
+
+    public int MaxCon
+    {
+        get => Record.MaxCon;
+        set { Record.MaxCon = value; Poke(CharacterFormat.OffMaxCon, 2); OnPropertyChanged(); RaiseDerived(); }
+    }
+
+    // --- quick actions -------------------------------------------------------
+    public void FullHeal()
+    {
+        Record.Con = Record.MaxCon; Poke(CharacterFormat.OffCon, 2);
+        OnPropertyChanged(nameof(Con)); RaiseDerived();
+    }
+
+    public void MaxAttributes()
+    {
+        for (int i = 0; i < CharacterFormat.AttributeCount; i++)
+            Record.SetAttribute(i, CharacterFormat.MaxAttribute);
+        Poke(CharacterFormat.OffAttributes, CharacterFormat.AttributeCount);
+        foreach (var a in Attributes) a.Refresh();
+    }
+
+    /// <summary>
+    /// Raises every skill the character already knows to the trainer's max level. Adding brand-new
+    /// skills is left to the per-skill editor rows, so this never overflows the 30-slot skill list
+    /// or grants skills the character cannot use.
+    /// </summary>
+    public void MaxSkills()
+    {
+        foreach (var e in Record.GetSkills())
+            Record.SetSkillLevel(e.Id, CharacterFormat.MaxSkillLevel);
+        Poke(CharacterFormat.OffSkills, CharacterFormat.SkillBlockBytes);
+        foreach (var s in Skills) s.Refresh();
+    }
+
+    public void MaxMoney()
+    {
+        Record.Money = CharacterFormat.MaxMoney; Poke(CharacterFormat.OffMoney, 3);
+        OnPropertyChanged(nameof(Money)); RaiseDerived();
+    }
+
+    public void MaxEverything()
+    {
+        MaxAttributes();
+        MaxSkills();
+        Record.MaxCon = CharacterFormat.MaxCon; Poke(CharacterFormat.OffMaxCon, 2);
+        Record.Con = CharacterFormat.MaxCon; Poke(CharacterFormat.OffCon, 2);
+        Record.Experience = CharacterFormat.MaxExperience; Poke(CharacterFormat.OffExperience, 3);
+        Record.SkillPoints = CharacterFormat.MaxSkillPoints; Poke(CharacterFormat.OffSkillPoints, 1);
+        MaxMoney();
+        RefreshEditors();
+        RaiseDerived();
+    }
+
+    // --- freeze / live refresh ----------------------------------------------
+    /// <summary>Called each poll tick: re-pin frozen constitution to its max in live memory.</summary>
+    public void ApplyFreeze()
+    {
+        if (!_host.IsAttached) return;
+        if (FreezeHealth && Record.Con != Record.MaxCon)
+        { Record.Con = Record.MaxCon; Poke(CharacterFormat.OffCon, 2); }
+    }
+
+    /// <summary>
+    /// Poll-tick refresh: copy the latest game bytes into the record and raise only the read-only
+    /// summary properties, so watching CON tick never clobbers a value being typed. The editable
+    /// inventory rows are re-raised only when the game actually changed the inventory block, so an
+    /// item id/quantity the user is mid-typing on the Inventory tab is not overwritten each tick.
+    /// </summary>
+    public void RefreshLiveSummary(byte[] fresh)
+    {
+        bool inventoryChanged = !fresh.AsSpan(CharacterFormat.OffInventory, CharacterFormat.ItemBlockBytes)
+            .SequenceEqual(Record.Bytes.AsSpan(CharacterFormat.OffInventory, CharacterFormat.ItemBlockBytes));
+        Array.Copy(fresh, 0, Record.Bytes, 0, CharacterFormat.RecordSize);
+        if (inventoryChanged)
+        {
+            foreach (var it in Items) it.Refresh();
+            OnPropertyChanged(nameof(ItemCount));
+        }
+        RaiseDerived();
+    }
+
+    // --- write plumbing ------------------------------------------------------
+    private void Poke(int offset, int length)
+    {
+        if (_host.IsAttached) _host.WriteBytes(Address, Record.Bytes, offset, length);
+    }
+
+    private void RaiseDerived()
+    {
+        OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(Summary));
+        OnPropertyChanged(nameof(ListLabel));
+    }
+
+    private void RefreshEditors()
+    {
+        foreach (var a in Attributes) a.Refresh();
+        foreach (var s in Skills) s.Refresh();
+        foreach (var it in Items) it.Refresh();
+        OnPropertyChanged(nameof(Name));
+        OnPropertyChanged(nameof(GenderIndex)); OnPropertyChanged(nameof(NationalityIndex));
+        OnPropertyChanged(nameof(Level)); OnPropertyChanged(nameof(Experience)); OnPropertyChanged(nameof(Money));
+        OnPropertyChanged(nameof(SkillPoints)); OnPropertyChanged(nameof(ArmorClass));
+        OnPropertyChanged(nameof(Con)); OnPropertyChanged(nameof(MaxCon));
+        OnPropertyChanged(nameof(ItemCount));
+    }
+}
