@@ -241,12 +241,13 @@ public sealed class CharacterViewModel : ObservableObject
 
     /// <summary>
     /// Called each poll tick after <see cref="RefreshLiveSummary"/> has copied in the latest inventory
-    /// bytes: top every ammo-bearing item up to <see cref="CharacterFormat.MaxAmmo"/>. Runs on the just-read
-    /// bytes (as does <see cref="ApplyFreeze"/>), then pokes back just the single quantity byte of each
-    /// slot it raised and re-raises only those rows — so the Inventory tab shows the topped-up amount,
-    /// without snapping back a quantity being typed into an unrelated row. Writing one byte per raised
-    /// slot (rather than the whole block) both follows the "poke only the changed range" rule and can't
-    /// clobber a concurrent in-game compaction, since it never rewrites item ids or other slots.
+    /// bytes: top every ammo-bearing item up to <see cref="CharacterFormat.MaxAmmo"/> and clear any
+    /// jammed-weapon flag. Runs on the just-read bytes (as does <see cref="ApplyFreeze"/>), then pokes
+    /// back just the single quantity byte of each slot it changed and re-raises only those rows — so the
+    /// Inventory tab shows the topped-up (and un-jammed) amount, without snapping back a quantity being
+    /// typed into an unrelated row. Writing one byte per changed slot (rather than the whole block) both
+    /// follows the "poke only the changed range" rule and can't clobber a concurrent in-game compaction,
+    /// since it never rewrites item ids or other slots.
     /// </summary>
     public void ApplyAmmoFreeze()
     {

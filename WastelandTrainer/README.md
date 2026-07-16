@@ -66,10 +66,11 @@ The toolbar has two party-wide freeze checkboxes; each runs off the same poll lo
 - **Freeze Health (CON)** — re-pins every ranger's current constitution (CON, the hit-point stat) to
   its max each tick, so it never drops in play. Toggle it off to let CON move again.
 - **Freeze Ammo** — tops every *ammo-bearing* item (a weapon that fires, or a clip/shell/power pack)
-  up to **99** each tick, so ammo never runs low. Only weapons and ammunition are touched — melee
-  weapons, armour, and gear/quest items are left alone (their second byte is unused or a status byte,
-  so forcing it could corrupt them). A count already above 99 is never reduced, and the jammed-weapon
-  flag (the quantity byte's high bit) is preserved. Only the quantity byte is written, never item ids.
+  up to **99** each tick, so ammo never runs low, and **clears the jammed-weapon flag** so a frozen
+  weapon can't stay jammed — turn Freeze Ammo on and a jammed weapon un-jams on the next tick. Only
+  weapons and ammunition are touched — melee weapons, armour, and gear/quest items are left alone
+  (their second byte is unused or a status byte, so forcing it could corrupt them). A count already
+  above 99 is never reduced. Only the quantity byte is written, never item ids.
 
 ### Quick actions
 

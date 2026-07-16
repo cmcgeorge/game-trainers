@@ -19,8 +19,9 @@ Three projects in `WastelandTrainer.sln`: the WPF app, its test harness, and the
     `ParagraphBook` parses the game's own `paragraphs.txt` at runtime (the copyrighted booklet text
     is never embedded). `AmmoFreeze` is a pure, stateless helper (no process/UI dependency) backing the
     Freeze Ammo toggle — each tick it tops every ammo-bearing item (weapons that fire, clips/shells; see
-    `ItemCatalog.IsAmmoItem`) up to `CharacterFormat.MaxAmmo` (99), preserving the jammed-weapon flag
-    (the quantity byte's high bit) and leaving non-ammo items untouched; `FormatCheck` covers it.
+    `ItemCatalog.IsAmmoItem`) up to `CharacterFormat.MaxAmmo` (99), clearing the jammed-weapon flag
+    (the quantity byte's high bit) so a frozen weapon can't stay jammed, and leaving non-ammo items
+    untouched; `FormatCheck` covers it.
   - `Memory/` — `PartyLocator.cs` finds the party by **structure**, not by an anchor: Wasteland has
     no stable byte-run adjacent to the roster, so it scans for an array of seven contiguous 256-byte
     records where occupied slots pack from slot 0. Each occupied slot must pass a strict validity
@@ -96,4 +97,4 @@ unidentified padding are left untouched. Setting values to the trainer's "max" c
 game UI may render very large numbers oddly (cosmetic). The two poll-loop freezes each rewrite only
 their own field: Freeze Health re-pins the CON u16 (`0x1D`), and Freeze Ammo tops the quantity
 byte of ammo-bearing items (weapons that fire, clips/shells) up to 99 inside the 60-byte block at
-`0xBD`+, preserving each byte's jammed-weapon high bit — never item ids, non-ammo items, or `0x1F`.
+`0xBD`+ and clears each byte's jammed-weapon high bit — never item ids, non-ammo items, or `0x1F`.

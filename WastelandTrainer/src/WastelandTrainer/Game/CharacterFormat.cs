@@ -56,7 +56,8 @@ public static class CharacterFormat
     public const int SlotSize = 2;
 
     /// <summary>In an inventory slot's quantity byte, bit 7 flags a jammed weapon; the low 7 bits are
-    /// the ammo / charge count. Freeze-ammo restores the count and leaves this flag untouched.</summary>
+    /// the ammo / charge count. Freeze-ammo restores the count and clears this flag (a frozen weapon
+    /// can't stay jammed).</summary>
     public const int InventoryJammedFlag = 0x80;
     public const int InventoryCountMask = 0x7F;
     public const int SkillBlockBytes = SkillSlots * SlotSize;   // 60
@@ -74,7 +75,7 @@ public static class CharacterFormat
     public const int MaxSkillLevel = 10;
     public const int MaxSkillPoints = 99;
     /// <summary>Freeze Ammo tops every ammo-bearing slot up to this count each tick (fits the 7-bit
-    /// ammo field, leaving the jammed-weapon flag at bit 7 free).</summary>
+    /// ammo field, leaving the jammed-weapon flag at bit 7 free, which the freeze then clears).</summary>
     public const int MaxAmmo = 99;
     public const int MaxCon = 5000;
     public const long MaxMoney = 0xFFFFFF;   // 24-bit field

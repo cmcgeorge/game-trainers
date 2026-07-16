@@ -118,15 +118,33 @@ Check("only the two ammo slots were raised", topped.Count == 2 && topped.Contain
 Check("second pass is a no-op once full", AmmoFreeze.TopUp(af), false);
 Console.WriteLine();
 
-Console.WriteLine("Ammo freeze never lowers ammo and preserves the jammed-weapon flag (qty byte bit 7):");
+Console.WriteLine("Ammo freeze never lowers ammo and clears the jammed-weapon flag (qty byte bit 7):");
 var jr = new CharacterRecord(new byte[CharacterFormat.RecordSize]);
-jr.SetItem(0, 29, 120);                                        // Meson cannon (Energy Weapon) already above the max
-Check("above-max ammo is not reduced", AmmoFreeze.TopUp(jr), false);
+jr.SetItem(0, 29, 120);                                        // Meson cannon (Energy Weapon) already above the max, un-jammed
+Check("above-max, un-jammed ammo is a no-op", AmmoFreeze.TopUp(jr), false);
 Check("above-max value kept", jr.GetItemQty(0), 120);
 jr.SetItem(0, 29, CharacterFormat.InventoryJammedFlag | 10);   // jammed, 10 charges (below the max)
 Check("tops up a jammed weapon", AmmoFreeze.TopUp(jr), true);
 Check("count raised to the max", jr.GetItemQty(0) & CharacterFormat.InventoryCountMask, CharacterFormat.MaxAmmo);
-Check("jam flag preserved", jr.GetItemQty(0) & CharacterFormat.InventoryJammedFlag, CharacterFormat.InventoryJammedFlag);
+Check("jam flag cleared", jr.GetItemQty(0) & CharacterFormat.InventoryJammedFlag, 0);
+// The stuck case: a weapon that jams while already at max ammo. The old "already full, skip"
+// fast-path left bit 7 set forever; the freeze must still clear it.
+jr.SetItem(0, 29, CharacterFormat.InventoryJammedFlag | CharacterFormat.MaxAmmo);  // jammed at full (0xE3)
+Check("clears a jam even at full ammo", AmmoFreeze.TopUp(jr), true);
+Check("full ammo kept after unjam", jr.GetItemQty(0) & CharacterFormat.InventoryCountMask, CharacterFormat.MaxAmmo);
+Check("jam flag cleared at full ammo", jr.GetItemQty(0) & CharacterFormat.InventoryJammedFlag, 0);
+Check("nothing to do once full and un-jammed", AmmoFreeze.TopUp(jr), false);
+// A jammed weapon above the max: never lower the count, but still drop the jam bit.
+jr.SetItem(0, 29, CharacterFormat.InventoryJammedFlag | 120);  // jammed, 120 charges (above the max)
+Check("clears a jam above the max", AmmoFreeze.TopUp(jr), true);
+Check("above-max count still kept after unjam", jr.GetItemQty(0), 120);
+// Bit 7 is cleared uniformly for every ammo-bearing category, not just firing weapons: the game's
+// display categories are cosmetic (a fired launcher like the RPG-7 sits under "Thrown / Explosive"),
+// so scoping the clear by category could miss a real jam. A clip (id 30, "Ammo") normalises the same
+// way — its count naturally sits well under 0x80, so clearing bit 7 is a no-op on real game data.
+jr.SetItem(0, 30, CharacterFormat.InventoryJammedFlag | 5);    // 45 clip with bit 7 set
+Check("clears bit 7 on a non-weapon ammo item too", AmmoFreeze.TopUp(jr), true);
+Check("clip count topped, high bit cleared", jr.GetItemQty(0), CharacterFormat.MaxAmmo);
 Console.WriteLine();
 
 Console.WriteLine("Drop-down parsing (pick a name or type a raw id; the separate id box is gone):");

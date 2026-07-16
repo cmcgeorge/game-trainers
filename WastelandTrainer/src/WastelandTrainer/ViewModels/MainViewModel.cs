@@ -68,7 +68,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public bool FreezeAmmo
     {
         get => _freezeAmmo;
-        set { if (SetField(ref _freezeAmmo, value)) { foreach (var c in Party) c.FreezeAmmo = value; Status = value ? $"Ammo freeze ON — topping every ammo-bearing item up to {CharacterFormat.MaxAmmo} each tick." : "Ammo freeze OFF."; } }
+        set { if (SetField(ref _freezeAmmo, value)) { foreach (var c in Party) c.FreezeAmmo = value; Status = value ? $"Ammo freeze ON — topping every ammo-bearing item up to {CharacterFormat.MaxAmmo} and clearing weapon jams each tick." : "Ammo freeze OFF."; } }
     }
 
     // --- commands ------------------------------------------------------------
