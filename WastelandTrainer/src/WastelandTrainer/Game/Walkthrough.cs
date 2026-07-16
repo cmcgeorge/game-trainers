@@ -23,7 +23,9 @@ public static class Walkthrough
             "Buy Clip Pistol early and raise it — pistols and their clips are the reliable early weapon. " +
             "Perception reveals hidden items, traps and passages; keep at least one high-Perception ranger. " +
             "Picklock, Safecrack, Alarm/Bomb Disarm and Demolition open the world's locked loot. " +
-            "Medic then Doctor keep the party alive between towns; Combat Shooting boosts every gun. " +
+            "Medic then Doctor keep the party alive between towns. Skip Combat Shooting — it is a " +
+            "creation-only skill the shipped game never actually reads (series creator Brian Fargo has " +
+            "confirmed it does nothing), so put those points into the weapon skills instead. " +
             "Higher-IQ skills (Cryptology, Electronics, Toaster Repair) pay off later at Base Cochise."),
 
         new("Ranger Center (start)",
