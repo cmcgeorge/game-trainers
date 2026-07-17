@@ -417,7 +417,7 @@
                             <GroupBox Header="Live position">
                                 <StackPanel Margin="4">
                                     <TextBlock TextWrapping="Wrap" Foreground="#555"
-                                               Text="Attach on the Party tab and the current map name plus the party's X/Y are read straight from the party-state header — no move-search needed. The green dot below is the live position; click any square (or type a target) to set the blue teleport target."/>
+                                               Text="Attach on the Party tab and the party's X/Y are read straight from the party-state header — no move-search needed. (The game doesn't keep a reliable current-map name, so use the Areas list on the left as a manual reference.) The green dot below is the live position; click any square (or type a target) to set the blue teleport target."/>
                                     <TextBlock Text="{Binding LivePosition}" FontWeight="Bold" FontSize="13" Margin="0,6,0,0"/>
                                 </StackPanel>
                             </GroupBox>

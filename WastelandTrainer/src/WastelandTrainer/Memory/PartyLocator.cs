@@ -44,9 +44,28 @@ public sealed class LocatedParty
 /// each in 1..100, a plausible MAXCON, current CON not exceeding MAXCON, a valid gender (0/1) and
 /// nationality (0..4). Those extra field checks reject stray byte runs that merely look name-like.
 ///
-/// To avoid latching onto a one-record fluke that happens to be followed by empty slots, the whole
-/// address space is swept and the candidate with the <b>most</b> occupied members wins (the real
-/// party has several; a false positive typically has one), ties going to the first found.
+/// The whole address space is swept and candidates are ranked by <see cref="Outranks"/>. Two kinds of
+/// decoy roster haunt Wasteland's memory, and the ranking is built to reject both:
+///
+/// <list type="number">
+/// <item><b>Headerless stale copies.</b> A deleted-but-not-cleared copy of old rangers lingers ~18 KB
+/// before the live roster with no valid <b>party-state header</b> in front of it. A roster preceded by
+/// a plausible header (<see cref="PartyHeader.IsPlausible"/>) always outranks one that is not, however
+/// many members the headerless copy holds — so a lingering 2-member copy never beats a freshly-created
+/// 1-member live party.</item>
+/// <item><b>The pre-made template.</b> The four factory rangers (Hell Razor, Angela Deth, Thrasher,
+/// Snake Vargas) are a read-only template that is <i>always</i> loaded, complete with its own valid
+/// header frozen at the Ranger Center spawn (X 55, Y 62) — so header validity alone can't tell it from
+/// the live party. But the game loads that template first and allocates the working/active party at a
+/// fixed offset <i>above</i> it (confirmed at a constant <c>+0x4A31</c> across sessions, and the active
+/// party sat above its decoy in every capture). So among header-backed candidates the one at the
+/// <b>highest base address</b> is the live party.</item>
+/// </list>
+///
+/// Ranking therefore is: header-backed beats headerless; among header-backed, higher base address wins
+/// (the active party above its template); among headerless, more members wins (rejecting a one-record
+/// fluke). Ties go to the first found. This pins the live party without a static anchor. See
+/// <c>.docs\Wasteland-Reverse-Engineering.md §2</c>.
 /// </summary>
 public static class PartyLocator
 {
@@ -58,6 +77,8 @@ public static class PartyLocator
     public static LocatedParty? Find(ProcessMemory mem, CancellationToken ct = default)
     {
         LocatedParty? best = null;
+        bool bestHasHeader = false;
+        byte[] headerScratch = new byte[CharacterFormat.PartyHeaderSize];
         int overlap = RosterBytes - 1;   // so a roster straddling a window edge is still seen whole
         byte[] buf = new byte[ChunkSize + overlap];
         foreach (var region in mem.EnumerateRegions())
@@ -75,11 +96,16 @@ public static class PartyLocator
                 {
                     if (!IsValidCharacter(buf, i)) continue;   // cheap gate: slot 0 must be a real member
                     var party = TryReadRoster(buf, i, start);
-                    if (IsBetter(party, best))
+                    if (party == null) continue;
+                    bool hasHeader = HasValidHeader(mem, party.RosterBase, headerScratch);
+                    if (best == null || Outranks(hasHeader, party.Members.Count, (ulong)party.RosterBase,
+                                                 bestHasHeader, best.Members.Count, (ulong)best.RosterBase))
                     {
                         best = party;
-                        if (best!.Members.Count == CharacterFormat.MaxSlots) return best;   // a full party can't be beaten
+                        bestHasHeader = hasHeader;
                     }
+                    // No early-out: the active party is the highest-addressed header-backed roster, so a
+                    // later (higher) candidate can still beat the current best — the whole space is swept.
                 }
 
                 // ProcessMemory.Read is all-or-nothing: one unreadable page fails the whole chunk
@@ -87,7 +113,7 @@ public static class PartyLocator
                 // skipping up to a megabyte that may still hold the roster.
                 if (read < readLen && want > PageSize)
                 {
-                    ScanByPage(mem, start, regionEnd, ct, ref best);
+                    ScanByPage(mem, start, regionEnd, ct, ref best, ref bestHasHeader, headerScratch);
                     break;   // the remainder of the region has now been scanned page by page
                 }
 
@@ -97,16 +123,44 @@ public static class PartyLocator
         return best;
     }
 
-    /// <summary>A candidate is better than the incumbent when it holds strictly more occupied members.</summary>
-    private static bool IsBetter(LocatedParty? candidate, LocatedParty? best) =>
-        candidate != null && candidate.Members.Count > (best?.Members.Count ?? 0);
+    /// <summary>
+    /// Candidate-ranking rule (exposed for testing). Returns true when candidate <c>(a…)</c> should
+    /// replace incumbent <c>(b…)</c>:
+    /// <list type="bullet">
+    /// <item>A roster preceded by a valid party-state header always outranks one that is not — this keeps
+    /// the locator off a headerless stale copy of deleted rangers, however many members it holds.</item>
+    /// <item>Among two header-backed rosters, the one at the <b>higher base address</b> wins: the live
+    /// party is allocated above the always-loaded pre-made template (see the type remarks), so the
+    /// higher address is the active party even when the template holds more members.</item>
+    /// <item>Among two headerless rosters, more members wins (a real party has several; a fluke has one).</item>
+    /// </list>
+    /// </summary>
+    public static bool Outranks(bool aHasHeader, int aCount, ulong aBase, bool bHasHeader, int bCount, ulong bBase) =>
+        aHasHeader != bHasHeader ? aHasHeader
+        : aHasHeader ? aBase > bBase
+        : aCount > bCount;
+
+    /// <summary>
+    /// Reads the 256-byte party-state header that precedes a candidate roster and reports whether it is
+    /// plausible (<see cref="PartyHeader.IsPlausible"/>). A failed read — or a roster too close to
+    /// address 0 to have a header before it — counts as no valid header.
+    /// </summary>
+    private static bool HasValidHeader(ProcessMemory mem, nuint rosterBase, byte[] scratch)
+    {
+        if (rosterBase < (nuint)CharacterFormat.PartyHeaderSize) return false;
+        nuint headerBase = rosterBase - (nuint)CharacterFormat.PartyHeaderSize;
+        if (mem.Read(headerBase, scratch, CharacterFormat.PartyHeaderSize) != CharacterFormat.PartyHeaderSize)
+            return false;
+        return PartyHeader.IsPlausible(scratch, 0);
+    }
 
     /// <summary>
     /// Page-granular fallback for a region whose bulk read failed on an unreadable page: reads one
     /// <see cref="PageSize"/> page at a time (plus a roster-length overlap so a straddling roster is
     /// still seen whole) and simply skips any page that cannot be read, keeping the best candidate.
     /// </summary>
-    private static void ScanByPage(ProcessMemory mem, nuint regionStart, nuint regionEnd, CancellationToken ct, ref LocatedParty? best)
+    private static void ScanByPage(ProcessMemory mem, nuint regionStart, nuint regionEnd, CancellationToken ct,
+        ref LocatedParty? best, ref bool bestHasHeader, byte[] headerScratch)
     {
         int overlap = RosterBytes - 1;
         byte[] buf = new byte[PageSize + overlap];
@@ -129,7 +183,14 @@ public static class PartyLocator
             {
                 if (!IsValidCharacter(buf, i)) continue;
                 var party = TryReadRoster(buf, i, start);
-                if (IsBetter(party, best)) best = party;
+                if (party == null) continue;
+                bool hasHeader = HasValidHeader(mem, party.RosterBase, headerScratch);
+                if (best == null || Outranks(hasHeader, party.Members.Count, (ulong)party.RosterBase,
+                                             bestHasHeader, best.Members.Count, (ulong)best.RosterBase))
+                {
+                    best = party;
+                    bestHasHeader = hasHeader;
+                }
             }
 
             start += (nuint)want;   // advance one page; overlap re-covers the seam

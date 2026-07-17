@@ -44,6 +44,210 @@ if (args.Length >= 9 && args[0] == "--createscan")
     return found.Count == 0 ? 2 : 0;
 }
 
+// Diagnostic: FormatCheck --find <pid> <text> [text2 …] searches all committed memory for each ASCII
+// string and prints every hit's address plus its offset from the located roster.
+if (args.Length >= 3 && args[0] == "--find")
+{
+    if (!int.TryParse(args[1], out int fpid))
+    {
+        Console.WriteLine("Usage: FormatCheck --find <pid> <text> [text2 …]");
+        return 2;
+    }
+    using var fm = ProcessMemory.Open(fpid);
+    var fp = PartyLocator.Find(fm);
+    nuint rb = fp?.RosterBase ?? 0;
+    Console.WriteLine(fp == null ? "(no roster located; offsets are absolute)" : $"located roster @ 0x{(ulong)rb:X}");
+    for (int ai = 2; ai < args.Length; ai++)
+    {
+        byte[] needle = System.Text.Encoding.ASCII.GetBytes(args[ai]);
+        var found = new List<nuint>();
+        const int Chunk = 1 << 16;
+        int overlap = needle.Length - 1;
+        byte[] sbuf = new byte[Chunk + overlap];
+        foreach (var region in fm.EnumerateRegions())
+        {
+            nuint rend = region.Base + region.Size;
+            for (nuint s = region.Base; s < rend && found.Count < 40;)
+            {
+                nuint rem = rend - s;
+                int want = (int)Math.Min((nuint)Chunk, rem);
+                int rl = (int)Math.Min((nuint)(want + overlap), rem);
+                int rd = fm.Read(s, sbuf, rl);
+                for (int i = 0; i + needle.Length <= rd; i++)
+                {
+                    bool ok = true;
+                    for (int j = 0; j < needle.Length; j++) if (sbuf[i + j] != needle[j]) { ok = false; break; }
+                    if (ok) { found.Add(s + (nuint)i); if (found.Count >= 40) break; }
+                }
+                s += (nuint)want;
+            }
+        }
+        Console.WriteLine($"\n\"{args[ai]}\": {found.Count} hit(s){(found.Count >= 40 ? " (capped)" : "")}");
+        foreach (var a in found)
+        {
+            long rel = (long)(ulong)a - (long)(ulong)rb;
+            Console.WriteLine($"  0x{(ulong)a:X}   roster{(rel >= 0 ? "+" : "")}{rel}");
+        }
+    }
+    return 0;
+}
+
+// Diagnostic: FormatCheck --peek <pid> <hexAddr> <len> hex-dumps an arbitrary memory range.
+if (args.Length >= 4 && args[0] == "--peek")
+{
+    if (!int.TryParse(args[1], out int ppid) || !int.TryParse(args[3], out int plen))
+    {
+        Console.WriteLine("Usage: FormatCheck --peek <pid> <hexAddr> <len>");
+        return 2;
+    }
+    ulong paddr = Convert.ToUInt64(args[2].Replace("0x", ""), 16);
+    using var pm = ProcessMemory.Open(ppid);
+    var pbuf = new byte[plen];
+    int pr = pm.Read((nuint)paddr, pbuf, plen);
+    Console.WriteLine($"Read {pr}/{plen} bytes at 0x{paddr:X}:");
+    for (int row = 0; row < pr; row += 16)
+    {
+        int n = Math.Min(16, pr - row);
+        string hex = string.Join(" ", Enumerable.Range(row, n).Select(k => pbuf[k].ToString("X2")));
+        string asc = new string(Enumerable.Range(row, n).Select(k => pbuf[k] >= 0x20 && pbuf[k] < 0x7F ? (char)pbuf[k] : '.').ToArray());
+        Console.WriteLine($"  0x{paddr + (ulong)row:X}: {hex,-47}  {asc}");
+    }
+    return 0;
+}
+
+// Diagnostic: FormatCheck --diffhdr <pid> <hexRosterA> <hexRosterB> reads the party-state header in
+// front of two rosters and prints them side by side, marking bytes that differ — to find a static
+// field that separates the live party from a frozen stale snapshot.
+if (args.Length >= 4 && args[0] == "--diffhdr")
+{
+    if (!int.TryParse(args[1], out int dpid))
+    {
+        Console.WriteLine("Usage: FormatCheck --diffhdr <pid> <hexRosterA> <hexRosterB>");
+        return 2;
+    }
+    nuint HdrOf(string hexRoster) =>
+        (nuint)(Convert.ToUInt64(hexRoster.Replace("0x", ""), 16) - (ulong)CharacterFormat.PartyHeaderSize);
+    using var dm = ProcessMemory.Open(dpid);
+    nuint a = HdrOf(args[2]), b = HdrOf(args[3]);
+    var ba = new byte[CharacterFormat.PartyHeaderSize];
+    var bb = new byte[CharacterFormat.PartyHeaderSize];
+    if (dm.Read(a, ba, ba.Length) != ba.Length || dm.Read(b, bb, bb.Length) != bb.Length)
+    { Console.WriteLine("A header was unreadable."); return 2; }
+    Console.WriteLine($"A header @ 0x{(ulong)a:X}   B header @ 0x{(ulong)b:X}   (* = differs)");
+    for (int row = 0; row < CharacterFormat.PartyHeaderSize; row += 16)
+    {
+        string HexAsc(byte[] buf)
+        {
+            string hex = string.Join(" ", Enumerable.Range(row, 16).Select(k => buf[k].ToString("X2")));
+            string asc = new string(Enumerable.Range(row, 16).Select(k => buf[k] >= 0x20 && buf[k] < 0x7F ? (char)buf[k] : '.').ToArray());
+            return $"{hex}  {asc}";
+        }
+        bool diff = Enumerable.Range(row, 16).Any(k => ba[k] != bb[k]);
+        Console.WriteLine($" {(diff ? "*" : " ")}{row:X2}: {HexAsc(ba)}   |   {HexAsc(bb)}");
+    }
+    return 0;
+}
+
+// Diagnostic: FormatCheck --mapscan <pid> enumerates EVERY party-shaped structure in memory and, for
+// each, the party-state header that precedes it (plausible?, map name, X/Y). This surfaces the live
+// roster next to any stale snapshot (e.g. a booted-defaults copy that lingers after an in-process game
+// restart) so we can see which header fields tell the live party apart from a stale-but-valid one.
+// Pass a second arg to also re-scan after that many milliseconds and diff the headers (movement/CON
+// regen changes only the live copy): FormatCheck --mapscan <pid> [delayMs]
+if (args.Length >= 2 && args[0] == "--mapscan")
+{
+    if (!int.TryParse(args[1], out int mpid))
+    {
+        Console.WriteLine("Usage: FormatCheck --mapscan <pid> [delayMs]   (pid must be a number)");
+        return 2;
+    }
+    using var mm = ProcessMemory.Open(mpid);
+    Console.WriteLine($"Attached to pid {mpid} (IsOpen={mm.IsOpen}). Enumerating party-shaped structures…");
+
+    List<(nuint rosterBase, int count, string names, string header)> Enumerate()
+    {
+        int rosterBytes = CharacterFormat.MaxSlots * CharacterFormat.RecordSize;
+        const int Chunk = 1 << 20;
+        int overlap = rosterBytes - 1;
+        byte[] buf = new byte[Chunk + overlap];
+        byte[] hb2 = new byte[CharacterFormat.PartyHeaderSize];
+        var seen = new HashSet<ulong>();
+        var rows = new List<(nuint, int, string, string)>();
+        foreach (var region in mm.EnumerateRegions())
+        {
+            nuint rend = region.Base + region.Size;
+            for (nuint s = region.Base; s < rend;)
+            {
+                nuint rem = rend - s;
+                int want = (int)Math.Min((nuint)Chunk, rem);
+                int readLen = (int)Math.Min((nuint)(want + overlap), rem);
+                int rd = mm.Read(s, buf, readLen);
+                for (int i = 0; i + rosterBytes <= rd; i++)
+                {
+                    if (!CharacterRecord.IsValidRecord(buf, i)) continue;
+                    // Only report maximal rosters: skip a window whose preceding record is itself a
+                    // member (that is a sub-roster of a larger one starting earlier).
+                    if (i >= CharacterFormat.RecordSize && CharacterRecord.IsValidRecord(buf, i - CharacterFormat.RecordSize)) continue;
+                    var names = new List<string>();
+                    bool emptySeen = false, ok = true;
+                    for (int slot = 0; slot < CharacterFormat.MaxSlots; slot++)
+                    {
+                        int off = i + slot * CharacterFormat.RecordSize;
+                        if (CharacterRecord.IsValidRecord(buf, off))
+                        {
+                            if (emptySeen) { ok = false; break; }
+                            names.Add(new CharacterRecord(buf, off).Name);
+                        }
+                        else if (buf[off + CharacterFormat.OffName] == 0x00) emptySeen = true;
+                        else { ok = false; break; }
+                    }
+                    if (!ok || names.Count == 0) continue;
+                    nuint rosterBase = s + (nuint)i;
+                    if (!seen.Add((ulong)rosterBase)) continue;
+                    string header;
+                    if (rosterBase >= (nuint)CharacterFormat.PartyHeaderSize
+                        && mm.Read(rosterBase - (nuint)CharacterFormat.PartyHeaderSize, hb2, hb2.Length) == hb2.Length)
+                        header = $"header plausible={PartyHeader.IsPlausible(hb2),-5} map=\"{MapBook.MapName(hb2)}\" X={hb2[CharacterFormat.HeaderPartyX]} Y={hb2[CharacterFormat.HeaderPartyY]}";
+                    else
+                        header = "header <unreadable>";
+                    rows.Add((rosterBase, names.Count, string.Join(", ", names), header));
+                }
+                s += (nuint)Math.Max(CharacterFormat.RecordSize, want);
+            }
+        }
+        return rows;
+    }
+
+    var first = Enumerate();
+    Console.WriteLine($"{first.Count} candidate roster(s):");
+    foreach (var r in first.OrderBy(r => (ulong)r.rosterBase))
+        Console.WriteLine($"  0x{(ulong)r.rosterBase:X}  {r.count} member(s)  [{r.names}]  {r.header}");
+
+    var picked = PartyLocator.Find(mm);
+    Console.WriteLine(picked == null
+        ? "\nPartyLocator.Find: (none)"
+        : $"\nPartyLocator.Find picks: 0x{(ulong)picked.RosterBase:X}  [{string.Join(", ", picked.Members.Select(m => m.Record.Name))}]");
+
+    // Optional second pass after a delay: take a step (or let CON regen) in-game during the delay and
+    // the LIVE copy's header/roster changes while stale snapshots stay frozen — the cleanest live/stale tell.
+    if (args.Length >= 3 && int.TryParse(args[2], out int delayMs) && delayMs > 0)
+    {
+        Console.WriteLine($"\nRe-scanning after {delayMs} ms — move the party or wait for CON regen now…");
+        System.Threading.Thread.Sleep(delayMs);
+        var second = Enumerate();
+        var before = first.ToDictionary(r => (ulong)r.rosterBase, r => r.header);
+        int changed = 0;
+        foreach (var r in second.OrderBy(r => (ulong)r.rosterBase))
+            if (before.TryGetValue((ulong)r.rosterBase, out var h0) && h0 != r.header)
+            {
+                Console.WriteLine($"  CHANGED 0x{(ulong)r.rosterBase:X} [{r.names}]\n    was {h0}\n    now {r.header}");
+                changed++;
+            }
+        Console.WriteLine(changed == 0 ? "  (no header changed — nothing moved during the delay)" : $"  {changed} roster header(s) changed.");
+    }
+    return 0;
+}
+
 // Optional live smoke test: FormatCheck --live <pid> runs the structural PartyLocator against a
 // running emulator instead of the embedded fixture.
 if (args.Length >= 2 && args[0] == "--live")
@@ -61,6 +265,18 @@ if (args.Length >= 2 && args[0] == "--live")
     var party = PartyLocator.Find(liveMem);
     if (party == null) { Console.WriteLine("No party located."); return 2; }
     Console.WriteLine($"Found roster at 0x{(ulong)party.RosterBase:X} with {party.Members.Count} character(s).");
+
+    // Report the party-state header that anchors the located roster. The live roster is preceded by a
+    // plausible header (map name + in-range X/Y); a stale copy of deleted rangers is not — this is the
+    // discriminator the locator now ranks on, so a healthy "plausible=True" here is the fix working.
+    var headerBuf = new byte[CharacterFormat.PartyHeaderSize];
+    nuint headerBase = party.RosterBase - (nuint)CharacterFormat.PartyHeaderSize;
+    if (liveMem.Read(headerBase, headerBuf, CharacterFormat.PartyHeaderSize) == CharacterFormat.PartyHeaderSize)
+        Console.WriteLine($"  header @ 0x{(ulong)headerBase:X}: plausible={PartyHeader.IsPlausible(headerBuf)} "
+            + $"map=\"{MapBook.MapName(headerBuf)}\" X={headerBuf[CharacterFormat.HeaderPartyX]} Y={headerBuf[CharacterFormat.HeaderPartyY]}");
+    else
+        Console.WriteLine($"  header @ 0x{(ulong)headerBase:X}: <unreadable>");
+
     foreach (var lc in party.Members)
     {
         var r = lc.Record;
@@ -396,6 +612,55 @@ Console.WriteLine("Party-state header offsets (X/Y are adjacent inside the heade
 Check("Party X at 0x08", CharacterFormat.HeaderPartyX, 0x08);
 Check("Party Y at 0x09", CharacterFormat.HeaderPartyY, 0x09);
 Check("Y immediately follows X", CharacterFormat.HeaderPartyY, CharacterFormat.HeaderPartyX + 1);
+Console.WriteLine();
+
+Console.WriteLine("Party-state header plausibility (the live roster has one; a stale copy does not):");
+// Two real 256-byte headers cut from dosbox-x-…-112525-175.bin. ValidHeader is the party-state header
+// that precedes the live roster (Ranger Center); StaleHeader is the 0x100 bytes before the lingering
+// stale copy of [Thrasher, Snake Vargas] ~18 KB earlier — actually the tail of another record, so it
+// must be rejected. This is exactly the discriminator PartyLocator ranks on.
+const string ValidHeaderB64 =
+    "AAECAwQAAAA3PgA3PgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgMEBQYBAAAAAAAAAAAAAgAAAAAAvgAAAAAGAOIZCgAGCl0AKAcAAAEAYQAAggIAAAAAoB6RLjrwAAAEAAAEAAAEAQIGQ7cBm04BOCEA7yYAq98AUBoAAhMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFJhbmdlciBDdHIuIAABAAAA/gAAAAAAAAAAAAAAAAAAAAAAAAAUAAAAAAAAAAAAAA==";
+const string StaleHeaderB64 =
+    "OzgDMP9RAzOzgAAwLzIzO7OAX4I7sAgAAAMzMzCPMjMwAIC/MjMwAID0AjAjEwMwUxMDMP//oxEwA9IxCIh7MAIyiId8szFCAwh3dMtjAohnAjCSMgh3fMvCMgiH/LPyMoCI+zAiIwgAA1MTAzD//wAAAAAAAAAAAAAAAAAAAAADAgcBCQEUARIBCgEWAQ8BGgEZAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBIgACAAIAAgACAAIAAgACAANgEsAC0ABAAxADQoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+byte[] validHeader = Convert.FromBase64String(ValidHeaderB64);
+byte[] staleHeader = Convert.FromBase64String(StaleHeaderB64);
+Check("live Ranger Center header is plausible", PartyHeader.IsPlausible(validHeader), true);
+Check("  live header map name", MapBook.MapName(validHeader), "Ranger Ctr.");
+Check("  live header X = 55", validHeader[CharacterFormat.HeaderPartyX], (byte)55);
+Check("  live header Y = 62", validHeader[CharacterFormat.HeaderPartyY], (byte)62);
+Check("stale copy's would-be header is rejected", PartyHeader.IsPlausible(staleHeader), false);
+Check("  stale would-be X is out of range", staleHeader[CharacterFormat.HeaderPartyX] >= PartyHeader.MapCoordinateCeiling, true);
+// Synthetic edge cases isolate each rejection reason.
+Check("all-zero header rejected (blank map name)", PartyHeader.IsPlausible(new byte[CharacterFormat.PartyHeaderSize]), false);
+var oobX = (byte[])validHeader.Clone(); oobX[CharacterFormat.HeaderPartyX] = 200;
+Check("out-of-range X rejected", PartyHeader.IsPlausible(oobX), false);
+var oobY = (byte[])validHeader.Clone(); oobY[CharacterFormat.HeaderPartyY] = (byte)PartyHeader.MapCoordinateCeiling;
+Check("Y at the ceiling rejected", PartyHeader.IsPlausible(oobY), false);
+var badMarch = (byte[])validHeader.Clone(); badMarch[0] = (byte)CharacterFormat.MaxSlots;
+Check("marching byte >= MaxSlots rejected", PartyHeader.IsPlausible(badMarch), false);
+var ctrlName = (byte[])validHeader.Clone(); ctrlName[CharacterFormat.HeaderMapName] = 0x01;
+Check("non-printable map name rejected", PartyHeader.IsPlausible(ctrlName), false);
+var spaceName = (byte[])validHeader.Clone();
+for (int i = 0; i < CharacterFormat.MapNameLength; i++) spaceName[CharacterFormat.HeaderMapName + i] = 0x20;
+Check("all-space map name rejected", PartyHeader.IsPlausible(spaceName), false);
+Console.WriteLine();
+
+Console.WriteLine("Roster ranking (header beats headerless; among header-backed the higher address wins):");
+// Bug 1: a live 1-member party (CHRISTOPHER, header-backed) lost to a lingering headerless 2-member
+// stale copy (Thrasher + Snake Vargas) under a member-count-only rule. Header-preference fixes it.
+Check("header-backed 1-member beats headerless 2-member", PartyLocator.Outranks(true, 1, 0x1000, false, 2, 0x9000), true);
+Check("headerless 2-member never beats header-backed 1-member", PartyLocator.Outranks(false, 2, 0x9000, true, 1, 0x1000), false);
+Check("both headerless: more members wins", PartyLocator.Outranks(false, 2, 0x1000, false, 1, 0x2000), true);
+// Bug 2: the always-loaded 4-member pre-made template (lower address, valid header) outvoted the live
+// CHRISTOPHER party (higher address, valid header) on member count. Higher address must win.
+Check("live party (higher addr) beats template (lower addr, more members)",
+    PartyLocator.Outranks(true, 1, 0x422C1, true, 4, 0x3D890), true);
+Check("template (lower addr, more members) never beats live party (higher addr)",
+    PartyLocator.Outranks(true, 4, 0x3D890, true, 1, 0x422C1), false);
+Check("among header-backed, member count does not override address",
+    PartyLocator.Outranks(true, 7, 0x1000, true, 1, 0x2000), false);
+Check("equal address: not better (first found wins)", PartyLocator.Outranks(true, 3, 0x1000, true, 3, 0x1000), false);
 Console.WriteLine();
 
 Console.WriteLine("Create-screen roll scanner (locate the temporary create buffer by its attribute bytes):");

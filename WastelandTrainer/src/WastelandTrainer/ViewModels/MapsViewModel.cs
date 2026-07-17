@@ -7,11 +7,16 @@ namespace WastelandTrainer.ViewModels;
 /// <summary>
 /// Backs the Maps tab: an offline area/landmark reference plus a live "where am I / teleport me
 /// there" helper. Unlike the Dragon Wars trainer — which has to hunt a moving global for the live
-/// position — Wasteland keeps the party's X/Y and current map name in a 256-byte party-state header
-/// that sits immediately before the roster (<see cref="CharacterFormat.PartyHeaderSize"/> bytes at
-/// <c>rosterBase − 0x100</c>). Because the Party tab already locates the roster by structure, this
-/// view-model just reads that header through a <see cref="nuint"/> supplied by the main view-model,
-/// so the live position and teleport light up as soon as the party is found — no move-search needed.
+/// position — Wasteland keeps the party's X/Y in a 256-byte party-state header that sits immediately
+/// before the roster (<see cref="CharacterFormat.PartyHeaderSize"/> bytes at <c>rosterBase − 0x100</c>).
+/// Because the Party tab already locates the roster by structure, this view-model just reads that
+/// header through a <see cref="nuint"/> supplied by the main view-model, so the live position and
+/// teleport light up as soon as the party is found — no move-search needed.
+///
+/// Only the X/Y are surfaced: the header's 0xD0 map-name field is <b>not</b> a reliable current-map
+/// label (it read "Ranger Ctr." with the party standing in Highpool, and no real map title is kept in
+/// guest RAM), so the Maps tab shows the trusted coordinates plus the manual Areas reference instead of
+/// a decoded name. See <c>.docs\Wasteland-Reverse-Engineering.md §2</c>.
 ///
 /// Teleport writes only the two position bytes (X at <see cref="CharacterFormat.HeaderPartyX"/>, Y
 /// at <see cref="CharacterFormat.HeaderPartyY"/>) on the current map. Do it while exploring, never
@@ -88,9 +93,6 @@ public sealed class MapsViewModel : ObservableObject
     private int _liveY;
     public int LiveY { get => _liveY; private set => SetField(ref _liveY, value); }
 
-    private string _liveMapName = "";
-    public string LiveMapName { get => _liveMapName; private set => SetField(ref _liveMapName, value); }
-
     private bool _hasParty;
     /// <summary>True once a readable live position has been found (enables the green dot and teleport).</summary>
     public bool HasParty
@@ -100,11 +102,13 @@ public sealed class MapsViewModel : ObservableObject
     }
 
     private string _livePosition = "";
-    /// <summary>"Ranger Ctr. — X 55 · Y 62" once the party is located; empty otherwise.</summary>
+    /// <summary>"X 55 · Y 62" once the party is located; empty otherwise. The header's map-name field
+    /// (0x0D0) is not a reliable current-map label (it read "Ranger Ctr." with the party in Highpool),
+    /// so only the trusted X/Y are surfaced — see <c>.docs\Wasteland-Reverse-Engineering.md §2</c>.</summary>
     public string LivePosition { get => _livePosition; private set => SetField(ref _livePosition, value); }
 
     private string _status =
-        "Reference only until attached. Attach on the Party tab; the live map and position appear here automatically, then pick a target square and Teleport.";
+        "Reference only until attached. Attach on the Party tab; the live position appears here automatically, then pick a target square and Teleport.";
     public string Status { get => _status; private set => SetField(ref _status, value); }
 
     public ICommand TeleportCommand { get; }
@@ -123,11 +127,11 @@ public sealed class MapsViewModel : ObservableObject
     {
         _staleReads = 0;
         LivePosition = "";
-        LiveMapName = "";
         HasParty = false;
     }
 
-    /// <summary>Poll-tick refresh: re-read the party-state header for the live map name and X/Y.</summary>
+    /// <summary>Poll-tick refresh: re-read the party-state header for the live X/Y. The 0xD0 map-name
+    /// field is not a reliable current-map label, so only the coordinates are surfaced.</summary>
     public void Tick()
     {
         var mem = _getMem();
@@ -138,7 +142,10 @@ public sealed class MapsViewModel : ObservableObject
             return;
         }
 
-        if (mem.Read(headerBase.Value, _headerBuf, CharacterFormat.PartyHeaderSize) != CharacterFormat.PartyHeaderSize)
+        // A failed read, or an implausible header (out-of-range X/Y — e.g. the header being rewritten as
+        // a new map loads), is ridden out for a few ticks so a map crossing doesn't blank the position.
+        if (mem.Read(headerBase.Value, _headerBuf, CharacterFormat.PartyHeaderSize) != CharacterFormat.PartyHeaderSize
+            || !PartyHeader.IsPlausible(_headerBuf))
         {
             if (++_staleReads < MaxStaleReads) return;
             ClearLive();
@@ -148,8 +155,7 @@ public sealed class MapsViewModel : ObservableObject
         _staleReads = 0;
         LiveX = _headerBuf[CharacterFormat.HeaderPartyX];
         LiveY = _headerBuf[CharacterFormat.HeaderPartyY];
-        LiveMapName = MapBook.MapName(_headerBuf);
-        LivePosition = $"{LiveMapName} — X {LiveX} · Y {LiveY}";
+        LivePosition = $"X {LiveX} · Y {LiveY}";
         HasParty = true;
     }
 
@@ -180,7 +186,7 @@ public sealed class MapsViewModel : ObservableObject
         bool ok = mem.WriteRange(headerBase.Value, _headerBuf, CharacterFormat.HeaderPartyX, 2);
 
         Status = ok
-            ? $"Teleported to ({TargetX}, {TargetY}) on {LiveMapName}. Take one step in-game to redraw the map."
+            ? $"Teleported to ({TargetX}, {TargetY}). Take one step in-game to redraw the map."
             : "Teleport write failed — Re-scan on the Party tab and try again.";
     }
 
