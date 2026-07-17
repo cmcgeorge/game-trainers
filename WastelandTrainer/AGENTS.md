@@ -53,7 +53,8 @@ Three projects in `WastelandTrainer.sln`: the WPF app, its test harness, and the
     (the **Create** tab: locates the create-screen roll via `CreationScanner`, then taps the spacebar
     through `KeyboardSender` to re-roll until each stat — and, when the record shape is confirmed,
     MAXCON — meets its minimum; reads-only, never writes to the game), `MapsViewModel` (reads the party-state
-    header for the live map/X/Y and teleports by writing the two position bytes),
+    header for the live X/Y as a read-only "where am I" display — teleport is intentionally not offered
+    because the header is a write-only shadow the game never reads back; see the RE notes §5),
     `ReferenceViewModel` (skills/items/paragraphs/strategy), and the row VMs
     (`NamedValueViewModel`, `SkillRowViewModel`, `ItemRowViewModel`) plus `ICharacterHost` (the
     write channel). Views (`*.xaml`) bind to these. `ObservableObject`/`RelayCommand` are used from
@@ -108,9 +109,10 @@ the same ranges so an edit never makes a ranger un-locatable). Names are **plain
 `(id, value)` array read to a `0x00` id terminator; edit skills by id (reuse-or-append into 30 slots).
 Inventory is 30 fixed `(id, qty)` slots read by index and kept gap-free by `CompactInventory` after
 each edit, so the running game (which reads the list only up to the first empty slot) still sees every
-carried item. The live map position and 12-byte map name live in the 256-byte
-party-state header at `rosterBase − 0x100` (X at header `0x08`, Y at `0x09`); teleport writes only
-those two bytes and only moves the party within the current map. The weapon/equip byte (`0x1F`) and
+carried item. The live map position lives in the 256-byte party-state header at `rosterBase − 0x100`
+(X at header `0x08`, Y at `0x09`); the Maps tab reads it for a live position display but does **not**
+write it — teleport was removed after live RE proved the header is a write-only shadow the game never
+reads back (§5 of the RE notes; no memory write relocates the party). The weapon/equip byte (`0x1F`) and
 unidentified padding are left untouched. Setting values to the trainer's "max" caps is safe; the
 game UI may render very large numbers oddly (cosmetic). The two poll-loop freezes each rewrite only
 their own field: Freeze Health re-pins the CON u16 (`0x1D`), and Freeze Ammo tops the quantity

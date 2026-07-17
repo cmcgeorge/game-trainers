@@ -64,8 +64,14 @@ public sealed class LocatedParty
 ///
 /// Ranking therefore is: header-backed beats headerless; among header-backed, higher base address wins
 /// (the active party above its template); among headerless, more members wins (rejecting a one-record
-/// fluke). Ties go to the first found. This pins the live party without a static anchor. See
-/// <c>.docs\Wasteland-Reverse-Engineering.md §2</c>.
+/// fluke). Ties go to the first found. This pins the live party without a static anchor.
+///
+/// Finally, the winner must be <b>header-backed</b> to be returned at all: the live party always has a
+/// plausible header, so a headerless best is never it — it is a stale copy, or a record-shaped byte run
+/// in unrelated process memory (e.g. a locale/CRT DLL string like <c>"NumShape"</c> that passes the
+/// field checks). Returning one would aim every edit/freeze/teleport write at foreign memory outside the
+/// guest RAM and crash the emulator, so <see cref="Find"/> reports no party instead and the caller
+/// re-scans once the save has loaded. See <c>.docs\Wasteland-Reverse-Engineering.md §2</c>.
 /// </summary>
 public static class PartyLocator
 {
@@ -73,7 +79,8 @@ public static class PartyLocator
     private const int PageSize = 0x1000;      // salvage granularity
     private const int RosterBytes = CharacterFormat.MaxSlots * CharacterFormat.RecordSize;
 
-    /// <summary>Finds the roster, or null if no party can be located (not attached, or not in-game yet).</summary>
+    /// <summary>Finds the live roster, or null if none can be located — not attached, not in-game yet, or
+    /// the save has not finished loading (only a header-backed roster is accepted; see the type remarks).</summary>
     public static LocatedParty? Find(ProcessMemory mem, CancellationToken ct = default)
     {
         LocatedParty? best = null;
@@ -120,7 +127,16 @@ public static class PartyLocator
                 start += (nuint)Math.Max(PageSize, want);   // next window; overlap re-covers the seam
             }
         }
-        return best;
+
+        // The live party is ALWAYS preceded by a plausible party-state header, so a headerless winner is
+        // never it — it is a deleted stale copy, or a coincidental record-shaped byte run in unrelated
+        // process memory (a locale/CRT DLL string such as "NumShape" passes the field checks but has no
+        // header). Returning such a candidate points every edit, freeze poke and teleport at foreign
+        // memory outside the 16 MB guest RAM, which corrupts the host emulator the moment a write fires.
+        // So only a header-backed roster counts as "found"; otherwise report no party (the caller retries
+        // via Re-scan once the save has loaded). Because a header-backed roster always outranks a
+        // headerless one, `best` is header-backed here iff any header-backed roster exists.
+        return bestHasHeader ? best : null;
     }
 
     /// <summary>

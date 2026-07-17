@@ -1,26 +1,28 @@
 using System.Collections.ObjectModel;
-using System.Windows.Input;
 using WastelandTrainer.Game;
 
 namespace WastelandTrainer.ViewModels;
 
 /// <summary>
-/// Backs the Maps tab: an offline area/landmark reference plus a live "where am I / teleport me
-/// there" helper. Unlike the Dragon Wars trainer — which has to hunt a moving global for the live
-/// position — Wasteland keeps the party's X/Y in a 256-byte party-state header that sits immediately
-/// before the roster (<see cref="CharacterFormat.PartyHeaderSize"/> bytes at <c>rosterBase − 0x100</c>).
-/// Because the Party tab already locates the roster by structure, this view-model just reads that
-/// header through a <see cref="nuint"/> supplied by the main view-model, so the live position and
-/// teleport light up as soon as the party is found — no move-search needed.
+/// Backs the Maps tab: an offline area/landmark reference plus a live "where am I" readout. Wasteland
+/// keeps the party's X/Y in a 256-byte party-state header immediately before the roster
+/// (<see cref="CharacterFormat.PartyHeaderSize"/> bytes at <c>rosterBase − 0x100</c>). Because the Party
+/// tab already locates the roster by structure, this view-model just reads that header through a
+/// <see cref="nuint"/> supplied by the main view-model, so the live position lights up as soon as the
+/// party is found — no move-search needed.
 ///
-/// Only the X/Y are surfaced: the header's 0xD0 map-name field is <b>not</b> a reliable current-map
-/// label (it read "Ranger Ctr." with the party standing in Highpool, and no real map title is kept in
-/// guest RAM), so the Maps tab shows the trusted coordinates plus the manual Areas reference instead of
-/// a decoded name. See <c>.docs\Wasteland-Reverse-Engineering.md §2</c>.
+/// <para><b>Teleport is intentionally not offered.</b> The party-state header is a <i>write-only shadow</i>:
+/// the game copies the party's position into it every step (which is exactly what makes this readout
+/// track movement) but never reads it back to place the party. Live reverse-engineering with the
+/// DOSBox-X debug server (see <c>.docs\Wasteland-Reverse-Engineering.md §5</c>) confirmed the on-map
+/// position is virtualized — a world position, a scrolling viewport origin, a screen-cell offset and
+/// several shadow copies, all rewritten per step with the map repainted incrementally — so <b>no single
+/// memory write relocates the party</b>. Only the game's own map-load/placement code moves it, which a
+/// host-memory trainer can't drive. This tab therefore <i>reads</i> the trusted live X/Y and offers the
+/// manual Areas reference; it never writes position.</para>
 ///
-/// Teleport writes only the two position bytes (X at <see cref="CharacterFormat.HeaderPartyX"/>, Y
-/// at <see cref="CharacterFormat.HeaderPartyY"/>) on the current map. Do it while exploring, never
-/// mid-combat.
+/// Only the X/Y are surfaced: the header's 0xD0 map-name field is not a reliable current-map label (it
+/// read "Ranger Ctr." with the party standing in Highpool), so the Areas list is the manual map reference.
 /// </summary>
 public sealed class MapsViewModel : ObservableObject
 {
@@ -35,8 +37,7 @@ public sealed class MapsViewModel : ObservableObject
     // the live position, so crossing between maps doesn't blank it.
     private const int MaxStaleReads = 5;
 
-    /// <summary>Fixed schematic size. The confirmed desert overworld is 64×64; interiors are smaller,
-    /// so a target near the edge may fall outside a small interior map — pick a square inside it.</summary>
+    /// <summary>Fixed schematic size. The confirmed desert overworld is 64×64; interiors are smaller.</summary>
     private const int GridSize = 64;
 
     public int GridWidth => GridSize;
@@ -49,11 +50,8 @@ public sealed class MapsViewModel : ObservableObject
     {
         _getMem = getMem;
         _getHeaderBase = getHeaderBase;
-        TeleportCommand = new RelayCommand(_ => Teleport(), _ => CanTeleport());
         SelectedArea = Areas.FirstOrDefault();
     }
-
-    private bool IsAttached => _getMem() is { IsOpen: true };
 
     // --- reference selection -------------------------------------------------
     private MapArea? _selectedArea;
@@ -68,24 +66,6 @@ public sealed class MapsViewModel : ObservableObject
         }
     }
 
-    // --- teleport target -----------------------------------------------------
-    // Clamp to the grid, and when the clamp rewrites an out-of-range entry to the value already held
-    // (e.g. typing 100 while the target is already 63), force a notification so the text box snaps back
-    // to the clamped value instead of showing an input the model won't teleport to.
-    private int _targetX;
-    public int TargetX
-    {
-        get => _targetX;
-        set { int v = Math.Clamp(value, 0, GridSize - 1); if (!SetField(ref _targetX, v) && v != value) OnPropertyChanged(); }
-    }
-
-    private int _targetY;
-    public int TargetY
-    {
-        get => _targetY;
-        set { int v = Math.Clamp(value, 0, GridSize - 1); if (!SetField(ref _targetY, v) && v != value) OnPropertyChanged(); }
-    }
-
     // --- live position (drives the green dot on the schematic) ---------------
     private int _liveX;
     public int LiveX { get => _liveX; private set => SetField(ref _liveX, value); }
@@ -94,33 +74,27 @@ public sealed class MapsViewModel : ObservableObject
     public int LiveY { get => _liveY; private set => SetField(ref _liveY, value); }
 
     private bool _hasParty;
-    /// <summary>True once a readable live position has been found (enables the green dot and teleport).</summary>
-    public bool HasParty
-    {
-        get => _hasParty;
-        private set { if (SetField(ref _hasParty, value)) RaiseCommands(); }
-    }
+    /// <summary>True once a readable live position has been found (shows the green dot).</summary>
+    public bool HasParty { get => _hasParty; private set => SetField(ref _hasParty, value); }
 
     private string _livePosition = "";
     /// <summary>"X 55 · Y 62" once the party is located; empty otherwise. The header's map-name field
-    /// (0x0D0) is not a reliable current-map label (it read "Ranger Ctr." with the party in Highpool),
-    /// so only the trusted X/Y are surfaced — see <c>.docs\Wasteland-Reverse-Engineering.md §2</c>.</summary>
+    /// (0x0D0) is not a reliable current-map label, so only the trusted X/Y are surfaced — see
+    /// <c>.docs\Wasteland-Reverse-Engineering.md §2</c>.</summary>
     public string LivePosition { get => _livePosition; private set => SetField(ref _livePosition, value); }
 
     private string _status =
-        "Reference only until attached. Attach on the Party tab; the live position appears here automatically, then pick a target square and Teleport.";
+        "Reference only until attached. Attach on the Party tab and the live position appears here automatically.";
     public string Status { get => _status; private set => SetField(ref _status, value); }
-
-    public ICommand TeleportCommand { get; }
 
     // --- lifecycle (called by the main view-model) ---------------------------
     public void OnAttached() =>
-        Status = "Attached. Once the party is found the live position shows here; click a square (or type a target) and Teleport.";
+        Status = "Attached. Once the party is found the live position shows here; use the Areas list as a map reference.";
 
     public void OnDetached()
     {
         ClearLive();
-        Status = "Detached. Attach on the Party tab to track and teleport the party again.";
+        Status = "Detached. Attach on the Party tab to track the party again.";
     }
 
     private void ClearLive()
@@ -158,37 +132,4 @@ public sealed class MapsViewModel : ObservableObject
         LivePosition = $"X {LiveX} · Y {LiveY}";
         HasParty = true;
     }
-
-    // --- teleport ------------------------------------------------------------
-    private bool CanTeleport() => IsAttached && HasParty;
-
-    private void Teleport()
-    {
-        var mem = _getMem();
-        var headerBase = _getHeaderBase();
-        if (mem is not { IsOpen: true } || headerBase == null)
-        {
-            Status = "Attach on the Party tab and let the party be located first.";
-            return;
-        }
-
-        // Re-read the header to confirm the address is still live before writing.
-        if (mem.Read(headerBase.Value, _headerBuf, CharacterFormat.PartyHeaderSize) != CharacterFormat.PartyHeaderSize)
-        {
-            Status = "The party position could not be read — Re-scan on the Party tab, then try again.";
-            return;
-        }
-
-        // X and Y are one byte each and adjacent (0x08, 0x09). Stamp the target into the header
-        // buffer, then write back just those two bytes so nothing else in the header is touched.
-        _headerBuf[CharacterFormat.HeaderPartyX] = (byte)TargetX;
-        _headerBuf[CharacterFormat.HeaderPartyY] = (byte)TargetY;
-        bool ok = mem.WriteRange(headerBase.Value, _headerBuf, CharacterFormat.HeaderPartyX, 2);
-
-        Status = ok
-            ? $"Teleported to ({TargetX}, {TargetY}). Take one step in-game to redraw the map."
-            : "Teleport write failed — Re-scan on the Party tab and try again.";
-    }
-
-    private void RaiseCommands() => (TeleportCommand as RelayCommand)?.RaiseCanExecuteChanged();
 }

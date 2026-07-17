@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using WastelandTrainer.Game;
 using WastelandTrainer.ViewModels;
 
@@ -47,21 +46,5 @@ public partial class MainWindow : Window
         if (e.AddedItems[0] is not ItemInfo option) return;
         if (!combo.IsDropDownOpen && option.Id == vm.Id) return;
         vm.Apply(option);
-    }
-
-    // Each map square is drawn at this many pixels (matches the DrawingBrush viewport and the
-    // MapScale converter's Cell). Clicking the schematic sets the teleport target to that square;
-    // the Y axis is drawn bottom-up (origin bottom-left), so the row is flipped back to a grid Y.
-    private const double MapCell = 10;
-
-    private void Map_Click(object sender, MouseButtonEventArgs e)
-    {
-        if (sender is not FrameworkElement map || map.DataContext is not MapsViewModel vm) return;
-
-        var p = e.GetPosition(map);
-        int x = (int)Math.Floor(p.X / MapCell);
-        int y = vm.GridHeight - 1 - (int)Math.Floor(p.Y / MapCell);
-        vm.TargetX = Math.Clamp(x, 0, vm.GridWidth - 1);
-        vm.TargetY = Math.Clamp(y, 0, vm.GridHeight - 1);
     }
 }

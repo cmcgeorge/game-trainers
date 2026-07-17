@@ -55,9 +55,9 @@ public static class Walkthrough
             "the Core Terminal to trigger self-destruction, and escape before it detonates to win."),
 
         new("Trainer tips",
-            "Teleport only moves the party within the map it is already on — walk to the target map first, and never " +
-            "teleport mid-combat. Freeze CON to stay at full constitution during exploration. \"Max\" actions are " +
-            "conservative caps; verify a change in-game (open the character or inventory screen) before trusting it, " +
-            "and keep a save from before you started editing."),
+            "The Maps tab shows your live position but can't teleport — Wasteland never reads that value back, so " +
+            "there's no position to write (see the README). Freeze CON to stay at full constitution during " +
+            "exploration. \"Max\" actions are conservative caps; verify a change in-game (open the character or " +
+            "inventory screen) before trusting it, and keep a save from before you started editing."),
     };
 }

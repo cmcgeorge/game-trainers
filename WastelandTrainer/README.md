@@ -7,10 +7,9 @@ roster in the emulated memory, and lets you edit every ranger live — the seven
 gender and nationality — with party-wide **Freeze Health (CON)** and **Freeze Ammo** toggles and
 one-click **max** actions, both per-character and party-wide. A **Create** tab **auto-re-rolls a new
 ranger** on the Ranger Center create screen until it meets the minimums you set. A **Maps** tab reads
-the party's live map and X/Y from memory
-and **teleports** the squad within the current map; a **References** tab explains what each
-**attribute** does, and lists skills, item ids, the game's own **paragraph** book, and a condensed
-**strategy** guide.
+the party's live X/Y from memory as a "where am I" readout (teleport is not offered — see
+[Maps & live position](#maps--live-position)); a **References** tab explains what each **attribute**
+does, and lists skills, item ids, the game's own **paragraph** book, and a condensed **strategy** guide.
 
 > Single-player cheat tool for your own game. Nothing here touches other machines or online services.
 
@@ -127,15 +126,23 @@ just means more re-rolls, never a corrupt character. (This mirrors the Might and
 
 ---
 
-## Maps & teleport
+## Maps & live position
 
-Wasteland keeps the party's live X/Y and the current 12-byte map name in a 256-byte **party-state
-header** that sits immediately before the roster (`rosterBase − 0x100`). Because the Party tab
-already locates the roster, the **Maps** tab reads that header directly — so the live map name and
-position appear as soon as the party is found, with **no move-search** needed (unlike the Dragon
-Wars trainer). Click any square on the 64×64 schematic (or type a target X/Y) and press
-**Teleport** to write the two position bytes. Teleport only moves the party *within the map it is
-already on* — walk to the target map first, and never teleport mid-combat.
+Wasteland keeps the party's live X/Y in a 256-byte **party-state header** that sits immediately
+before the roster (`rosterBase − 0x100`). Because the Party tab already locates the roster, the
+**Maps** tab reads that header directly — so the live position and the green dot on the 64×64
+schematic appear as soon as the party is found, with **no move-search** needed (unlike the Dragon
+Wars trainer).
+
+**Teleport is deliberately not offered.** It looks like it should be a two-byte write, but a live
+debugger investigation (DOSBox-X debug server; see `.docs\Wasteland-Reverse-Engineering.md §5`)
+proved the party-state header is a *write-only shadow*: the game copies the party's position into it
+every step — which is what makes this readout track movement — but **never reads it back** to place
+the party. The real on-map position is virtualized (a world position, a scrolling viewport origin,
+a screen-cell offset and several shadow copies, all rewritten per step with the map repainted
+incrementally), so **no single memory write relocates the party**. Only the game's own
+map-load/placement code moves it, which a host-memory trainer can't drive. So the Maps tab reads
+position and offers the Areas reference; it never writes.
 
 The **Areas** list is a descriptive reference (each town/dungeon and its landmarks). Interior grid
 coordinates are not reproduced because they were not confirmed against live memory — only the
@@ -219,10 +226,12 @@ shared `GameTrainers.Common` library rather than being duplicated here.
 ## Notes & caveats
 
 - Tested logic: the record parser and the packed skill/inventory decoding are verified by
-  `FormatCheck` against the bundled roster bytes. The live attach/scan/teleport path needs the game
-  running to exercise.
+  `FormatCheck` against the bundled roster bytes. The live attach/scan path needs the game running to
+  exercise.
 - Edits take effect the next time the game reads the field (e.g. opening the character or inventory
-  screen; take one step after a teleport to redraw the map).
+  screen).
+- No teleport: writing the party position does nothing because the game never reads it back — see
+  [Maps & live position](#maps--live-position).
 - The per-character weapon/equip byte (`0x1F`) and the unidentified padding regions are deliberately
   left untouched.
 - Setting values very high is safe for the trainer, though the game's own UI may render unusually
