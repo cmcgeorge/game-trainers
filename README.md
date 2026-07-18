@@ -11,6 +11,7 @@ Each game lives in its own self-contained folder with its own solution/project, 
 | `AutoduelTrainer/` | Autoduel (Origin Systems, 1985) | net9.0-windows |
 | `BardsTale1Trainer/` | The Bard's Tale: Tales of the Unknown, Vol. I (1987) | net8.0-windows |
 | `BattleTech1Trainer/` | BattleTech: The Crescent Hawk's Inception (Westwood/Infocom, 1988) | net8.0-windows |
+| `DarklandsTrainer/` | Darklands (MicroProse, 1992) | net8.0-windows |
 | `DragonWarsTrainer/` | Dragon Wars (Interplay, 1989) | net8.0-windows |
 | `KeefTrainer/` | Keef the Thief (EA / Naughty Dog, 1989) | net9.0-windows |
 | `LordsOfTheRealmTrainer/` | Lords of the Realm | net9.0-windows |
@@ -29,7 +30,7 @@ Each game lives in its own self-contained folder with its own solution/project, 
 
 ### Shared library
 
-`GameTrainers.Common/` is a small shared library holding the game-agnostic plumbing that used to be copied between trainers: the process/guest-memory access layer (`GameTrainers.Common.Memory`) and the hand-rolled MVVM base types (`GameTrainers.Common.Mvvm`). The MM1-family trainers — `MightAndMagic1Trainer`, `BardsTale1Trainer`, and `PoolOfRadianceTrainer` — reference it instead of duplicating that code, as do `DragonWarsTrainer`, `MinesOfTitanTrainer`, `WarOfTheLanceTrainer`, `ThePerfectGeneral2Trainer`, `BattleTech1Trainer`, `QuestForGlory1Trainer`, and `WastelandTrainer`; each keeps only its own game-specific locators and scanners. `WastelandTrainer` locates the party by **structure** (an array of seven contiguous 256-byte records that pack from slot 0) rather than by a static anchor, and teleports by writing the party's X/Y into the party-state header that precedes the roster. `ThePerfectGeneral2Trainer`, `BattleTech1Trainer`, and `QuestForGlory1Trainer` drive Common's `MemorySearcher` as a Cheat-Engine-style value scanner rather than a fixed locator, because their live game state has no stable static signature to anchor to (`BattleTech1Trainer` additionally uses Common's `BytePatternScanner` to *detect* the game via its read-only EXE strings; `QuestForGlory1Trainer` additionally exposes a Day/Time editor and a Teleport editor that write directly to SCI0 global variables once their addresses are scanned and pinned). The remaining trainers are still self-contained.
+`GameTrainers.Common/` is a small shared library holding the game-agnostic plumbing that used to be copied between trainers: the process/guest-memory access layer (`GameTrainers.Common.Memory`) and the hand-rolled MVVM base types (`GameTrainers.Common.Mvvm`). The MM1-family trainers — `MightAndMagic1Trainer`, `BardsTale1Trainer`, and `PoolOfRadianceTrainer` — reference it instead of duplicating that code, as do `DragonWarsTrainer`, `MinesOfTitanTrainer`, `WarOfTheLanceTrainer`, `ThePerfectGeneral2Trainer`, `BattleTech1Trainer`, `QuestForGlory1Trainer`, `DarklandsTrainer`, and `WastelandTrainer`; each keeps only its own game-specific locators and scanners. `WastelandTrainer` locates the party by **structure** (an array of seven contiguous 256-byte records that pack from slot 0) rather than by a static anchor, and teleports by writing the party's X/Y into the party-state header that precedes the roster. `ThePerfectGeneral2Trainer`, `BattleTech1Trainer`, `QuestForGlory1Trainer`, and `DarklandsTrainer` drive Common's `MemorySearcher` as a Cheat-Engine-style value scanner rather than a fixed locator, because their live game state has no stable static signature to anchor to (`BattleTech1Trainer` additionally uses Common's `BytePatternScanner` to *detect* the game via its read-only EXE strings; `QuestForGlory1Trainer` additionally exposes a Day/Time editor and a Teleport editor that write directly to SCI0 global variables once their addresses are scanned and pinned; `DarklandsTrainer` targets a PKLITE-packed, extender-relocated EXE that has no reliable detection signature either, so it has neither a locator nor a detector and keeps only its Confirmed attribute/skill/currency/Fame reference tables and a read-only DEFAULT-save reader). The remaining trainers are still self-contained.
 
 ## Prerequisites
 
@@ -77,10 +78,10 @@ Shared options (identical for the root launcher and every trainer):
 - **`-Test`** — run the trainer's verification harness (warns if it has none).
 - **`-Publish`** — publish a single self-contained win-x64 exe; skips launch.
 
-Only `BardsTale1Trainer`, `BattleTech1Trainer`, `DragonWarsTrainer`, `MightAndMagic1Trainer`,
-`MinesOfTitanTrainer`, `PoolOfRadianceTrainer`, `SwordOfTheSamuraiTrainer`, `ThePerfectGeneral2Trainer`,
-`WarOfTheLanceTrainer`, and `WastelandTrainer` ship a verification harness; `-Test` warns and is ignored
-on the others (including `QuestForGlory1Trainer`). `SwordOfTheSamuraiTrainer` also has `.\Edit-SotsSave.ps1` for offline save editing.
+Only `BardsTale1Trainer`, `BattleTech1Trainer`, `DarklandsTrainer`, `DragonWarsTrainer`,
+`MightAndMagic1Trainer`, `MinesOfTitanTrainer`, `PoolOfRadianceTrainer`, `SwordOfTheSamuraiTrainer`,
+`ThePerfectGeneral2Trainer`, `WarOfTheLanceTrainer`, and `WastelandTrainer` ship a verification harness;
+`-Test` warns and is ignored on the others (including `QuestForGlory1Trainer`). `SwordOfTheSamuraiTrainer` also has `.\Edit-SotsSave.ps1` for offline save editing.
 
 You can always build directly with the SDK:
 
