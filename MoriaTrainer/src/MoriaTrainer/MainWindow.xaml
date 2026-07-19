@@ -1,0 +1,564 @@
+<Window x:Class="MoriaTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="UMoria 5.5.2 Trainer" Height="720" Width="960"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+        <Style x:Key="Header" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Background="#EEE" Padding="6">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Process:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <ComboBox Width="300" ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                          SelectedItem="{Binding SelectedProcess}"/>
+                <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                <Button Content="Detach" Command="{Binding DetachCommand}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+        </Border>
+
+        <TabControl Margin="6">
+            <!-- Character (value scanner + guided scans + freeze table) -->
+            <TabItem Header="Character">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <ComboBox Width="80" ItemsSource="{Binding Widths}"
+                                          SelectedItem="{Binding SelectedWidth}"
+                                          IsEnabled="{Binding NotScanning}"
+                                          ToolTip="Byte, 16-bit or 32-bit value. Changing this starts a new scan."/>
+                                <TextBlock Text="Value:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Width="120" Text="{Binding ScanText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Decimal (30) or hex (0x1E). Leave blank for an unknown-value first scan."/>
+                                <Button Content="First Scan" Command="{Binding FirstScanCommand}"/>
+                                <Button Content="New Scan" Command="{Binding NewScanCommand}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="Narrow:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <Button Content="Exact" Command="{Binding NextScanCommand}" CommandParameter="Exact"/>
+                                <Button Content="Increased" Command="{Binding NextScanCommand}" CommandParameter="Increased"/>
+                                <Button Content="Decreased" Command="{Binding NextScanCommand}" CommandParameter="Decreased"/>
+                                <Button Content="Changed" Command="{Binding NextScanCommand}" CommandParameter="Changed"/>
+                                <Button Content="Unchanged" Command="{Binding NextScanCommand}" CommandParameter="Unchanged"/>
+                                <TextBlock Text="{Binding MatchCount}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                           FontWeight="Bold"/>
+                            </StackPanel>
+                            <TextBlock Text="Guided scans (one click sets width + a sensible default; read the value in-game and First Scan):"
+                                       Margin="0,6,0,2" Style="{StaticResource Header}"/>
+                            <ItemsControl ItemsSource="{Binding Recipes}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding DisplayName}"
+                                                Command="{Binding DataContext.GuideScanCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip="{Binding Notes}"
+                                                Margin="2,2,2,2" Padding="6,2"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Bottom" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Pin selected →" Command="{Binding PinCommand}"
+                                    ToolTip="Add the selected candidate to the freeze table to edit or freeze it."/>
+                            <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
+                                       Text="Survivors below — narrow until one row remains, then Pin it."/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                              IsReadOnly="True" HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="220"/>
+                            <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Stats (auto-detect + live character dashboard + freeze shortcuts) -->
+            <TabItem Header="Stats">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Header}"
+                                       Text="Auto-detect the player struct by scanning for Gold + Max HP, then live-edit any field or freeze it."/>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="Max HP:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBox Width="70" Text="{Binding Character.HintMaxHp, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Max HP shown on the C screen (e.g. 10)"/>
+                                <TextBlock Text="Gold:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Width="90" Text="{Binding Character.HintGold, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Gold shown on the C screen (e.g. 536) — use a distinctive value"/>
+                                <Button Content="Auto-Detect" Command="{Binding Character.AutoDetectCommand}" Margin="8,0,2,0"
+                                        ToolTip="Scan memory for the player struct using Gold as the primary anchor."/>
+                                <Button Content="Reset" Command="{Binding Character.ResetCommand}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <TextBlock Text="Quick freeze:" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#555"/>
+                                <CheckBox Content="HP (invincible)" IsChecked="{Binding Character.FreezeHp}"
+                                          IsEnabled="{Binding Character.IsLocated}" Margin="0,0,10,0"
+                                          ToolTip="Re-write Cur HP = Max HP every 200 ms."/>
+                                <CheckBox Content="Mana (infinite spells)" IsChecked="{Binding Character.FreezeMana}"
+                                          IsEnabled="{Binding Character.IsLocated}" Margin="0,0,10,0"
+                                          ToolTip="Re-write Cur Mana = Max Mana every 200 ms."/>
+                                <CheckBox Content="Food (never starve)" IsChecked="{Binding Character.FreezeFood}"
+                                          IsEnabled="{Binding Character.IsLocated}"
+                                          ToolTip="Re-write Food counter to 15000 every 200 ms."/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Bottom" Background="#F6F6F6" Padding="6">
+                        <TextBlock Text="{Binding Character.Status}" TextWrapping="Wrap" Foreground="#333"/>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Character.Pins}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                              HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Field"   Binding="{Binding Label}"     IsReadOnly="True" Width="90"/>
+                            <DataGridTextColumn Header="Address" Binding="{Binding Address, StringFormat='0x{0:X}'}" IsReadOnly="True" Width="160"/>
+                            <DataGridTextColumn Header="Type"    Binding="{Binding Width}"      IsReadOnly="True" Width="60"/>
+                            <DataGridTextColumn Header="Live"    Binding="{Binding Live}"       IsReadOnly="True" Width="80"/>
+                            <DataGridTextColumn Header="Target"
+                                                Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="*"/>
+                            <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="60"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Live Inventory (scan-based, Candidate struct offsets) -->
+            <TabItem Header="Inventory">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Header}"
+                                       Text="Live inventory editor (Candidate confidence — struct offsets from source, not Ghidra-confirmed). Verify before editing."/>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="Slot letter:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBox Width="30" Text="{Binding LiveInventory.HintSlot, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Pack slot letter of the anchor item (a–v)."/>
+                                <TextBlock Text="tval:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Width="60" Text="{Binding LiveInventory.HintTval, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Item type byte for the anchor item. See Items reference tab (e.g. sword=5, potion=26, scroll=25)."/>
+                                <Button Content="Locate" Command="{Binding LiveInventory.LocateCommand}" Margin="8,0,2,0"
+                                        ToolTip="Scan memory for the inventory array using the anchor tval."/>
+                                <Button Content="Reset" Command="{Binding LiveInventory.ResetCommand}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <Button Content="Set Qty" Command="{Binding LiveInventory.WriteNumberCommand}"
+                                        ToolTip="Write the Qty field of the selected slot."/>
+                                <Button Content="Set Charges/P1" Command="{Binding LiveInventory.WriteChargesCommand}"
+                                        ToolTip="Write the Charges/P1 field of the selected slot (wands, staves, bonuses)."/>
+                                <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#777" FontSize="11"
+                                           Text="Edit Qty or Charges in the grid, then click the matching Set button."/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Bottom" Background="#F6F6F6" Padding="6">
+                        <TextBlock Text="{Binding LiveInventory.Status}" TextWrapping="Wrap" Foreground="#333"/>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding LiveInventory.Slots}"
+                              SelectedItem="{Binding LiveInventory.Selected}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                              HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Slot"     Binding="{Binding SlotLabel}"    IsReadOnly="True" Width="55"/>
+                            <DataGridTextColumn Header="tval"     Binding="{Binding Tval}"         IsReadOnly="True" Width="45"/>
+                            <DataGridTextColumn Header="Category" Binding="{Binding CategoryName}" IsReadOnly="True" Width="130"/>
+                            <DataGridTextColumn Header="Live Qty" Binding="{Binding Number}"       IsReadOnly="True" Width="65"/>
+                            <DataGridTextColumn Header="Qty"      Binding="{Binding EditNumber, UpdateSourceTrigger=PropertyChanged}" Width="55"/>
+                            <DataGridTextColumn Header="Live P1"  Binding="{Binding P1}"           IsReadOnly="True" Width="65"/>
+                            <DataGridTextColumn Header="Charges/P1" Binding="{Binding EditCharges, UpdateSourceTrigger=PropertyChanged}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Map Reveal -->
+            <TabItem Header="Map Reveal">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Header}"
+                                       Text="Locate cave[66][198] by its permanent-wall boundary signature, then set fm=1 on all cells to reveal the full level."/>
+                            <TextBlock Margin="0,2,0,6" Foreground="#555" TextWrapping="Wrap"
+                                       Text="Must be inside a dungeon level (not the town). After descending a staircase, Reset and Locate Cave again."/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Locate Cave" Command="{Binding DungeonMap.LocateCaveCommand}"
+                                        ToolTip="Scan memory for the cave[] grid using the row-0 FvalPermWall signature."/>
+                                <Button Content="Reveal Map" Command="{Binding DungeonMap.RevealMapCommand}" Margin="4,0,0,0"
+                                        ToolTip="Write fm=1 to all cells; then press 'm' in-game to see the full level."/>
+                                <Button Content="Reset" Command="{Binding DungeonMap.ResetCommand}" Margin="4,0,0,0"/>
+                                <TextBlock VerticalAlignment="Center" Margin="12,0,0,0" Foreground="#555">
+                                    <Run Text="cave[] address: "/>
+                                    <Run Text="{Binding DungeonMap.CaveAddressHex}" FontFamily="Consolas"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Bottom" Background="#F6F6F6" Padding="6">
+                        <TextBlock Text="{Binding DungeonMap.Status}" TextWrapping="Wrap" Foreground="#333"/>
+                    </Border>
+                    <TextBlock Margin="12" Foreground="#888" TextWrapping="Wrap" FontSize="13">
+                        <Run FontWeight="Bold">How it works: </Run>
+                        <Run Text="The dungeon is stored as a 66×198 grid of 4-byte cells (fval / lr / fm / tl). Setting 'fm' (field-mark) to 1 on every cell tells the game the player has already seen that cell. Press 'm' in-game to view the full map. Cell contents (monsters, items) are not changed. The cave grid is regenerated each time you enter a new level, so you need to click Reveal Map again after every staircase or Word of Recall."/>
+                    </TextBlock>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Freeze table -->
+            <TabItem Header="Freeze">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Freeze all" Command="{Binding FreezeAllCommand}"/>
+                            <Button Content="Remove selected" Command="{Binding RemoveFrozenCommand}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
+                                       Text="Edit Target to poke a value; tick Freeze to re-write it every ~200 ms."/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Frozen}" SelectedItem="{Binding SelectedFrozen}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                              HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Label" Binding="{Binding Label}" Width="140"/>
+                            <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" IsReadOnly="True" Width="200"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding WidthLabel}" IsReadOnly="True" Width="70"/>
+                            <DataGridTextColumn Header="Live" Binding="{Binding Live}" IsReadOnly="True" Width="90"/>
+                            <DataGridTextColumn Header="Target"
+                                                Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="*"/>
+                            <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="70"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Teleport -->
+            <TabItem Header="Teleport">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Header}"
+                                       Text="Locate char_row / char_col by relative scan, then write them to teleport."/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Snapshot Position" Command="{Binding Teleport.SnapshotCommand}"
+                                        ToolTip="Capture an unknown-value Int16 baseline across all committed memory."/>
+                                <Button Content="Reset" Command="{Binding Teleport.ResetScanCommand}"/>
+                                <TextBlock Text="{Binding Teleport.MatchCount}" VerticalAlignment="Center" Margin="12,0,0,0" FontWeight="Bold"/>
+                            </StackPanel>
+                            <TextBlock Margin="0,6,0,2" Text="Walk one square in-game, then click the matching Walked button:"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Walked N (row−1)" Command="{Binding Teleport.WalkedNorthCommand}"/>
+                                <Button Content="Walked S (row+1)" Command="{Binding Teleport.WalkedSouthCommand}"/>
+                                <Button Content="Walked E (col+1)" Command="{Binding Teleport.WalkedEastCommand}"/>
+                                <Button Content="Walked W (col−1)" Command="{Binding Teleport.WalkedWestCommand}"/>
+                                <Button Content="Stayed" Command="{Binding Teleport.StayedCommand}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Bottom" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Live X (col):" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text="{Binding Teleport.LiveX}" VerticalAlignment="Center" Margin="0,0,12,0" Width="60"/>
+                            <TextBlock Text="Live Y (row):" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text="{Binding Teleport.LiveY}" VerticalAlignment="Center" Margin="0,0,12,0" Width="60"/>
+                            <TextBlock Text="Col addr:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text="{Binding Teleport.ColAddressHex}" VerticalAlignment="Center" Margin="0,0,12,0" Width="140"/>
+                            <TextBlock Text="Row addr:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text="{Binding Teleport.RowAddressHex}" VerticalAlignment="Center" Margin="0,0,12,0" Width="140"/>
+                        </StackPanel>
+                    </Border>
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <DataGrid Grid.Column="0"
+                                  ItemsSource="{Binding Teleport.Candidates}"
+                                  SelectedItem="{Binding Teleport.SelectedCandidate}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="220"/>
+                                <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <StackPanel Grid.Column="1" Margin="6,0,0,0" Width="260">
+                            <TextBlock Text="Pin the located globals:" Style="{StaticResource Header}"/>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Pin as Col" Command="{Binding Teleport.PinAsColCommand}"
+                                        ToolTip="Mark the selected candidate as char_col."/>
+                                <Button Content="Pin as Row" Command="{Binding Teleport.PinAsRowCommand}"
+                                        ToolTip="Mark the selected candidate as char_row."/>
+                            </StackPanel>
+                            <TextBlock Text="Teleport target (write both):" Margin="0,12,0,2" Style="{StaticResource Header}"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="X (col 0..197):" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBox Width="60" Text="{Binding Teleport.TargetX, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Y (row 0..65):" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <TextBox Width="60" Text="{Binding Teleport.TargetY, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                            <Button Content="Teleport" Command="{Binding Teleport.TeleportCommand}" Margin="0,8,0,0"
+                                    ToolTip="Write the target column and row to the pinned globals."/>
+                            <TextBlock Text="{Binding Teleport.Status}" TextWrapping="Wrap" Margin="0,12,0,0" Foreground="#555"/>
+                        </StackPanel>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Maps (the 51-level descent reference; dungeon layouts are procedural) -->
+            <TabItem Header="Maps">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="The dungeon rebuilds every descent — there are no fixed maps. This tab documents what each depth contains."
+                                       Foreground="#555" TextWrapping="Wrap" MaxWidth="700"/>
+                            <Button Content="Jump to Balrog level" Command="{Binding Maps.SelectBalrogCommand}" Margin="12,0,0,0"/>
+                        </StackPanel>
+                    </Border>
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="260"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <DataGrid Grid.Column="0"
+                                  ItemsSource="{Binding Maps.Levels}"
+                                  SelectedItem="{Binding Maps.Selected}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Depth" Binding="{Binding Depth}" Width="50"/>
+                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                                <DataGridTextColumn Header="Feet" Binding="{Binding Feet}" Width="60"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <TextBox Grid.Column="1" Margin="6,0,0,0"
+                                 Text="{Binding Maps.Detail, Mode=OneWay}" IsReadOnly="True"
+                                 TextWrapping="Wrap" FontFamily="Consolas" VerticalScrollBarVisibility="Auto"
+                                 Background="#FAFAFA" Padding="6"/>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Paragraphs (monster memory reference) -->
+            <TabItem Header="Paragraphs">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Filter (name or flag):" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBox Width="180" Text="{Binding Paragraphs.Filter, UpdateSourceTrigger=PropertyChanged}"/>
+                            <Button Content="Clear" Command="{Binding Paragraphs.ClearFilterCommand}"/>
+                            <TextBlock Text="{Binding Paragraphs.Creatures.Count, StringFormat='{}{0} creatures'}"
+                                       VerticalAlignment="Center" Margin="12,0,0,0" Foreground="#555"/>
+                        </StackPanel>
+                    </Border>
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="360"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <DataGrid Grid.Column="0"
+                                  ItemsSource="{Binding Paragraphs.Creatures}"
+                                  SelectedItem="{Binding Paragraphs.Selected}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="40"/>
+                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                                <DataGridTextColumn Header="Lvl" Binding="{Binding Level}" Width="40"/>
+                                <DataGridTextColumn Header="Sym" Binding="{Binding Symbol}" Width="40"/>
+                                <DataGridTextColumn Header="XP" Binding="{Binding Exp}" Width="70"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <TextBox Grid.Column="1" Margin="6,0,0,0"
+                                 Text="{Binding Paragraphs.Paragraph, Mode=OneWay}" IsReadOnly="True"
+                                 TextWrapping="Wrap" FontFamily="Consolas" VerticalScrollBarVisibility="Auto"
+                                 Background="#FAFAFA" Padding="6"/>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Items reference -->
+            <TabItem Header="Items">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBox Width="180" Text="{Binding Items.Filter, UpdateSourceTrigger=PropertyChanged}"/>
+                            <Button Content="Clear" Command="{Binding Items.ClearFilterCommand}"/>
+                            <TextBlock Text="{Binding Items.Items.Count, StringFormat='{}{0} categories'}"
+                                       VerticalAlignment="Center" Margin="12,0,0,0" Foreground="#555"/>
+                        </StackPanel>
+                    </Border>
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="360"/>
+                        </Grid.ColumnDefinitions>
+                        <DataGrid Grid.Column="0"
+                                  ItemsSource="{Binding Items.Items}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="tval" Binding="{Binding TvalHex}" Width="60"/>
+                                <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="120"/>
+                                <DataGridTextColumn Header="Char" Binding="{Binding DisplayChar}" Width="40"/>
+                                <DataGridTextColumn Header="Examples" Binding="{Binding Examples}" Width="*"/>
+                                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <DockPanel Grid.Column="1" Margin="6,0,0,0">
+                            <TextBlock DockPanel.Dock="Top" Text="Ego weapons" Style="{StaticResource Header}"/>
+                            <DataGrid DockPanel.Dock="Top" Height="120"
+                                      ItemsSource="{Binding Items.EgoWeapons}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      IsReadOnly="True" HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Code" Binding="{Binding Item1}" Width="50"/>
+                                    <DataGridTextColumn Header="Name" Binding="{Binding Item2}" Width="120"/>
+                                    <DataGridTextColumn Header="Effect" Binding="{Binding Item3}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <TextBlock DockPanel.Dock="Top" Text="Crowns" Style="{StaticResource Header}" Margin="0,6,0,0"/>
+                            <DataGrid DockPanel.Dock="Top" Height="120"
+                                      ItemsSource="{Binding Items.Crowns}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      IsReadOnly="True" HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Name" Binding="{Binding Item1}" Width="160"/>
+                                    <DataGridTextColumn Header="Effect" Binding="{Binding Item2}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <TextBlock DockPanel.Dock="Top" Text="Wearable flags" Style="{StaticResource Header}" Margin="0,6,0,0"/>
+                            <DataGrid DockPanel.Dock="Top"
+                                      ItemsSource="{Binding Items.WearableFlags}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      IsReadOnly="True" HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Code" Binding="{Binding Item1}" Width="50"/>
+                                    <DataGridTextColumn Header="Effect" Binding="{Binding Item2}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Reference (races / classes / spells) -->
+            <TabItem Header="Reference">
+                <TabControl Margin="4">
+                    <TabItem Header="Races">
+                        <DataGrid ItemsSource="{Binding Reference.Races}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Race" Binding="{Binding Name}" Width="100"/>
+                                <DataGridTextColumn Header="Classes" Binding="{Binding AllowedClasses}" Width="120"/>
+                                <DataGridTextColumn Header="Adjustments" Binding="{Binding KeyAdjustments}" Width="*"/>
+                                <DataGridCheckBoxColumn Header="Infravision" Binding="{Binding Infravision}" Width="80"/>
+                                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Classes">
+                        <DataGrid ItemsSource="{Binding Reference.Classes}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Class" Binding="{Binding Name}" Width="90"/>
+                                <DataGridTextColumn Header="Prime" Binding="{Binding PrimeStat}" Width="60"/>
+                                <DataGridTextColumn Header="Hit Die" Binding="{Binding HitDie}" Width="60"/>
+                                <DataGridTextColumn Header="Mana" Binding="{Binding ManaBasis}" Width="100"/>
+                                <DataGridTextColumn Header="Skill Gain (Fight/Bow/Device/Disarm/Throw)" Binding="{Binding SkillRow}" Width="240"/>
+                                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Mage Spells">
+                        <DataGrid ItemsSource="{Binding Reference.MageSpells}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Letter" Binding="{Binding Letter}" Width="50"/>
+                                <DataGridTextColumn Header="Spell" Binding="{Binding Name}" Width="180"/>
+                                <DataGridTextColumn Header="Lvl" Binding="{Binding MinLevel}" Width="40"/>
+                                <DataGridTextColumn Header="Mana" Binding="{Binding ManaCost}" Width="50"/>
+                                <DataGridTextColumn Header="Book" Binding="{Binding Book}" Width="*"/>
+                                <DataGridTextColumn Header="Effect" Binding="{Binding Effect}" Width="*"/>
+                                <DataGridTextColumn Header="Damage" Binding="{Binding Damage}" Width="70"/>
+                                <DataGridTemplateColumn Header="Copy" Width="48">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="Copy"
+                                                    Command="{Binding DataContext.Reference.CopySpellLetterCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    Padding="4,1" Margin="1"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Priest Prayers">
+                        <DataGrid ItemsSource="{Binding Reference.PriestPrayers}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Letter" Binding="{Binding Letter}" Width="50"/>
+                                <DataGridTextColumn Header="Prayer" Binding="{Binding Name}" Width="180"/>
+                                <DataGridTextColumn Header="Lvl" Binding="{Binding MinLevel}" Width="40"/>
+                                <DataGridTextColumn Header="Mana" Binding="{Binding ManaCost}" Width="50"/>
+                                <DataGridTextColumn Header="Book" Binding="{Binding Book}" Width="*"/>
+                                <DataGridTextColumn Header="Effect" Binding="{Binding Effect}" Width="*"/>
+                                <DataGridTextColumn Header="Damage" Binding="{Binding Damage}" Width="70"/>
+                                <DataGridTemplateColumn Header="Copy" Width="48">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="Copy"
+                                                    Command="{Binding DataContext.Reference.CopySpellLetterCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"
+                                                    Padding="4,1" Margin="1"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>
