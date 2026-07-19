@@ -55,6 +55,9 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public LiveInventoryViewModel LiveInventory { get; } = new();
     public MapsViewModel Maps { get; } = new();
 
+    /// <summary>Auto-re-rolls a new character on the create-a-character screen until a target roll is hit.</summary>
+    public CharacterRollerViewModel Roller { get; }
+
     // --- state ---------------------------------------------------------------
     private ProcessEntry? _selectedProcess;
     public ProcessEntry? SelectedProcess { get => _selectedProcess; set { SetProperty(ref _selectedProcess, value); RaiseCommands(); } }
@@ -178,6 +181,11 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _poll.Tick += (_, _) => PollTick();
 
+        Roller = new CharacterRollerViewModel(
+            () => _mem,
+            () => IsAttached ? SelectedProcess?.Id : null,
+            s => Status = s);
+
         RefreshProcesses();
     }
 
@@ -219,6 +227,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             Maps.Attach(_mem);
             OnPropertyChanged(nameof(IsAttached));
             RaiseCommands();
+            Roller.RefreshCommands();   // the roller can act now that we're attached
             _poll.Start();
             Status = $"Attached to {SelectedProcess.Name} (pid {SelectedProcess.Id}). Now Scan for the party.";
             Scan();
@@ -233,6 +242,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     {
         _poll.Stop();
         _scanCts?.Cancel();
+        Roller.Reset();          // stop the roll loop before disposing the handle; the locked roll
+                                 // address belonged to the process we're leaving anyway
         MemorySearch.Detach();
         LiveInventory.Detach();
         Maps.Detach();
@@ -361,6 +372,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         _hotkeys?.Dispose();
         _scanCts?.Cancel();
         _scanCts?.Dispose();
+        Roller.Reset();          // stop any in-flight roll loop before the handle closes
         _mem?.Dispose();
     }
 }

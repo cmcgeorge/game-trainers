@@ -23,6 +23,9 @@
   <ItemGroup>
     <Using Include="GameTrainers.Common.Memory.ProcessMemory" Alias="ProcessMemory" />
     <Using Include="GameTrainers.Common.Memory.MemoryRegion" Alias="MemoryRegion" />
+    <!-- The create-screen roller taps the 'n' key to re-roll via Common's scancode-based SendInput
+         wrapper; it works with DOSBox/SDL emulators where PostMessage can't. -->
+    <Using Include="GameTrainers.Common.Memory.KeyboardSender" Alias="KeyboardSender" />
   </ItemGroup>
 
 </Project>

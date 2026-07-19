@@ -884,6 +884,283 @@
                         </ScrollViewer>
                     </Border>
                 </TabItem>
+
+                <!-- ======================= CREATE (auto re-roll on the create-a-character screen) ======================= -->
+                <TabItem Header="🎲 Create" DataContext="{Binding Roller}">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="4" MaxWidth="640" HorizontalAlignment="Left">
+                                <TextBlock Text="Roll a hero" Style="{StaticResource Section}"/>
+                                <TextBlock TextWrapping="Wrap" Style="{StaticResource Hint}" Margin="0,0,0,8"
+                                           Text="Automates the 'Create a character' re-roll: it taps the n key for you (answering 'no' to 'keep character (y/n)?') and reads each fresh roll straight from the game's memory, stopping when your target is hit. The freshly-rolled stats aren't a saved character yet, so the trainer first has to find them — type the numbers currently on the create screen, click Lock onto roll, then set a target and Roll. Attach to the game and open the create-a-character screen first."/>
+
+                                <!-- 1 · capture the on-screen roll to locate it in memory -->
+                                <Border Background="{StaticResource Panel2}" BorderBrush="{StaticResource Line}"
+                                        BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,4,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="1 · Capture the current roll" Style="{StaticResource Section}" Margin="0"/>
+                                        <TextBlock TextWrapping="Wrap" Style="{StaticResource Hint}" Margin="0,0,0,6"
+                                                   Text="Enter the values exactly as they show on the create screen. 'Live' fills in once locked, and updates on every roll. STR% is 0 for non-fighters. HP is optional but lets the trainer confirm the record and re-roll for hit points too."/>
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Stat" Style="{StaticResource Hint}"/>
+                                            <TextBlock Grid.Column="1" Text="On screen" Style="{StaticResource Hint}"/>
+                                            <TextBlock Grid.Column="2" Text="Live" Style="{StaticResource Hint}"/>
+                                        </Grid>
+                                        <ItemsControl ItemsSource="{Binding Stats}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,1">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="90"/>
+                                                            <ColumnDefinition Width="90"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                                                   ToolTip="{Binding Description}"/>
+                                                        <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                                 Text="{Binding CapturedText, UpdateSourceTrigger=LostFocus}"/>
+                                                        <TextBlock Grid.Column="2" Text="{Binding LiveText}" VerticalAlignment="Center"
+                                                                   FontFamily="Consolas" Foreground="{StaticResource Accent}"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <!-- Total of the six abilities (excludes STR% and HP). -->
+                                        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,2"/>
+                                        <Grid Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                       ToolTip="Sum of the six abilities (STR, INT, WIS, DEX, CON, CHA); excludes STR% and HP."/>
+                                            <TextBlock Grid.Column="1" Text="{Binding CapturedTotalText}" VerticalAlignment="Center" Style="{StaticResource Hint}"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding LiveTotalText}" VerticalAlignment="Center"
+                                                       FontFamily="Consolas" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+                                        </Grid>
+                                        <!-- STR% (part of the signature; always tracked; targetable for fighters). -->
+                                        <Grid Margin="0,1" DataContext="{Binding StrPercent}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                                       ToolTip="{Binding Description}"/>
+                                            <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                     Text="{Binding CapturedText, UpdateSourceTrigger=LostFocus}"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding LiveText}" VerticalAlignment="Center"
+                                                       FontFamily="Consolas" Foreground="{StaticResource Accent}"/>
+                                        </Grid>
+                                        <!-- HP (own row: tracked only when the record shape is confirmed). -->
+                                        <Grid Margin="0,1" DataContext="{Binding Hp}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                                       ToolTip="{Binding Description}"/>
+                                            <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                     Text="{Binding CapturedText, UpdateSourceTrigger=LostFocus}"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding LiveText}" VerticalAlignment="Center"
+                                                       FontFamily="Consolas" Foreground="{StaticResource Accent}"/>
+                                        </Grid>
+
+                                        <WrapPanel Margin="0,8,0,0">
+                                            <Button Content="🎯 Lock onto roll" Command="{Binding LockCommand}"/>
+                                            <Button Content="↻ Read current roll" Command="{Binding ReadOnceCommand}"/>
+                                            <Button Content="✕ Reset lock" Command="{Binding ResetLockCommand}"/>
+                                        </WrapPanel>
+                                        <TextBlock Text="{Binding LockInfo}" Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 2 · target -->
+                                <Border Background="{StaticResource Panel2}" BorderBrush="{StaticResource Line}"
+                                        BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,8,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="2 · Set your target" Style="{StaticResource Section}" Margin="0"/>
+                                        <TextBlock TextWrapping="Wrap" Style="{StaticResource Hint}" Margin="0,0,0,6"
+                                                   Text="Set a minimum for each ability you care about. The roller stops once every ability is at or above its minimum. Leave an ability blank to ignore it."/>
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Stat" Style="{StaticResource Hint}"/>
+                                            <TextBlock Grid.Column="1" Text="Minimum (≥)" Style="{StaticResource Hint}"/>
+                                        </Grid>
+                                        <ItemsControl ItemsSource="{Binding Stats}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,1">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="90"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                                                   ToolTip="{Binding Description}"/>
+                                                        <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                                 Text="{Binding MinimumText, UpdateSourceTrigger=PropertyChanged}"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <!-- Optional target on the ability total (sum of the six abilities). -->
+                                        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,2"/>
+                                        <Grid Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"
+                                                       ToolTip="Minimum for the sum of the six abilities (STR, INT, WIS, DEX, CON, CHA); excludes STR% and HP. A fair 3d6 roll averages ~63."/>
+                                            <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                     Text="{Binding TotalMinimumText, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </Grid>
+                                        <Grid Margin="0,1" DataContext="{Binding StrPercent}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                                       ToolTip="{Binding Description}"/>
+                                            <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                     Text="{Binding MinimumText, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </Grid>
+                                        <Grid Margin="0,1" DataContext="{Binding Hp}"
+                                              IsEnabled="{Binding DataContext.HpAvailable, RelativeSource={RelativeSource AncestorType=TabItem}}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                                       ToolTip="{Binding Description}"/>
+                                            <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                     Text="{Binding MinimumText, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </Grid>
+                                        <TextBlock Text="{Binding HpNote}" Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        <Button Content="🗑 Clear all targets" Command="{Binding ClearMinimumsCommand}"
+                                                HorizontalAlignment="Left" Margin="0,6,0,0"
+                                                ToolTip="Reset every minimum back to blank (no requirement)."/>
+                                        <TextBlock Text="{Binding CriteriaText}" Foreground="{StaticResource Accent}" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                        <TextBlock Text="{Binding OddsText}" Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 3 · roll -->
+                                <Border Background="{StaticResource Panel2}" BorderBrush="{StaticResource Line}"
+                                        BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,8,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="3 · Roll" Style="{StaticResource Section}" Margin="0"/>
+                                        <WrapPanel Margin="0,4,0,0">
+                                            <Button Content="🎲 Roll until target met" Command="{Binding StartCommand}"/>
+                                            <Button Content="⏹ Stop" Command="{Binding StopCommand}"/>
+                                        </WrapPanel>
+                                        <TextBlock Text="{Binding AttemptsText}" Style="{StaticResource Hint}" Margin="0,6,0,0"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                            <TextBlock Text="Best so far: " Style="{StaticResource Hint}"/>
+                                            <TextBlock Text="{Binding BestText}"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" Foreground="{StaticResource Accent}" Margin="0,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 4 · statistics -->
+                                <Border Background="{StaticResource Panel2}" BorderBrush="{StaticResource Line}"
+                                        BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,8,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="4 · Statistics" Style="{StaticResource Section}" Margin="0"/>
+                                        <TextBlock TextWrapping="Wrap" Style="{StaticResource Hint}" Margin="0,0,0,4"
+                                                   Text="Tallies every fresh roll read this session — Pool of Radiance's abilities are modelled as 3d6 (see the odds above), and these are the observed averages and ranges over your rolls."/>
+                                        <TextBlock Text="{Binding SamplesText}" Margin="0,0,0,4"/>
+                                        <Grid Margin="0,0,0,2">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Stat" Style="{StaticResource Hint}"/>
+                                            <TextBlock Grid.Column="1" Text="Average (min–max)" Style="{StaticResource Hint}"/>
+                                        </Grid>
+                                        <ItemsControl ItemsSource="{Binding Stats}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="0,1">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="90"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                                        <TextBlock Grid.Column="1" Text="{Binding AvgText}" VerticalAlignment="Center"
+                                                                   FontFamily="Consolas" Foreground="{StaticResource Accent}"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <!-- Ability total (the six abilities; excludes STR% and HP). -->
+                                        <Border BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Margin="0,2"/>
+                                        <Grid Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding TotalAvgText}" VerticalAlignment="Center"
+                                                       FontFamily="Consolas" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+                                        </Grid>
+                                        <Grid Margin="0,1" DataContext="{Binding StrPercent}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding AvgText}" VerticalAlignment="Center"
+                                                       FontFamily="Consolas" Foreground="{StaticResource Accent}"/>
+                                        </Grid>
+                                        <Grid Margin="0,1" DataContext="{Binding Hp}"
+                                              Visibility="{Binding DataContext.HpAvailable, RelativeSource={RelativeSource AncestorType=TabItem}, Converter={StaticResource BoolToVis}}">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding AvgText}" VerticalAlignment="Center"
+                                                       FontFamily="Consolas" Foreground="{StaticResource Accent}"/>
+                                        </Grid>
+                                        <Button Content="🗑 Clear statistics" Command="{Binding ClearStatsCommand}"
+                                                HorizontalAlignment="Left" Margin="0,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Expander Header="Advanced timing" Margin="0,8,0,0" Foreground="{StaticResource FgDim}">
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="Max rolls"/>
+                                            <TextBox Width="90" Text="{Binding MaxAttempts, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="Settle after 'n' (ms)"/>
+                                            <TextBox Width="90" Text="{Binding SettleDelayMs, UpdateSourceTrigger=LostFocus}"
+                                                     ToolTip="Pause after each re-roll so the game updates memory before the trainer reads it. Raise this if rolls read stale."/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,6">
+                                            <Label Content="Focus pause (ms)"/>
+                                            <TextBox Width="90" Text="{Binding FocusDelayMs, UpdateSourceTrigger=LostFocus}"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Expander>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </TabItem>
             </TabControl>
         </Grid>
     </DockPanel>
