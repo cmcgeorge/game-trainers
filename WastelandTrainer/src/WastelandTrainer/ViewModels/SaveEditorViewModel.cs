@@ -26,7 +26,21 @@ public sealed class SaveEditorViewModel : ObservableObject, ICharacterHost
 
     public ObservableCollection<CharacterViewModel> Characters { get; } = new();
 
-    public IReadOnlyList<TeleportTarget> TeleportTargets => MapBook.TeleportTargets;
+    /// <summary>The confirmed built-in destinations plus every spot the player has captured from a save.
+    /// Bound to the "Jump to" drop-down.</summary>
+    public ObservableCollection<TeleportTarget> TeleportTargets { get; } = new();
+
+    /// <summary>The user-captured subset (persisted); the built-in <see cref="MapBook.TeleportTargets"/>
+    /// are always re-added on top and never written to disk.</summary>
+    private readonly List<TeleportTarget> _bookmarks = new();
+
+    private string _bookmarkName = "";
+    /// <summary>Name typed for a new captured destination.</summary>
+    public string BookmarkName
+    {
+        get => _bookmarkName;
+        set { if (SetField(ref _bookmarkName, value)) (AddBookmarkCommand as RelayCommand)?.RaiseCanExecuteChanged(); }
+    }
 
     private CharacterViewModel? _selectedCharacter;
     public CharacterViewModel? SelectedCharacter
@@ -38,13 +52,64 @@ public sealed class SaveEditorViewModel : ObservableObject, ICharacterHost
     public ICommand OpenCommand { get; }
     public ICommand SaveCommand { get; }
     public ICommand ApplyTeleportCommand { get; }
+    public ICommand AddBookmarkCommand { get; }
+    public ICommand RemoveBookmarkCommand { get; }
 
     public SaveEditorViewModel()
     {
         OpenCommand = new RelayCommand(_ => PickAndOpen());
         SaveCommand = new RelayCommand(_ => SaveToDisk(), _ => IsLoaded);
         ApplyTeleportCommand = new RelayCommand(t => ApplyTeleport(t as TeleportTarget), _ => IsLoaded);
+        AddBookmarkCommand = new RelayCommand(_ => AddBookmark(),
+            _ => IsLoaded && !string.IsNullOrWhiteSpace(BookmarkName));
+        RemoveBookmarkCommand = new RelayCommand(t => RemoveBookmark(t as TeleportTarget),
+            t => IsUserBookmark(t as TeleportTarget));
+        _bookmarks.AddRange(TeleportBookmarks.Load());
+        RebuildTeleportTargets();
         TryAutoOpen();
+    }
+
+    // --- teleport destinations (built-in + captured) -------------------------
+    private void RebuildTeleportTargets()
+    {
+        TeleportTargets.Clear();
+        foreach (var t in MapBook.TeleportTargets) TeleportTargets.Add(t);
+        foreach (var t in _bookmarks) TeleportTargets.Add(t);
+    }
+
+    private bool IsUserBookmark(TeleportTarget? t) => t != null && _bookmarks.Contains(t);
+
+    /// <summary>Captures the loaded save's current map and X/Y as a named destination. Because these are
+    /// the very fields the game reads on load, a spot bookmarked from a save made while standing there
+    /// teleports back exactly — no guessing at unconfirmed coordinates.</summary>
+    private void AddBookmark()
+    {
+        if (_save == null) return;
+        string name = BookmarkName.Trim();
+        if (name.Length == 0) return;
+
+        var target = new TeleportTarget(name, MapId, PartyX, PartyY,
+            $"Captured from a save at map {MapId} ({PartyX},{PartyY}).");
+        _bookmarks.RemoveAll(b => string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase));
+        _bookmarks.Add(target);
+        PersistBookmarks();
+        RebuildTeleportTargets();
+        BookmarkName = "";
+        Status = $"Saved \"{name}\" — map {MapId} at ({PartyX},{PartyY}). It's now in the Jump-to list.";
+    }
+
+    private void RemoveBookmark(TeleportTarget? target)
+    {
+        if (target == null || !_bookmarks.Remove(target)) return;
+        PersistBookmarks();
+        RebuildTeleportTargets();
+        Status = $"Removed \"{target.Name}\" from the Jump-to list.";
+    }
+
+    private void PersistBookmarks()
+    {
+        try { TeleportBookmarks.Save(_bookmarks); }
+        catch (Exception ex) { Status = $"Could not save bookmarks: {ex.Message}"; }
     }
 
     // --- state ---------------------------------------------------------------
