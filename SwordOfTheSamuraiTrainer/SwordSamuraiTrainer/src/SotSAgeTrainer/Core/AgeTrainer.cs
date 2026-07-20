@@ -270,8 +270,10 @@ public sealed class AgeTrainer : IDisposable
         return new GameBlock { BaseAddress = baseAddr, Records = recs };
     }
 
+    // One WriteProcessMemory for the whole little-endian word: two separate byte writes could
+    // leave the value half-updated if the second failed after the first landed.
     private bool WriteWord(IntPtr addr, int value) =>
-        _mem!.WriteByte(addr, (byte)(value & 0xFF)) & _mem.WriteByte((IntPtr)((long)addr + 1), (byte)((value >> 8) & 0xFF));
+        _mem!.WriteBytes(addr, new byte[] { (byte)(value & 0xFF), (byte)((value >> 8) & 0xFF) });
 
     // ---- process management ---------------------------------------------------------------------
 

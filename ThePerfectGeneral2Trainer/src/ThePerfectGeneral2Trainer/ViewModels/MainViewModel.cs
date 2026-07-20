@@ -264,8 +264,8 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
             if (mem != _mem || searcher != _searcher || ct.IsCancellationRequested) return;
             PublishResults(searcher);
         }
-        catch (OperationCanceledException) { Status = "Scan cancelled."; }
-        catch (Exception ex) { Status = "Scan error: " + ex.Message; }
+        catch (OperationCanceledException) { if (mem == _mem) Status = "Scan cancelled."; }
+        catch (Exception ex) { if (mem == _mem) Status = "Scan error: " + ex.Message; }
         finally
         {
             IsScanning = false;

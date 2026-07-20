@@ -166,8 +166,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
                 ? "No party found. Load a saved game (past the title screen), then Re-scan."
                 : $"Found {Party.Count} character(s).";
         }
-        catch (OperationCanceledException) { Status = "Scan cancelled."; }
-        catch (Exception ex) { Status = "Scan error: " + ex.Message; }
+        catch (OperationCanceledException) { if (mem == _mem) Status = "Scan cancelled."; }
+        catch (Exception ex) { if (mem == _mem) Status = "Scan error: " + ex.Message; }
         finally { IsScanning = false; RaiseCommands(); }
     }
 

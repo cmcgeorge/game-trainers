@@ -450,6 +450,7 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     private void NewScan()
     {
         _scanCts?.Cancel();
+        _pendingPinLabel = "";   // a plain/manual scan makes unlabeled pins; guides set the label afterwards
         if (_mem != null) _searcher = new MemorySearcher(_mem, SelectedWidth);
         Results.Clear();
         SelectedResult = null;
@@ -525,9 +526,11 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     // ---- guided scans -------------------------------------------------------
     private void BeginGuide(ScanWidth width, string label)
     {
-        _pendingPinLabel = label;
+        // Trigger the reset first (the width setter runs NewScan, which clears the label),
+        // then stamp the guided label so the next pin carries it.
         if (_selectedWidth != width) SelectedWidth = width;
         else NewScan();
+        _pendingPinLabel = label;
     }
 
     private void ShowHpGuide()

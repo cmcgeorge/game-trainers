@@ -296,8 +296,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
                 ? "No records found. Make sure a party is loaded (past the title screen), then Re-scan."
                 : $"Found {Party.Count} character(s) and {Enemies.Count} combatant/monster record(s).";
         }
-        catch (OperationCanceledException) { Status = "Scan cancelled."; }
-        catch (Exception ex) { Status = "Scan error: " + ex.Message; }
+        catch (OperationCanceledException) { if (mem == _mem) Status = "Scan cancelled."; }
+        catch (Exception ex) { if (mem == _mem) Status = "Scan error: " + ex.Message; }
         finally { IsScanning = false; RaiseCommands(); }
     }
 

@@ -400,7 +400,7 @@ public sealed class MainViewModel : ObservableObject
                 // One-step undo: the file as it was before this save lands in "<file>.bak".
                 if (File.Exists(path))
                     File.Copy(path, path + ".bak", overwrite: true);
-                File.WriteAllBytes(path, c.Record.ToTpw());
+                AtomicWriteAllBytes(path, c.Record.ToTpw());
                 saved++;
             }
             catch (Exception ex)
@@ -421,12 +421,30 @@ public sealed class MainViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(path) || Characters.Count == 0) return;
         try
         {
-            File.WriteAllBytes(path, PartySnapshot.Build(Characters.Select(c => c.Record)));
+            AtomicWriteAllBytes(path, PartySnapshot.Build(Characters.Select(c => c.Record)));
             Status = $"Snapshot of {Characters.Count} character(s) saved to {Path.GetFileName(path)}.";
         }
         catch (Exception ex)
         {
             Status = "Failed to save snapshot: " + ex.Message;
+        }
+    }
+
+    // Write via a "<file>.tmp" sibling and rename into place, so an interrupted or failed
+    // write never leaves the destination half-written (it keeps its previous contents, or a
+    // stray .tmp that announces itself). Mirrors GameTrainers.Common.MemoryDumper's approach.
+    private static void AtomicWriteAllBytes(string path, byte[] data)
+    {
+        string tmp = path + ".tmp";
+        try
+        {
+            File.WriteAllBytes(tmp, data);
+            File.Move(tmp, path, overwrite: true);
+        }
+        catch
+        {
+            try { File.Delete(tmp); } catch { /* nothing to clean up, or locked */ }
+            throw;
         }
     }
 

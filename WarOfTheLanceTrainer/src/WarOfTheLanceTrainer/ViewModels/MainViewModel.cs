@@ -174,8 +174,8 @@ public sealed class MainViewModel : ObservableObject, IStrengthHost, IDisposable
             if (FreezeAll) foreach (var u in Units) u.Freeze = true;
             Status = BuildScanStatus(found);
         }
-        catch (OperationCanceledException) { Status = "Scan cancelled."; }
-        catch (Exception ex) { Status = "Scan error: " + ex.Message; }
+        catch (OperationCanceledException) { if (mem == _mem) Status = "Scan cancelled."; }
+        catch (Exception ex) { if (mem == _mem) Status = "Scan error: " + ex.Message; }
         finally { IsScanning = false; RaiseCommands(); }
     }
 

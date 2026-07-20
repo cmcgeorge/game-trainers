@@ -51,6 +51,18 @@ public sealed class ProcessMemory : IDisposable
                && (long)written == 1;
     }
 
+    /// <summary>
+    /// Write every byte in <paramref name="buffer"/> in a single call, so a multi-byte value
+    /// (e.g. a little-endian 16-bit stat) can never be left half-updated by a second syscall that
+    /// fails after the first succeeded. Returns true only when the whole buffer was written.
+    /// </summary>
+    public bool WriteBytes(IntPtr address, byte[] buffer)
+    {
+        if (!IsOpen || buffer.Length == 0) return false;
+        return NativeMethods.WriteProcessMemory(_handle, address, buffer, (IntPtr)buffer.Length, out IntPtr written)
+               && (long)written == buffer.Length;
+    }
+
     /// <summary>Query the protection/type/state of the region containing <paramref name="address"/>.</summary>
     public bool TryQuery(IntPtr address, out uint protect, out uint type, out uint state, out IntPtr regionBase, out long regionSize)
     {
