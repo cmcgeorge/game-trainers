@@ -55,32 +55,52 @@ public sealed class SaveHeader
     // --- active group position ----------------------------------------------
     private int GroupBase => CurrentPartyIndex * SaveFormat.GroupSize;
 
-    /// <summary>Active party's world X (map column). Setting it also re-centres the viewport.</summary>
+    /// <summary>Signed viewport-origin byte (party position minus the fixed draw offset).</summary>
+    private int Viewport(int o) => (sbyte)Payload[o];
+    private void Viewport(int o, int v) =>
+        Payload[o] = (byte)(sbyte)Math.Clamp(v, sbyte.MinValue, sbyte.MaxValue);
+
+    /// <summary>
+    /// Party's world X (map column) on the map it is <b>currently</b> on. This is derived from the
+    /// viewport origin (<c>viewport + <see cref="SaveFormat.ViewportOffsetX"/></c>), the position the
+    /// game re-derives on load, so it is correct inside a location as well as on the overworld — unlike
+    /// the group-header X, which only tracks the overworld return position.
+    /// </summary>
     public int PartyX
     {
-        get => U8(GroupBase + SaveFormat.GroupX);
+        get => Viewport(SaveFormat.ViewportX) + SaveFormat.ViewportOffsetX;
         set => SetPosition(value, PartyY, MapId);
     }
 
-    /// <summary>Active party's world Y (map row). Setting it also re-centres the viewport.</summary>
+    /// <summary>Party's world Y (map row) on the current map; see <see cref="PartyX"/>.</summary>
     public int PartyY
     {
-        get => U8(GroupBase + SaveFormat.GroupY);
+        get => Viewport(SaveFormat.ViewportY) + SaveFormat.ViewportOffsetY;
         set => SetPosition(PartyX, value, MapId);
     }
 
-    /// <summary>Active party's map id. Setting it keeps the global current-map byte in step.</summary>
+    /// <summary>
+    /// The map the party is <b>currently</b> on — the global current-map byte the game reads on load
+    /// to choose which map to draw. This is <b>not</b> the group-header map (which holds the overworld
+    /// map even while the party stands inside a location): reading the group map here made editing X/Y
+    /// re-stamp the current map as the wilderness, dumping the party out of any interior on reload.
+    /// </summary>
     public int MapId
     {
-        get => U8(GroupBase + SaveFormat.GroupMap);
+        get => U8(SaveFormat.CurrentMap);
         set => SetPosition(PartyX, PartyY, value);
     }
 
     /// <summary>
-    /// Places the active party at (<paramref name="x"/>, <paramref name="y"/>) on map
-    /// <paramref name="mapId"/>, writing every field the game reads on load so the move is consistent:
-    /// the group X/Y/map and its "previous" shadow, the global current-map byte, and the viewport origin
-    /// (party position minus the fixed draw offset), coordinates clamped to the 0..63 map grid.
+    /// Places the party at (<paramref name="x"/>, <paramref name="y"/>) on map <paramref name="mapId"/>,
+    /// writing the two fields the game re-derives the on-map position from on load — the global
+    /// current-map byte (<see cref="SaveFormat.CurrentMap"/>) and the viewport origin (party minus the
+    /// fixed draw offset) — so the move works on the current map, interior or overworld.
+    ///
+    /// <para>The active group header (its X/Y and map) is kept in step because on the overworld it is
+    /// the party position; the group's "previous"/home shadow (prev X/Y/map) is deliberately left
+    /// untouched so a location's saved overworld return coordinate is not overwritten by an interior
+    /// teleport. Coordinates are clamped to the 0..63 map grid.</para>
     /// </summary>
     public void SetPosition(int x, int y, int mapId)
     {
@@ -88,21 +108,17 @@ public sealed class SaveHeader
         y = Math.Clamp(y, 0, SaveFormat.MapCoordinateCeiling - 1);
         mapId = Math.Clamp(mapId, 0, 255);
 
+        // The current map + viewport origin are what the game reads on load to place the party.
+        U8(SaveFormat.CurrentMap, mapId);
+        Viewport(SaveFormat.ViewportX, x - SaveFormat.ViewportOffsetX);
+        Viewport(SaveFormat.ViewportY, y - SaveFormat.ViewportOffsetY);
+
+        // Keep the active group header in step (on the overworld this is the party position); leave the
+        // prev/home shadow alone so an interior's overworld return coordinate survives the edit.
         int g = GroupBase;
         U8(g + SaveFormat.GroupX, x);
         U8(g + SaveFormat.GroupY, y);
         U8(g + SaveFormat.GroupMap, mapId);
-        // Mirror the "previous" shadow so an in-progress transition can't snap the party back.
-        U8(g + SaveFormat.GroupPrevX, x);
-        U8(g + SaveFormat.GroupPrevY, y);
-        U8(g + SaveFormat.GroupPrevMap, mapId);
-
-        U8(SaveFormat.CurrentMap, mapId);
-        // The viewport origin is a signed byte (party position minus the draw offset), so near the
-        // top-left edge it is legitimately negative — write it raw rather than through U8, whose
-        // 0..255 clamp would snap a negative origin to 0 and mis-centre the party.
-        Payload[SaveFormat.ViewportX] = (byte)(sbyte)Math.Clamp(x - SaveFormat.ViewportOffsetX, sbyte.MinValue, sbyte.MaxValue);
-        Payload[SaveFormat.ViewportY] = (byte)(sbyte)Math.Clamp(y - SaveFormat.ViewportOffsetY, sbyte.MinValue, sbyte.MaxValue);
     }
 
     /// <summary>Bumps the save serial by <see cref="SaveFormat.SerialBump"/> so the edited file wins the

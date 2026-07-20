@@ -723,18 +723,34 @@ try { RotatingXor.Decode(tampered, 0, SaveFormat.PayloadSize); } catch (InvalidD
 Check("a corrupted block fails the checksum", threw, true);
 Console.WriteLine();
 
-Console.WriteLine("SaveHeader teleport writes every field the game reads on load:");
+Console.WriteLine("SaveHeader teleport writes the fields the game reads on load:");
 var hdrPayload = new byte[SaveFormat.PayloadSize];
 var hdr = new SaveHeader(hdrPayload);
 hdr.SetPosition(30, 20, 7);
 int gBase = hdr.CurrentPartyIndex * SaveFormat.GroupSize;
-Check("group X written", hdrPayload[gBase + SaveFormat.GroupX], 30);
-Check("group Y written", hdrPayload[gBase + SaveFormat.GroupY], 20);
-Check("group map written", hdrPayload[gBase + SaveFormat.GroupMap], 7);
-Check("prev X mirrored", hdrPayload[gBase + SaveFormat.GroupPrevX], 30);
-Check("current-map byte kept in step", hdrPayload[SaveFormat.CurrentMap], 7);
+Check("current-map byte set (the map the game loads)", hdrPayload[SaveFormat.CurrentMap], 7);
 Check("viewport X = partyX - offset", (sbyte)hdrPayload[SaveFormat.ViewportX], 30 - SaveFormat.ViewportOffsetX);
 Check("viewport Y = partyY - offset", (sbyte)hdrPayload[SaveFormat.ViewportY], 20 - SaveFormat.ViewportOffsetY);
+Check("group X kept in step", hdrPayload[gBase + SaveFormat.GroupX], 30);
+Check("group Y kept in step", hdrPayload[gBase + SaveFormat.GroupY], 20);
+Check("group map kept in step", hdrPayload[gBase + SaveFormat.GroupMap], 7);
+Check("MapId reads the current-map byte, not the group map", hdr.MapId, 7);
+Check("PartyX reads back the placed X", hdr.PartyX, 30);
+Check("PartyY reads back the placed Y", hdr.PartyY, 20);
+// A teleport inside a location must not restamp the current map as the overworld: nudging Y keeps the
+// current-map byte on the interior map (the reported bug dumped the party into the wilderness).
+hdrPayload[SaveFormat.CurrentMap] = 12;                       // pretend the party is inside interior map 12
+hdrPayload[gBase + SaveFormat.GroupMap] = 0;                  // while the group header still holds the overworld
+hdr.PartyY = hdr.PartyY - 4;                                  // move four north
+Check("interior current-map survives an X/Y edit", hdrPayload[SaveFormat.CurrentMap], 12);
+// The prev/home shadow (the overworld return coordinate) is left untouched by a position edit.
+hdrPayload[gBase + SaveFormat.GroupPrevX] = 55;
+hdrPayload[gBase + SaveFormat.GroupPrevY] = 62;
+hdrPayload[gBase + SaveFormat.GroupPrevMap] = 0;
+hdr.SetPosition(3, 1, 12);
+Check("prev/home X preserved", hdrPayload[gBase + SaveFormat.GroupPrevX], 55);
+Check("prev/home Y preserved", hdrPayload[gBase + SaveFormat.GroupPrevY], 62);
+Check("prev/home map preserved", hdrPayload[gBase + SaveFormat.GroupPrevMap], 0);
 hdr.SetPosition(999, -5, 0);   // out-of-range coords clamp to the 0..63 grid
 Check("X clamped to the map grid", hdr.PartyX, SaveFormat.MapCoordinateCeiling - 1);
 Check("Y clamped to >= 0", hdr.PartyY, 0);

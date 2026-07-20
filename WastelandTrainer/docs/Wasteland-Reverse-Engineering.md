@@ -303,15 +303,24 @@ serial 0. This matches the live party-state header (§5) exactly.
 
 ### Teleport by save-edit
 
-`SaveHeader.SetPosition(x, y, map)` writes the active group's X/Y/map, mirrors the "previous" shadow (so
-an in-progress transition can't snap the party back), sets the global current-map byte, and re-centres the
-viewport (party − (9, 4)) — every field the load path reads — clamped to the 0..63 grid. `Save` bumps the
-serial so the edited file wins the game's next "load the higher serial" decision, re-encrypts just the
-block into a copy of the file, and writes a one-time `.bak` of the original. Character/skill/inventory
-edits reuse the exact same `CharacterRecord` code paths the live trainer uses (§3–§4), so any ranger can be
-fully edited offline. The one **confirmed** teleport destination is the Ranger Center start (map 0, X 55,
-Y 62); other spots are reached by typing the map id and coordinates directly (interior grids were not
-confirmed against live memory).
+The map the game loads is the **global current-map byte `0x7F`**, and the on-map position is re-derived
+from the **viewport origin `0x78/0x79`** (party = viewport + (9, 4)) — the same virtualized position the
+live game computes each step (§5). The four group headers are the **overworld** party position/map (the
+return spot), which coincides with the current map only while the party is actually on the overworld;
+inside a location the group map stays the overworld id while `0x7F` holds the interior map.
+
+`SaveHeader.SetPosition(x, y, map)` therefore writes `0x7F = map` and the viewport origin (party − (9, 4),
+kept signed so a near-edge target isn't snapped to the top-left), and keeps the active group's X/Y/map in
+step (correct on the overworld). It deliberately **leaves the group's prev/home shadow (`0x0B/0C/0D`)
+untouched** so a location's saved overworld return coordinate survives an interior teleport. Accordingly
+`MapId` reads/writes `0x7F` and `PartyX/PartyY` read/write the viewport-derived current position — **not**
+the group header, which was the bug that made editing X/Y re-stamp the current map as the wilderness and
+dump the party out of any interior on reload. `Save` bumps the serial so the edited file wins the game's
+next "load the higher serial" decision, re-encrypts just the block into a copy of the file, and writes a
+one-time `.bak` of the original. Character/skill/inventory edits reuse the exact same `CharacterRecord`
+code paths the live trainer uses (§3–§4), so any ranger can be fully edited offline. The one **confirmed**
+teleport destination is the Ranger Center start (map 0, X 55, Y 62); other spots are reached by typing the
+map id and coordinates directly (interior grids were not confirmed against live memory).
 
 ---
 
