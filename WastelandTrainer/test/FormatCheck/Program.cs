@@ -759,6 +759,12 @@ Check("viewport X keeps a negative origin near the edge", (sbyte)hdrPayload[Save
 Check("viewport Y keeps a negative origin near the edge", (sbyte)hdrPayload[SaveFormat.ViewportY], 1 - SaveFormat.ViewportOffsetY);
 hdr.Serial = 100;
 Check("serial bump adds 2", hdr.BumpSerial(), 102L);
+// The edited file must out-rank BOTH slots so the game loads it: bumping only its own serial fails once
+// a later in-game save left the sibling slot equal or higher (the reported "edits stop taking effect").
+Check("winning serial: no sibling -> own + 2", SaveGame.WinningSerial(100, -1), 102L);
+Check("winning serial: sibling lower -> own + 2", SaveGame.WinningSerial(100, 98), 102L);
+Check("winning serial: sibling equal -> beats the tie", SaveGame.WinningSerial(100, 100), 102L);
+Check("winning serial: sibling higher -> sibling + 2", SaveGame.WinningSerial(100, 140), 142L);
 hdr.Hour = 30;
 Check("time of day clamps hours to 0..23", hdr.Hour, 23);
 hdr.Minute = 80;

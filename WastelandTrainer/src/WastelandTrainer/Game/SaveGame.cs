@@ -146,17 +146,24 @@ public sealed class SaveGame
     }
 
     /// <summary>
-    /// Commits every edit, bumps the serial so the game loads this file next, and writes it back. A
+    /// Commits every edit, raises the serial so the game loads this file next, and writes it back. A
     /// one-time <c>.bak</c> copy of the original file is made first (never overwritten) so the pre-edit
     /// save is always recoverable. Pass a <paramref name="path"/> to save elsewhere.
+    ///
+    /// <para>Wasteland double-buffers into GAME1 and GAME2 and, on load, reads whichever holds the higher
+    /// serial. Merely bumping <i>this</i> file's serial by 2 is not enough once a later in-game save has
+    /// written the sibling slot with an equal-or-higher serial — the game would keep loading the sibling
+    /// and the edit would appear to do nothing. So the serial is lifted above <b>both</b> files' current
+    /// serials (see <see cref="WinningSerial"/>), guaranteeing the edited file wins the next load.</para>
     /// </summary>
     public void Save(string? path = null)
     {
-        Header.BumpSerial();
+        string target = path ?? Path;
+
+        Header.Serial = WinningSerial(Header.Serial, SiblingSerial(target));
         byte[] outBytes = BuildFileBytes();
         Array.Copy(outBytes, 0, FileBytes, 0, outBytes.Length);   // keep this instance in sync with disk
 
-        string target = path ?? Path;
         string backup = target + ".bak";
         if (File.Exists(target) && !File.Exists(backup))
             File.Copy(target, backup);
@@ -164,6 +171,43 @@ public sealed class SaveGame
     }
 
     // --- helpers -------------------------------------------------------------
+
+    /// <summary>The serial an edited file must carry to win Wasteland's "load the higher serial" choice:
+    /// strictly above both its own and the sibling slot's current serial, keeping the game's own +2
+    /// step. <paramref name="siblingSerial"/> is negative when there is no readable sibling.</summary>
+    public static long WinningSerial(long ownSerial, long siblingSerial)
+    {
+        long floor = Math.Max(ownSerial, siblingSerial);
+        return (floor + SaveFormat.SerialBump) & 0xFFFFFFFFL;
+    }
+
+    /// <summary>Reads the serial of the sibling save slot (GAME1 &lt;-&gt; GAME2) beside
+    /// <paramref name="target"/>, or -1 when there is no sibling file or it cannot be decoded.</summary>
+    private static long SiblingSerial(string target)
+    {
+        string? sibling = SiblingPath(target);
+        if (sibling == null || !File.Exists(sibling)) return -1;
+        try
+        {
+            byte[] bytes = File.ReadAllBytes(sibling);
+            if (!TryLocate(bytes, out _, out _, out byte[] payload)) return -1;
+            return new SaveHeader(payload).Serial;
+        }
+        catch { return -1; }
+    }
+
+    /// <summary>The path of the other save slot (game1 &lt;-&gt; game2) in the same directory, or null
+    /// when <paramref name="target"/> is not a GAME1/GAME2 file.</summary>
+    private static string? SiblingPath(string target)
+    {
+        string name = System.IO.Path.GetFileName(target);
+        string? other = name.Equals("game1", StringComparison.OrdinalIgnoreCase) ? "game2"
+                      : name.Equals("game2", StringComparison.OrdinalIgnoreCase) ? "game1"
+                      : null;
+        if (other == null) return null;
+        string dir = System.IO.Path.GetDirectoryName(target) ?? "";
+        return System.IO.Path.Combine(dir, other);
+    }
 
     /// <summary>True when <paramref name="path"/>'s file name looks like a Wasteland save (GAME1/GAME2).</summary>
     public static bool LooksLikeSaveFileName(string path)
