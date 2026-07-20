@@ -287,53 +287,84 @@
 
                     <!-- Skills -->
                     <TabItem Header="Skills">
-                        <ListBox ItemsSource="{Binding Skills}" HorizontalContentAlignment="Stretch"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="40"/>
-                                            <ColumnDefinition Width="170"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding Id}" Foreground="#999"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold"/>
-                                        <TextBlock Grid.Column="2" Text="{Binding Description}" TextWrapping="Wrap" Foreground="#444"/>
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Foreground="#555" TextWrapping="Wrap" Margin="2,2,2,6"
+                                       Text="What each of the 35 skills does, where in the game it's notably used, and the IQ needed to learn its first level. A fresh ranger starts with skill points equal to IQ, and each extra level of a skill costs progressively more — but skills also improve just from being used. Combat and weapon skills apply in any fight, so no single location is listed for them."/>
+                            <ListBox ItemsSource="{Binding Skills}" HorizontalContentAlignment="Stretch"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,3">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="40"/>
+                                                <ColumnDefinition Width="170"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Id}" Foreground="#999" VerticalAlignment="Top"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Top" TextWrapping="Wrap"/>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="{Binding Use}" TextWrapping="Wrap" Foreground="#444"/>
+                                                <TextBlock TextWrapping="Wrap" Foreground="#1565C0" Margin="0,2,0,0">
+                                                    <Run Text="Where used:" FontWeight="SemiBold"/>
+                                                    <Run Text="{Binding Where}"/>
+                                                </TextBlock>
+                                                <TextBlock Text="{Binding Requirement}" Foreground="#777" FontSize="11" Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
                     </TabItem>
 
                     <!-- Items -->
                     <TabItem Header="Items">
-                        <ListBox ItemsSource="{Binding Items}" HorizontalContentAlignment="Stretch"
-                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                            <ListBox.GroupStyle>
-                                <GroupStyle>
-                                    <GroupStyle.HeaderTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding Name}" Style="{StaticResource RefHeader}"/>
-                                        </DataTemplate>
-                                    </GroupStyle.HeaderTemplate>
-                                </GroupStyle>
-                            </ListBox.GroupStyle>
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="40"/>
-                                            <ColumnDefinition Width="200"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding Id}" Foreground="#999"/>
-                                        <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold"/>
-                                        <TextBlock Grid.Column="2" Text="{Binding Category}" Foreground="#777"/>
-                                    </Grid>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Foreground="#555" TextWrapping="Wrap" Margin="2,2,2,6"
+                                       Text="Every item the game stores by id (decoded from WL.EXE), grouped by type, with a short note on what it is or does. These same ids and names drive the Inventory tab's drop-down. Weapons also list their damage as six-sided dice (e.g. 4d6) — but each point of the target's Armor Class cancels one die, so well-armoured foes take fewer of them."/>
+                            <ListBox ItemsSource="{Binding Items}" HorizontalContentAlignment="Stretch"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.GroupStyle>
+                                    <GroupStyle>
+                                        <GroupStyle.HeaderTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding Name}" Style="{StaticResource RefHeader}"/>
+                                            </DataTemplate>
+                                        </GroupStyle.HeaderTemplate>
+                                    </GroupStyle>
+                                </ListBox.GroupStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,3">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="40"/>
+                                                <ColumnDefinition Width="200"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Id}" Foreground="#999" VerticalAlignment="Top"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Top" TextWrapping="Wrap"/>
+                                            <StackPanel Grid.Column="2">
+                                                <TextBlock Text="{Binding Description}" TextWrapping="Wrap" Foreground="#444"/>
+                                                <TextBlock TextWrapping="Wrap" Foreground="#1565C0" Margin="0,2,0,0">
+                                                    <Run Text="Damage:" FontWeight="SemiBold"/>
+                                                    <Run Text="{Binding Damage}"/>
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding Damage}" Value="">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
                     </TabItem>
 
                     <!-- Paragraphs -->
