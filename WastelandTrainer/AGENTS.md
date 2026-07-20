@@ -31,7 +31,19 @@ Three projects in `WastelandTrainer.sln`: the WPF app, its test harness, and the
     each attribute as fair 3d6 (a model a 1,000-plus-sample live read confirmed); its `PMeetsTarget`
     convolves each attribute's minimum-floored 3d6 distribution so per-stat and total-points targets are
     handled together, exactly (MAXCON is not modelled — its distribution is undocumented). Both are
-    `FormatCheck`-covered.
+    `FormatCheck`-covered. The **save-editor** data layer also lives here: `RotatingXor` is Wasteland's
+    rotating-XOR block cipher (key `x1^x2`, `+0x1F`/byte; the two seed bytes double as the block's
+    end checksum, so an untouched block re-encodes byte-for-byte); `SaveFormat` is the savegame-block
+    offset table (block framing, the four 14-byte party-group headers, party state, the u32 serial, and
+    the seven 256-byte character records at `0x100`); `SaveHeader` is a typed mutable view over the
+    party-state/position fields (its `SetPosition` writes group X/Y/map + the "previous" shadow + the
+    global current-map byte + the viewport origin, all clamped to the 0..63 grid — this is the real
+    teleport); `SaveGame` is the container that locates the `"msqN"` savegame block in a GAME1/GAME2
+    file (scan + clean-decode + a party-state plausibility gate), decodes it, exposes `Header` and the
+    seven `CharacterRecord`s over the decoded payload, and on `Save` bumps the serial, re-encrypts just
+    that block back into a copy of the file, and writes a one-time `.bak`. All four are `FormatCheck`-covered
+    (round-trip, teleport field writes/clamps, synthetic-file locate + lossless rebuild, and — when the
+    copyrighted `.game` saves are present — a byte-for-byte round-trip of the shipped GAME1/GAME2).
   - `Memory/` — `PartyLocator.cs` finds the party by **structure**, not by an anchor: Wasteland has
     no stable byte-run adjacent to the roster, so it scans for an array of seven contiguous 256-byte
     records where occupied slots pack from slot 0. Each occupied slot must pass a strict validity
@@ -55,9 +67,15 @@ Three projects in `WastelandTrainer.sln`: the WPF app, its test harness, and the
     MAXCON — meets its minimum; reads-only, never writes to the game), `MapsViewModel` (reads the party-state
     header for the live X/Y as a read-only "where am I" display — teleport is intentionally not offered
     because the header is a write-only shadow the game never reads back; see the RE notes §5),
-    `ReferenceViewModel` (skills/items/paragraphs/strategy), and the row VMs
+    `ReferenceViewModel` (skills/items/paragraphs/strategy), `SaveEditorViewModel` (the **Save Editor**
+    tab — opens a GAME1/GAME2 file via `SaveGame`, edits the party position/clock through `SaveHeader`,
+    and reuses `CharacterViewModel` for every occupied ranger by itself implementing `ICharacterHost`,
+    where `IsAttached` is true whenever a save is loaded and `WriteBytes` copies the changed bytes into
+    the decoded payload at the record's payload offset instead of a live process — so it is the one place
+    teleport actually works, since the game reads these fields on load), and the row VMs
     (`NamedValueViewModel`, `SkillRowViewModel`, `ItemRowViewModel`) plus `ICharacterHost` (the
-    write channel). Views (`*.xaml`) bind to these. `ObservableObject`/`RelayCommand` are used from
+    write channel — implemented by both `MainViewModel` over live memory and `SaveEditorViewModel` over
+    a decoded save payload). Views (`*.xaml`) bind to these. `ObservableObject`/`RelayCommand` are used from
     `GameTrainers.Common.Mvvm` — note `ObservableObject` exposes `SetField(ref field, value)`.
 - `test/FormatCheck/` — headless verification harness (console `Exe`), not the app.
 
@@ -111,8 +129,12 @@ Inventory is 30 fixed `(id, qty)` slots read by index and kept gap-free by `Comp
 each edit, so the running game (which reads the list only up to the first empty slot) still sees every
 carried item. The live map position lives in the 256-byte party-state header at `rosterBase − 0x100`
 (X at header `0x08`, Y at `0x09`); the Maps tab reads it for a live position display but does **not**
-write it — teleport was removed after live RE proved the header is a write-only shadow the game never
-reads back (§5 of the RE notes; no memory write relocates the party). The weapon/equip byte (`0x1F`) and
+write it — live teleport was removed after live RE proved the header is a write-only shadow the game
+never reads back (§5 of the RE notes; no memory write relocates the party). Teleport is instead offered
+in the **Save Editor** tab, whose position fields the game *does* read on load: `SaveHeader.SetPosition`
+writes the active group's X/Y/map + "previous" shadow, the global current-map byte, and the viewport
+origin into the decoded savegame block, and saving bumps the serial so the game loads the edited file
+next (the one confirmed destination is the Ranger Center start, map 0 at X 55, Y 62). The weapon/equip byte (`0x1F`) and
 unidentified padding are left untouched. Setting values to the trainer's "max" caps is safe; the
 game UI may render very large numbers oddly (cosmetic). The two poll-loop freezes each rewrite only
 their own field: Freeze Health re-pins the CON u16 (`0x1D`), and Freeze Ammo tops the quantity

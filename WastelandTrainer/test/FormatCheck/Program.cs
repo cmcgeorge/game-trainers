@@ -1,4 +1,5 @@
 using GameTrainers.Common.Memory;
+using System.IO;
 using WastelandTrainer.Game;
 using WastelandTrainer.Memory;
 using WastelandTrainer.ViewModels;
@@ -704,10 +705,125 @@ Check("total max (66)", snap.TotalMax, 66);
 Check("total mean (64.0)", snap.TotalMean, 64.0);
 Console.WriteLine();
 
+Console.WriteLine("Rotating-XOR codec (the savegame block cipher) round-trips losslessly:");
+var rng = new Random(1234);
+var plain = new byte[SaveFormat.PayloadSize];
+rng.NextBytes(plain);
+byte[] enc = RotatingXor.Encode(plain);
+Check("encoded length = seed + payload", enc.Length, RotatingXor.SeedSize + SaveFormat.PayloadSize);
+byte[] back = RotatingXor.Decode(enc, 0, SaveFormat.PayloadSize);
+Check("decode(encode(x)) == x", back.AsSpan().SequenceEqual(plain), true);
+byte[] enc2 = RotatingXor.Encode(plain);
+Check("encode is deterministic", enc2.AsSpan().SequenceEqual(enc), true);
+// A tampered ciphertext byte must fail the checksum (the block did not decode cleanly).
+byte[] tampered = (byte[])enc.Clone();
+tampered[10] ^= 0xFF;
+bool threw = false;
+try { RotatingXor.Decode(tampered, 0, SaveFormat.PayloadSize); } catch (InvalidDataException) { threw = true; }
+Check("a corrupted block fails the checksum", threw, true);
+Console.WriteLine();
+
+Console.WriteLine("SaveHeader teleport writes every field the game reads on load:");
+var hdrPayload = new byte[SaveFormat.PayloadSize];
+var hdr = new SaveHeader(hdrPayload);
+hdr.SetPosition(30, 20, 7);
+int gBase = hdr.CurrentPartyIndex * SaveFormat.GroupSize;
+Check("group X written", hdrPayload[gBase + SaveFormat.GroupX], 30);
+Check("group Y written", hdrPayload[gBase + SaveFormat.GroupY], 20);
+Check("group map written", hdrPayload[gBase + SaveFormat.GroupMap], 7);
+Check("prev X mirrored", hdrPayload[gBase + SaveFormat.GroupPrevX], 30);
+Check("current-map byte kept in step", hdrPayload[SaveFormat.CurrentMap], 7);
+Check("viewport X = partyX - offset", (sbyte)hdrPayload[SaveFormat.ViewportX], 30 - SaveFormat.ViewportOffsetX);
+Check("viewport Y = partyY - offset", (sbyte)hdrPayload[SaveFormat.ViewportY], 20 - SaveFormat.ViewportOffsetY);
+hdr.SetPosition(999, -5, 0);   // out-of-range coords clamp to the 0..63 grid
+Check("X clamped to the map grid", hdr.PartyX, SaveFormat.MapCoordinateCeiling - 1);
+Check("Y clamped to >= 0", hdr.PartyY, 0);
+hdr.SetPosition(3, 1, 0);      // near the top-left edge: viewport origin is legitimately negative
+Check("viewport X keeps a negative origin near the edge", (sbyte)hdrPayload[SaveFormat.ViewportX], 3 - SaveFormat.ViewportOffsetX);
+Check("viewport Y keeps a negative origin near the edge", (sbyte)hdrPayload[SaveFormat.ViewportY], 1 - SaveFormat.ViewportOffsetY);
+hdr.Serial = 100;
+Check("serial bump adds 2", hdr.BumpSerial(), 102L);
+hdr.Hour = 30;
+Check("time of day clamps hours to 0..23", hdr.Hour, 23);
+hdr.Minute = 80;
+Check("time of day clamps minutes to 0..59", hdr.Minute, 59);
+Console.WriteLine();
+
+Console.WriteLine("SaveGame.TryLocate finds the savegame block inside a synthetic file:");
+// Build a minimal file: some noise, a decoy variable-length "msq0" block that won't decode at 0x800,
+// then a real savegame block (tag + encoded payload + zero reserved tail) with one valid member.
+var synthPayload = new byte[SaveFormat.PayloadSize];
+var member = MakeValid("Scout");
+Array.Copy(member.Bytes, 0, synthPayload, SaveFormat.CharacterArea, CharacterFormat.RecordSize);
+synthPayload[SaveFormat.CurrentMembers] = 1;
+synthPayload[SaveFormat.TotalMembers] = 1;
+new SaveHeader(synthPayload).SetPosition(12, 34, 3);
+byte[] block = RotatingXor.Encode(synthPayload);
+var synth = new List<byte>();
+synth.AddRange(new byte[64]);                                   // leading noise
+synth.AddRange(System.Text.Encoding.ASCII.GetBytes("msq0"));   // decoy tag with random bytes after it
+var decoy = new byte[600]; rng.NextBytes(decoy); synth.AddRange(decoy);
+int realOffset = synth.Count;
+synth.AddRange(System.Text.Encoding.ASCII.GetBytes("msq0"));
+synth.AddRange(block);
+synth.AddRange(new byte[SaveFormat.ReservedTailSize]);         // zero reserved tail
+bool located = SaveGame.TryLocate(synth.ToArray(), out int foundOff, out string foundTag, out byte[] foundPayload);
+Check("savegame block located", located, true);
+Check("located at the real block offset", foundOff, realOffset);
+Check("located tag is msq0", foundTag, "msq0");
+Check("decoded payload matches", foundPayload.AsSpan().SequenceEqual(synthPayload), true);
+var synthGame = SaveGame.FromBytes("synthetic", synth.ToArray());
+Check("member name decodes from the block", synthGame.Characters[0].Name, "Scout");
+Check("position decodes from the block", (synthGame.Header.PartyX, synthGame.Header.PartyY, synthGame.Header.MapId), (12, 34, 3));
+byte[] rebuilt = synthGame.BuildFileBytes();
+Check("untouched rebuild is byte-for-byte identical", rebuilt.AsSpan().SequenceEqual(synth.ToArray()), true);
+Console.WriteLine();
+
+// Optional: decode the shipped GAME1/GAME2 when present (they are copyrighted and git-ignored under
+// .game/, so this is skipped on a checkout without them). Proves the codec against the real files and
+// surfaces the confirmed Ranger Center map id / coordinates.
+string? gameDir = FindGameDir();
+foreach (var (fileName, idx) in new[] { ("game1", 0), ("game2", 1) })
+{
+    string? path = gameDir == null ? null : System.IO.Path.Combine(gameDir, fileName);
+    if (path == null || !File.Exists(path))
+    {
+        Console.WriteLine($"(skipped {fileName}: shipped save not present under .game/)");
+        continue;
+    }
+    Console.WriteLine($"Shipped {fileName}: decode + lossless round-trip:");
+    var sg = SaveGame.FromBytes(path, File.ReadAllBytes(path));
+    Check($"{fileName} block at the documented offset", sg.BlockOffset, SaveFormat.ShippedBlockOffset[idx]);
+    Check($"{fileName} tag", sg.Tag, SaveFormat.Tags[idx]);
+    byte[] roundTrip = sg.BuildFileBytes();
+    Check($"{fileName} untouched re-encode is byte-for-byte identical",
+        roundTrip.AsSpan().SequenceEqual(sg.FileBytes), true);
+    var names = sg.Characters.Where(c => c.IsOccupied).Select(c => c.Name).ToList();
+    Console.WriteLine($"    members: [{string.Join(", ", names)}]   "
+        + $"map={sg.Header.CurrentMap} pos=({sg.Header.PartyX},{sg.Header.PartyY}) "
+        + $"time={sg.Header.Hour:00}:{sg.Header.Minute:00} serial={sg.Header.Serial}");
+    Check($"{fileName} has at least one member", names.Count > 0, true);
+}
+Console.WriteLine();
+
 Console.WriteLine(failures == 0
     ? "ALL CHECKS PASSED — the 256-byte record layout decodes the sample party correctly."
     : $"{failures} CHECK(S) FAILED.");
 return failures == 0 ? 0 : 1;
+
+// Walks up from the test binary looking for the trainer's .game folder (present only on a dev machine
+// that has the copyrighted assets); returns null when not found so the codec checks skip gracefully.
+string? FindGameDir()
+{
+    var dir = new DirectoryInfo(AppContext.BaseDirectory);
+    for (int i = 0; i < 8 && dir != null; i++, dir = dir.Parent)
+    {
+        string candidate = System.IO.Path.Combine(dir.FullName, ".game");
+        if (Directory.Exists(candidate) && File.Exists(System.IO.Path.Combine(candidate, "game1")))
+            return candidate;
+    }
+    return null;
+}
 
 void CheckCharacter(int slot, string name, int str, int iq, int lck, int spd, int agl, int dex, int chr,
     int maxCon, int gender, int nationality, int level, int skp, string rank)

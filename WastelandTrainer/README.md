@@ -7,8 +7,10 @@ roster in the emulated memory, and lets you edit every ranger live — the seven
 gender and nationality — with party-wide **Freeze Health (CON)** and **Freeze Ammo** toggles and
 one-click **max** actions, both per-character and party-wide. A **Create** tab **auto-re-rolls a new
 ranger** on the Ranger Center create screen until it meets the minimums you set. A **Maps** tab reads
-the party's live X/Y from memory as a "where am I" readout (teleport is not offered — see
-[Maps & live position](#maps--live-position)); a **References** tab explains what each **attribute**
+the party's live X/Y from memory as a "where am I" readout (live teleport is not possible — see
+[Maps & live position](#maps--live-position)). A **Save Editor** tab edits a **GAME1/GAME2 save file
+offline** — including the one thing live memory can't do, **teleporting** the party (see
+[Save editor & teleport](#save-editor--teleport)). A **References** tab explains what each **attribute**
 does, and lists skills, item ids, the game's own **paragraph** book, and a condensed **strategy** guide.
 
 > Single-player cheat tool for your own game. Nothing here touches other machines or online services.
@@ -146,7 +148,34 @@ position and offers the Areas reference; it never writes.
 
 The **Areas** list is a descriptive reference (each town/dungeon and its landmarks). Interior grid
 coordinates are not reproduced because they were not confirmed against live memory — only the
-Ranger Center start (X 55, Y 62) is a confirmed coordinate.
+Ranger Center start (X 55, Y 62) is a confirmed coordinate. **Teleport is offered instead in the Save
+Editor tab** (below), because the game *does* read the party's position out of the save on load.
+
+---
+
+## Save editor & teleport
+
+Live teleport is impossible (above), but Wasteland reads the party's position, the in-game clock, and
+the seven character records straight out of its **save file** on load — so editing the save relocates
+and re-equips the party for real. The **Save Editor** tab does this entirely **offline** (no need to
+attach to a running game):
+
+1. **Open** a `GAME1` or `GAME2` file from your Wasteland save folder. (If the game's own folder is
+   found beside the trainer, it auto-opens whichever of the two the game would load next.)
+2. **Teleport** — set the **map id** and **X/Y** (0–63), or pick a confirmed destination (the Ranger
+   Center start, map 0 at 55, 62) and click **Teleport party here**. You can also set the in-game clock.
+3. **Edit rangers** — every occupied ranger is editable exactly as on the live Party/Inventory tabs
+   (attributes, skills, inventory, money, the Max buttons — the same code paths).
+4. **Save** — writes the file back, **bumps the save serial** so the game loads your edited file next,
+   and keeps a one-time **`.bak`** of the original. Load the save in-game to see the changes.
+
+Under the hood the trainer locates the obfuscated `"msqN"` savegame block, decrypts it with Wasteland's
+rotating-XOR codec, edits the decoded payload, and re-encrypts **only that block** back into a copy of
+the file — an untouched save round-trips byte-for-byte (verified against the shipped GAME1/GAME2). Full
+format notes are in [.docs/Wasteland-Reverse-Engineering.md §6](.docs/Wasteland-Reverse-Engineering.md).
+
+> Edit saves with the game **not** running (or before you next load), so the emulator's in-memory copy
+> doesn't overwrite your changes on its next save.
 
 ---
 

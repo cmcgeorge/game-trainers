@@ -42,6 +42,10 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public ReferenceViewModel Reference { get; } = new();
     public MapsViewModel Maps { get; }
 
+    /// <summary>Offline save-game editor (open a GAME1/GAME2 file to teleport and edit rangers without
+    /// attaching to a running game). Independent of the live process.</summary>
+    public SaveEditorViewModel SaveEditor { get; } = new();
+
     /// <summary>Auto-re-rolls a new ranger on the Ranger Center create screen until a target roll is hit.</summary>
     public CharacterRollerViewModel Roller { get; }
 

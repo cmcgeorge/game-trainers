@@ -3,6 +3,9 @@ namespace WastelandTrainer.Game;
 /// <summary>A notable spot within a Wasteland area: its name and a one-line note.</summary>
 public sealed record MapLandmark(string Name, string Notes);
 
+/// <summary>A confirmed save-editor teleport destination: the map id and X/Y the save writes on load.</summary>
+public sealed record TeleportTarget(string Name, int MapId, int X, int Y, string Notes);
+
 /// <summary>One explorable Wasteland area with a description and its notable landmarks.</summary>
 public sealed record MapArea(string Name, string Notes, IReadOnlyList<MapLandmark> Landmarks);
 
@@ -11,15 +14,26 @@ public sealed record MapArea(string Name, string Notes, IReadOnlyList<MapLandmar
 /// as X/Y bytes in the 256-byte party-state header that precedes the roster
 /// (<see cref="CharacterFormat.HeaderPartyX"/> / <see cref="CharacterFormat.HeaderPartyY"/>) and the
 /// current map's 12-byte name at <see cref="CharacterFormat.HeaderMapName"/>. The trainer reads the
-/// live name and X/Y and can teleport within the loaded map by writing the two position bytes.
+/// live name and X/Y for display, but the running game never reads that party-state header back (it is
+/// a write-only shadow, see the RE notes §5), so writing those bytes does <b>not</b> move the party —
+/// live teleport is impossible. Teleporting is done instead through the <b>save editor</b>, whose
+/// position fields the game <i>does</i> read on load (see <see cref="SaveHeader"/>).
 ///
 /// A numeric map <i>id</i> is not clearly located adjacent to the roster, so this table is a
 /// descriptive reference (area + landmarks) rather than a coordinate atlas; exact interior grid
 /// coordinates are not reproduced because they were not confirmed against live memory. The one
-/// confirmed coordinate is the Ranger Center start (X 55, Y 62). Reference only.
+/// confirmed coordinate is the Ranger Center start (map 0, X 55, Y 62). Reference only.
 /// </summary>
 public static class MapBook
 {
+    /// <summary>Confirmed save-editor teleport destinations. Only the Ranger Center start is verified
+    /// byte-for-byte against the shipped save (map 0, X 55, Y 62); other spots are set by typing the
+    /// map id and coordinates directly, since interior grids were not confirmed against live memory.</summary>
+    public static readonly IReadOnlyList<TeleportTarget> TeleportTargets = new TeleportTarget[]
+    {
+        new("Ranger Center", 0, 55, 62, "Confirmed start position of the Desert Rangers."),
+    };
+
     /// <summary>Reads the current 12-byte map name from a party-header buffer.</summary>
     public static string MapName(byte[] header)
     {

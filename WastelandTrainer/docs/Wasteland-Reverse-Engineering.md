@@ -248,16 +248,81 @@ investigation with the DOSBox-X **AI debug server** (`C:\Solutions\Personal\DosB
   host-memory trainer (the WPF app) cannot do. It would be a debug-server / code-patch feature.
 
 **Conclusion:** the trainer's Maps tab **reads** the live X/Y (a reliable "where am I") and offers the
-Areas reference, but does **not** write position. Teleport was removed.
+Areas reference, but does **not** write position. Live teleport was removed — but see §6: the saved
+game *does* store a position the game reads on load, so teleport is offered there instead.
 
 ---
 
-## 6. Trainer implications
+## 6. Save-file editor (offline teleport + character editing)
+
+Live teleport is impossible (§5), but Wasteland reads the party's position, the clock, and the seven
+character records straight out of its **save file** on load — so editing the save relocates and re-equips
+the party for real. This is the trainer's **Save Editor** tab, and it is entirely offline (no attach).
+
+### The savegame block
+
+Wasteland keeps two save files, **GAME1** (party in group 0) and **GAME2** (a second image). Each is a
+sequence of `"msqN"`-tagged, obfuscated chunks; one of them — `"msq0"` in GAME1, `"msq1"` in GAME2 — is
+the **savegame block**, found byte-for-byte at offsets **152517** (GAME1) and **166855** (GAME2) in the
+shipped saves (the trainer does not trust those offsets — it scans for the tag, decodes, and gates on a
+party-state plausibility check). Block framing:
+
+| Offset | Size | Contents |
+|-------:|-----:|----------|
+| `+0x00` | 4 | Tag `"msq0"` / `"msq1"`. |
+| `+0x04` | 2 | Rotating-XOR seed / end-checksum bytes. |
+| `+0x06` | `0x800` | Encrypted payload (decoded below). |
+| `+0x806` | `0x0A00` | Zero-filled reserved tail (macro storage). |
+
+### Rotating-XOR codec
+
+Let `x1`,`x2` be the two seed bytes. The rolling key starts at `x1 ^ x2` and advances by `0x1F` (mod 256)
+per byte; plaintext = cipher ^ key. A checksum accumulator starts at 0 and has every decoded byte
+*subtracted* from it (mod 65536); after the block it must equal `x1 | (x2 << 8)`, else the block did not
+decode cleanly. Because the seed **is** that end-checksum, re-encoding an unchanged payload reproduces the
+original seed and ciphertext exactly — so an untouched block round-trips byte-for-byte and only edited
+bytes change (verified against the shipped GAME1/GAME2 in `FormatCheck`).
+
+### Decoded payload (`0x800` bytes)
+
+| Offset | Field | Notes |
+|-------:|-------|-------|
+| `0x00`–`0x37` | Four 14-byte party-group headers | Per group: marching order `0x01..0x07`, X `0x08`, Y `0x09`, map `0x0A`, prev X/Y/map `0x0B/0C/0D`. |
+| `0x78`/`0x79` | Viewport origin X/Y | Party world position = viewport + (9, 4). |
+| `0x7D` | Current members | |
+| `0x7E` | Current party (group) index | 0 in a normal game. |
+| `0x7F` | Current map id | Kept in step with the active group's map. |
+| `0x80` | Total members | |
+| `0x83`/`0x84` | Minute / hour | In-game clock. |
+| `0xF5` | u32 serial | The game loads whichever of GAME1/GAME2 has the **higher** serial and bumps it +2 per save. |
+| `0x100`–`0x7FF` | Seven 256-byte character records | Identical layout to the live records (§3–§4). |
+
+**Confirmed ground truth:** both shipped saves decode to the default party (Hell Razor, Angela Deth,
+Thrasher, Snake Vargas) at **map 0, (55, 62)** — the Ranger Center start — with GAME1 serial 16 > GAME2
+serial 0. This matches the live party-state header (§5) exactly.
+
+### Teleport by save-edit
+
+`SaveHeader.SetPosition(x, y, map)` writes the active group's X/Y/map, mirrors the "previous" shadow (so
+an in-progress transition can't snap the party back), sets the global current-map byte, and re-centres the
+viewport (party − (9, 4)) — every field the load path reads — clamped to the 0..63 grid. `Save` bumps the
+serial so the edited file wins the game's next "load the higher serial" decision, re-encrypts just the
+block into a copy of the file, and writes a one-time `.bak` of the original. Character/skill/inventory
+edits reuse the exact same `CharacterRecord` code paths the live trainer uses (§3–§4), so any ranger can be
+fully edited offline. The one **confirmed** teleport destination is the Ranger Center start (map 0, X 55,
+Y 62); other spots are reached by typing the map id and coordinates directly (interior grids were not
+confirmed against live memory).
+
+---
+
+## 7. Trainer implications
 
 - **Safe to edit:** name, the seven attributes, money, MAXCON/CON, SKP, experience, level,
   gender, nationality, armor class, the skill list, and the inventory list.
 - **Read-validate-write:** every write re-reads/mutates the in-memory record and pushes only the
   changed bytes back, so a shifted or partially-loaded layout is never corrupted.
-- **Party X/Y are read-only:** the Maps tab displays the live position but does not write it — the
-  header is a write-only shadow the game never reads back (see §5), so there is no teleport.
+- **Party X/Y are read-only in live memory:** the Maps tab displays the live position but does not
+  write it — the header is a write-only shadow the game never reads back (see §5), so there is no *live*
+  teleport. Teleport is instead done offline in the **Save Editor** tab (§6), whose position fields the
+  game reads on load.
 - The `0x1F` weapon byte and the unidentified padding regions are deliberately left alone.

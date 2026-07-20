@@ -716,6 +716,234 @@
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
+
+            <!-- ======================= SAVE EDITOR ======================= -->
+            <TabItem Header="Save Editor" DataContext="{Binding SaveEditor}">
+                <DockPanel Margin="6">
+                    <!-- Open / Save toolbar -->
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6" Margin="0,0,0,6">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Open GAME1/GAME2…" Command="{Binding OpenCommand}"/>
+                                <Button Content="Save" Command="{Binding SaveCommand}"/>
+                                <TextBlock Text="{Binding LoadedPath}" VerticalAlignment="Center" Margin="8,0,0,0"
+                                           Foreground="#555" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Foreground="#1565C0" Margin="2,6,2,0"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="#777" FontSize="11" Margin="2,4,2,0"
+                                       Text="Edits an offline Wasteland save. This is the only way to teleport: the running game never reads the live position back (see the Maps tab), but it DOES read these fields on load. Saving bumps the save serial so the game loads this file next, and keeps a one-time .bak of the original."/>
+                        </StackPanel>
+                    </Border>
+
+                    <Grid IsEnabled="{Binding IsLoaded}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="260"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <!-- Position & time / teleport -->
+                            <GroupBox Header="Position &amp; time">
+                                <StackPanel Margin="4">
+                                    <TextBlock Text="{Binding HeaderSummary}" Foreground="#555" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="70"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="70"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/>
+                                            <RowDefinition/>
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Map" Style="{StaticResource FieldLabel}" MinWidth="30"/>
+                                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding MapId, UpdateSourceTrigger=LostFocus}"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="X" Style="{StaticResource FieldLabel}" MinWidth="30"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding PartyX, UpdateSourceTrigger=LostFocus}"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="2" Text="Y" Style="{StaticResource FieldLabel}" MinWidth="30"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="3" Text="{Binding PartyY, UpdateSourceTrigger=LostFocus}"/>
+                                    </Grid>
+
+                                    <Grid Margin="0,4,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="70"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="70"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="Hour" Style="{StaticResource FieldLabel}" MinWidth="30"/>
+                                        <TextBox   Grid.Column="1" Text="{Binding Hour, UpdateSourceTrigger=LostFocus}"/>
+                                        <TextBlock Grid.Column="2" Text="Min" Style="{StaticResource FieldLabel}" MinWidth="30"/>
+                                        <TextBox   Grid.Column="3" Text="{Binding Minute, UpdateSourceTrigger=LostFocus}"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Jump to" Style="{StaticResource RefHeader}"/>
+                                    <ComboBox x:Name="TeleportCombo" ItemsSource="{Binding TeleportTargets}"
+                                              DisplayMemberPath="Name" SelectedIndex="0"
+                                              ToolTip="Confirmed destinations. For anywhere else, type the map id and X/Y above (0..63)."/>
+                                    <Button Content="Teleport party here"
+                                            Command="{Binding ApplyTeleportCommand}"
+                                            CommandParameter="{Binding SelectedItem, ElementName=TeleportCombo}"
+                                            HorizontalAlignment="Left" Margin="2,4,2,0"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Rangers" Margin="0,6,0,0">
+                                <ListBox ItemsSource="{Binding Characters}" SelectedItem="{Binding SelectedCharacter}"
+                                         DisplayMemberPath="ListLabel" Height="220"/>
+                            </GroupBox>
+                        </StackPanel>
+
+                        <!-- Selected ranger editor (reuses CharacterViewModel) -->
+                        <GroupBox Grid.Column="1" Header="Ranger" Margin="6,0,0,0"
+                                  DataContext="{Binding SelectedCharacter}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Margin="6">
+                                    <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="14" Margin="0,0,0,2"/>
+                                    <TextBlock Text="{Binding Summary}" Foreground="#555" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="150"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="130"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/>
+                                            <RowDefinition/>
+                                            <RowDefinition/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Name" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}" MaxLength="13"/>
+                                        <TextBlock Grid.Row="0" Grid.Column="2" Text="Gender" Style="{StaticResource FieldLabel}"/>
+                                        <ComboBox  Grid.Row="0" Grid.Column="3" Margin="2" ItemsSource="{Binding GenderOptions}"
+                                                   SelectedIndex="{Binding GenderIndex}"/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Level" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Level}"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="2" Text="Nationality" Style="{StaticResource FieldLabel}"/>
+                                        <ComboBox  Grid.Row="1" Grid.Column="3" Margin="2" ItemsSource="{Binding NationalityOptions}"
+                                                   SelectedIndex="{Binding NationalityIndex}"/>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Experience" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Experience}"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="2" Text="Money ($)" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="2" Grid.Column="3" Text="{Binding Money}"/>
+                                    </Grid>
+
+                                    <GroupBox Header="Constitution &amp; progression" Margin="0,8,0,0">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="90"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="90"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition/>
+                                                <RowDefinition/>
+                                            </Grid.RowDefinitions>
+
+                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="CON" Style="{StaticResource FieldLabel}"/>
+                                            <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Con}"/>
+                                            <TextBlock Grid.Row="0" Grid.Column="2" Text="/ Max" Style="{StaticResource FieldLabel}"/>
+                                            <TextBox   Grid.Row="0" Grid.Column="3" Text="{Binding MaxCon}"/>
+
+                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Skill pts" Style="{StaticResource FieldLabel}"/>
+                                            <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding SkillPoints}"/>
+                                            <TextBlock Grid.Row="1" Grid.Column="2" Text="Armor Cls" Style="{StaticResource FieldLabel}"/>
+                                            <TextBox   Grid.Row="1" Grid.Column="3" Text="{Binding ArmorClass}"/>
+                                        </Grid>
+                                    </GroupBox>
+
+                                    <GroupBox Header="Attributes" Margin="0,8,0,0">
+                                        <ItemsControl ItemsSource="{Binding Attributes}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" Margin="4">
+                                                        <TextBlock Text="{Binding Name}" Width="40" VerticalAlignment="Center"
+                                                                   ToolTip="{Binding Description}"/>
+                                                        <TextBox Width="60" Text="{Binding Value}"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </GroupBox>
+
+                                    <GroupBox Header="Skills" Margin="0,8,0,0">
+                                        <ItemsControl ItemsSource="{Binding Skills}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" Margin="4,2" Width="215">
+                                                        <TextBlock Text="{Binding Name}" Width="135" VerticalAlignment="Center"
+                                                                   ToolTip="{Binding Description}"/>
+                                                        <TextBox Width="55" Text="{Binding Level}"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </GroupBox>
+
+                                    <WrapPanel Margin="0,8,0,0">
+                                        <Button Content="Full Heal" Click="FullHeal_Click"/>
+                                        <Button Content="Max Attributes" Click="MaxAttributes_Click"/>
+                                        <Button Content="Max Skills" Click="MaxSkills_Click"/>
+                                        <Button Content="Max Money" Click="MaxMoney_Click"/>
+                                        <Button Content="Max Everything" Click="MaxEverything_Click"/>
+                                    </WrapPanel>
+
+                                    <GroupBox Header="Carried Items" Margin="0,8,0,0">
+                                        <ItemsControl ItemsSource="{Binding Items}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="2,3">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="28"/>
+                                                                <ColumnDefinition Width="260"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="55"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="{Binding SlotLabel}" VerticalAlignment="Center" Foreground="#888"/>
+                                                            <ComboBox  Grid.Column="1" Margin="2" IsEditable="True" StaysOpenOnEdit="True"
+                                                                       IsTextSearchEnabled="False" ItemsSource="{Binding Options}"
+                                                                       DisplayMemberPath="Label"
+                                                                       Text="{Binding Selection, UpdateSourceTrigger=LostFocus}"
+                                                                       SelectionChanged="ItemSelected"
+                                                                       ToolTip="Pick an item, or type its name or a raw item id (0 = empty)"/>
+                                                            <TextBlock Grid.Column="2" Text="Qty" Style="{StaticResource FieldLabel}" MinWidth="0"/>
+                                                            <TextBox   Grid.Column="3" Text="{Binding Quantity}"
+                                                                       ToolTip="Ammunition / charge / quantity byte"/>
+                                                            <TextBlock Grid.Column="4" Text="{Binding Name}" Foreground="#555"
+                                                                       VerticalAlignment="Center" Margin="8,0" TextTrimming="CharacterEllipsis"/>
+                                                            <Button    Grid.Column="5" Content="Clear" Click="ClearItem_Click"/>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </GroupBox>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </GroupBox>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
         </TabControl>
     </DockPanel>
 </Window>
