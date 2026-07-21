@@ -105,6 +105,15 @@ public static class GameData
     /// <summary>Highest value the single-byte day counter can hold.</summary>
     public const int DayMax = 255;
 
+    /// <summary>
+    /// A mid-morning value for the hour-of-day counter (<see cref="OffTimeOfDay"/>).
+    /// Teleport resets the clock to this so the driver arrives during the day instead
+    /// of at night (which forces an overnight stay at the truck stop). Higher values
+    /// bring on the evening; normal in-city play was observed across hours 1–14, so 8
+    /// sits solidly in daytime business hours.
+    /// </summary>
+    public const int DaytimeHour = 8;
+
     /// <summary>Weekday index (0 = Sunday) for a given day counter, per <see cref="EpochWeekday"/>.</summary>
     public static int WeekdayForDay(int day) => ((day % 7) + EpochWeekday) % 7;
 

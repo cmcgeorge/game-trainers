@@ -493,8 +493,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     /// <summary>
     /// Drive the game's own quit → reload flow so a teleport (or any edit persisted
     /// on quit) takes effect without the player saving/loading by hand. Sends
-    /// q y y 1 4 = Quit, Yes, "another go" Yes, "continue saved driver" (1),
-    /// driver #4 (4). Must be started from the game's main city menu.
+    /// q y y 1 1 = Quit, Yes, "another go" Yes, "continue saved driver" (1),
+    /// driver #1 (1). Must be started from the game's main city menu.
     /// </summary>
     private async Task ReloadGameAsync()
     {
@@ -509,8 +509,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         RaiseCommands();
         try
         {
-            Status = "Reloading the game (Quit → reload driver 4)…";
-            await GameInput.SendSequenceAsync(hwnd, "qyy14");
+            Status = "Reloading the game (Quit → reload driver 1)…";
+            await GameInput.SendSequenceAsync(hwnd, "qyy11");
             await Task.Delay(1000); // let the driver finish loading before we read again
         }
         finally

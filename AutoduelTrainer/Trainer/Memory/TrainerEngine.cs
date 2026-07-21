@@ -247,8 +247,10 @@ public sealed class TrainerEngine : IDisposable
 
     /// <summary>
     /// Teleport the driver to a city: set the current city, clear any in-progress
-    /// route (destination = current so the game does not immediately re-route), and
-    /// bring the car along when it is with the player.
+    /// route (destination = current so the game does not immediately re-route),
+    /// reset the clock to daytime (so the driver doesn't arrive at night and get
+    /// stuck with an overnight truck-stop stay), and bring the car along when it is
+    /// with the player.
     /// </summary>
     public void Teleport(int cityId)
     {
@@ -260,6 +262,9 @@ public sealed class TrainerEngine : IDisposable
         Mem.WriteByte(PlayerField(GameData.OffWorkCityActive), c);
         Mem.WriteByte(PlayerField(GameData.OffWorkCityMirror), c);
         Mem.WriteByte(PlayerField(GameData.OffWorkCityBlock), c);
+        // Drop the hour back to mid-morning so arrival lands in the day; otherwise a
+        // late-hour teleport reloads into night and forces an overnight stay.
+        Mem.WriteByte(PlayerField(GameData.OffTimeOfDay), (byte)GameData.DaytimeHour);
 
         var p = Mem.Read(PlayerAddress, GameData.PlayerRecordSize);
         bool carWithPlayer = (p[GameData.OffFlags] & 0x20) != 0;
