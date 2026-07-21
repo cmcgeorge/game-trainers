@@ -1,0 +1,359 @@
+<Window x:Class="ColonizationTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sid Meier's Colonization — Trainer" Height="760" Width="1000"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+            <Setter Property="MinWidth" Value="92"/>
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Resources>
+
+    <TabControl Margin="6">
+        <!-- ============================ SAVE EDITOR ============================ -->
+        <TabItem Header="Save Editor" DataContext="{Binding SaveEditor}">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Background="#EEE" Padding="6">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Open save…" Command="{Binding OpenCommand}"/>
+                            <Button Content="Save" Command="{Binding SaveCommand}"/>
+                            <TextBlock Text="{Binding FilePath}" VerticalAlignment="Center"
+                                       Margin="10,0,0,0" Foreground="#555" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding HeaderSummary}" Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+                <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+                </Border>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="8" IsEnabled="{Binding IsLoaded}">
+                        <!-- Nation selector -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                            <TextBlock Text="Editing nation:" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox Width="320" ItemsSource="{Binding NationChoices}"
+                                      SelectedIndex="{Binding SelectedNationIndex}"/>
+                        </StackPanel>
+
+                        <!-- Treasury / economy -->
+                        <GroupBox Header="Treasury &amp; economy" Padding="6">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Gold:" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox Width="140" Text="{Binding Gold, UpdateSourceTrigger=LostFocus}"/>
+                                    <Button Content="Max Gold" Command="{Binding MaxGoldCommand}"/>
+                                    <TextBlock Text="Tax %:" Style="{StaticResource FieldLabel}" Margin="16,0,4,0"/>
+                                    <TextBox Width="60" Text="{Binding TaxRate, UpdateSourceTrigger=LostFocus}"/>
+                                    <Button Content="Set 0%" Command="{Binding ClearTaxCommand}"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                    <TextBlock Text="Liberty Bells:" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox Width="100" Text="{Binding LibertyBells, UpdateSourceTrigger=LostFocus}"/>
+                                    <TextBlock Text="Crosses:" Style="{StaticResource FieldLabel}" Margin="16,0,4,0"/>
+                                    <TextBox Width="100" Text="{Binding Crosses, UpdateSourceTrigger=LostFocus}"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                    <TextBlock Text="Boycotts:" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Text="{Binding BoycottStatus}" VerticalAlignment="Center" Foreground="#555"/>
+                                    <Button Content="Lift all boycotts" Command="{Binding ClearBoycottsCommand}" Margin="10,2,2,2"/>
+                                </StackPanel>
+                                <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0"
+                                           Text="Gold and Tax are the fully-verified edits. 'Max Gold' sets 999,999,999 (staying under the 4-byte display glitch)."/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- Founding Fathers -->
+                        <GroupBox Header="Founding Fathers" Padding="6" Margin="0,8,0,0">
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                                    <Button Content="Grant all" Command="{Binding GrantAllFathersCommand}"/>
+                                    <Button Content="Clear all" Command="{Binding ClearFathersCommand}"/>
+                                    <TextBlock Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="10,0,0,0"
+                                               Text="Tick to grant a Father to the selected nation. (Gold/tax are verified; Father edits are a documented convenience.)"/>
+                                </StackPanel>
+                                <DataGrid ItemsSource="{Binding Fathers}" AutoGenerateColumns="False" CanUserAddRows="False"
+                                          CanUserDeleteRows="False" HeadersVisibility="Column" MaxHeight="240">
+                                    <DataGrid.Columns>
+                                        <DataGridTemplateColumn Header="Have" Width="46">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <CheckBox IsChecked="{Binding Acquired, UpdateSourceTrigger=PropertyChanged}"
+                                                              IsEnabled="{Binding Grantable}" HorizontalAlignment="Center"/>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Father" Binding="{Binding Name}" IsReadOnly="True" Width="150"/>
+                                        <DataGridTextColumn Header="Category" Binding="{Binding Category}" IsReadOnly="True" Width="90"/>
+                                        <DataGridTextColumn Header="Effect" Binding="{Binding Effect}" IsReadOnly="True" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </DockPanel>
+                        </GroupBox>
+
+                        <!-- Colonies -->
+                        <GroupBox Header="Colonies" Padding="6" Margin="0,8,0,0">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                    <Button Content="Fill all warehouses" Command="{Binding FillAllColoniesCommand}"/>
+                                    <TextBlock Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="10,0,0,0"
+                                               Text="A fresh 1492 game has no colonies yet — found one in-game and re-open the save to edit it."/>
+                                </StackPanel>
+                                <ItemsControl ItemsSource="{Binding Colonies}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Expander Header="{Binding Title}" Margin="0,2">
+                                                <Border Background="#F8F8F8" Padding="6" Margin="0,2,0,6">
+                                                    <StackPanel>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="Name:" Style="{StaticResource FieldLabel}"/>
+                                                            <TextBox Width="180" Text="{Binding Name, UpdateSourceTrigger=LostFocus}"/>
+                                                            <TextBlock Text="Pop:" Style="{StaticResource FieldLabel}" Margin="16,0,4,0" MinWidth="0"/>
+                                                            <TextBox Width="50" Text="{Binding Population, UpdateSourceTrigger=LostFocus}"/>
+                                                            <TextBlock Text="Hammers:" Style="{StaticResource FieldLabel}" Margin="16,0,4,0" MinWidth="0"/>
+                                                            <TextBox Width="70" Text="{Binding Hammers, UpdateSourceTrigger=LostFocus}"/>
+                                                            <Button Content="Fill warehouse" Command="{Binding FillWarehouseCommand}" Margin="16,2,2,2"/>
+                                                            <TextBlock Text="{Binding Location}" VerticalAlignment="Center" Foreground="#777" Margin="10,0,0,0"/>
+                                                        </StackPanel>
+                                                        <DataGrid ItemsSource="{Binding Goods}" AutoGenerateColumns="False" CanUserAddRows="False"
+                                                                  CanUserDeleteRows="False" HeadersVisibility="Column" Margin="0,6,0,0" MaxHeight="360">
+                                                            <DataGrid.Columns>
+                                                                <DataGridTextColumn Header="Good" Binding="{Binding Name}" IsReadOnly="True" Width="140"/>
+                                                                <DataGridTextColumn Header="Qty" Binding="{Binding Quantity, UpdateSourceTrigger=LostFocus}" Width="*"/>
+                                                            </DataGrid.Columns>
+                                                        </DataGrid>
+                                                    </StackPanel>
+                                                </Border>
+                                            </Expander>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                   Text="Edit with the game NOT running (or before you next load), so the emulator's copy doesn't overwrite your changes. Saving keeps a one-time .bak of the original."/>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </TabItem>
+
+        <!-- ============================ LIVE SCANNER ============================ -->
+        <TabItem Header="Live (Value Scanner)" DataContext="{Binding Live}">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Background="#EEE" Padding="6">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Process:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <ComboBox Width="300" ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                                  SelectedItem="{Binding SelectedProcess}"/>
+                        <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                        <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                        <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                    </StackPanel>
+                </Border>
+                <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+                </Border>
+
+                <TabControl Margin="0,6,0,0">
+                    <TabItem Header="Scan">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <ComboBox Width="80" ItemsSource="{Binding Widths}" SelectedItem="{Binding SelectedWidth}"
+                                                  IsEnabled="{Binding NotScanning}"
+                                                  ToolTip="Byte, 16-bit or 32-bit. Changing this starts a new scan."/>
+                                        <TextBlock Text="Value:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                        <TextBox Width="120" Text="{Binding ScanText, UpdateSourceTrigger=PropertyChanged}"
+                                                 ToolTip="Decimal (500) or hex (0x1F4). Leave blank for an unknown-value first scan."/>
+                                        <Button Content="First Scan" Command="{Binding FirstScanCommand}"/>
+                                        <Button Content="New Scan" Command="{Binding NewScanCommand}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <TextBlock Text="Guides:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <Button Content="Gold" Command="{Binding GoldGuideCommand}"
+                                                ToolTip="Step-by-step to pin your treasury (Int32)."/>
+                                        <Button Content="Tax %" Command="{Binding TaxGuideCommand}"
+                                                ToolTip="Step-by-step to pin the tax rate (Byte)."/>
+                                        <Button Content="Liberty Bells" Command="{Binding BellsGuideCommand}"
+                                                ToolTip="Step-by-step to pin accumulated Liberty Bells (Int16)."/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <TextBlock Text="Narrow:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <Button Content="Exact" Command="{Binding NextScanCommand}" CommandParameter="Exact"/>
+                                        <Button Content="Increased" Command="{Binding NextScanCommand}" CommandParameter="Increased"/>
+                                        <Button Content="Decreased" Command="{Binding NextScanCommand}" CommandParameter="Decreased"/>
+                                        <Button Content="Changed" Command="{Binding NextScanCommand}" CommandParameter="Changed"/>
+                                        <Button Content="Unchanged" Command="{Binding NextScanCommand}" CommandParameter="Unchanged"/>
+                                        <TextBlock Text="{Binding MatchCount}" VerticalAlignment="Center" Margin="12,0,0,0" FontWeight="Bold"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                            <Border DockPanel.Dock="Bottom" Background="#F6F6F6" Padding="6">
+                                <Button Content="Pin selected →" Command="{Binding PinCommand}" HorizontalAlignment="Left"
+                                        ToolTip="Add the selected candidate to the Freezes tab to edit or freeze it."/>
+                            </Border>
+                            <DataGrid ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      IsReadOnly="True" HeadersVisibility="Column" Margin="0,6,0,0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="220"/>
+                                    <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+
+                    <TabItem Header="Freezes">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Freeze all" Command="{Binding FreezeAllCommand}"/>
+                                    <Button Content="Unfreeze all" Command="{Binding FreezeNoneCommand}"/>
+                                    <Button Content="Remove selected" Command="{Binding RemoveFrozenCommand}"/>
+                                    <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
+                                               Text="Edit Target to poke a value; tick Freeze to re-write it every ~200 ms."/>
+                                </StackPanel>
+                            </Border>
+                            <DataGrid ItemsSource="{Binding Frozen}" SelectedItem="{Binding SelectedFrozen}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      HeadersVisibility="Column" Margin="0,6,0,0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Label" Binding="{Binding Label}" IsReadOnly="True" Width="110"/>
+                                    <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" IsReadOnly="True" Width="180"/>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding WidthLabel}" IsReadOnly="True" Width="60"/>
+                                    <DataGridTextColumn Header="Live" Binding="{Binding Live}" IsReadOnly="True" Width="110"/>
+                                    <DataGridTextColumn Header="Target" Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="*"/>
+                                    <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="60"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                </TabControl>
+            </DockPanel>
+        </TabItem>
+
+        <!-- ============================ REFERENCES ============================ -->
+        <TabItem Header="References" DataContext="{Binding Reference}">
+            <TabControl Margin="4">
+                <TabItem Header="Goods">
+                    <DataGrid ItemsSource="{Binding Goods}" AutoGenerateColumns="False" IsReadOnly="True"
+                              CanUserAddRows="False" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding Id}" Width="40"/>
+                            <DataGridTextColumn Header="Good" Binding="{Binding Name}" Width="120"/>
+                            <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="120"/>
+                            <DataGridTextColumn Header="Refines / use" Binding="{Binding Refining}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Units">
+                    <DataGrid ItemsSource="{Binding Units}" AutoGenerateColumns="False" IsReadOnly="True"
+                              CanUserAddRows="False" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding Id}" Width="40"/>
+                            <DataGridTextColumn Header="Unit" Binding="{Binding Name}" Width="160"/>
+                            <DataGridTextColumn Header="Role" Binding="{Binding Role}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Terrain">
+                    <DataGrid ItemsSource="{Binding Terrains}" AutoGenerateColumns="False" IsReadOnly="True"
+                              CanUserAddRows="False" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Terrain" Binding="{Binding Name}" Width="150"/>
+                            <DataGridTextColumn Header="Food" Binding="{Binding Food}" Width="60"/>
+                            <DataGridTextColumn Header="Other base yields" Binding="{Binding Yields}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Professions">
+                    <DataGrid ItemsSource="{Binding Professions}" AutoGenerateColumns="False" IsReadOnly="True"
+                              CanUserAddRows="False" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding Id}" Width="40"/>
+                            <DataGridTextColumn Header="Profession" Binding="{Binding Name}" Width="200"/>
+                            <DataGridTextColumn Header="Specialty" Binding="{Binding Specialty}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Buildings">
+                    <DataGrid ItemsSource="{Binding Buildings}" AutoGenerateColumns="False" IsReadOnly="True"
+                              CanUserAddRows="False" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding Id}" Width="40"/>
+                            <DataGridTextColumn Header="Building" Binding="{Binding Name}" Width="200"/>
+                            <DataGridTextColumn Header="Effect" Binding="{Binding Effect}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Founding Fathers">
+                    <DataGrid ItemsSource="{Binding Fathers}" AutoGenerateColumns="False" IsReadOnly="True"
+                              CanUserAddRows="False" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Bit" Binding="{Binding Bit}" Width="40"/>
+                            <DataGridTextColumn Header="Father" Binding="{Binding Name}" Width="160"/>
+                            <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="100"/>
+                            <DataGridTextColumn Header="Effect" Binding="{Binding Effect}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </TabItem>
+                <TabItem Header="Nations">
+                    <StackPanel Margin="6">
+                        <TextBlock Text="Playable powers" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <DataGrid ItemsSource="{Binding Nations}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" HeadersVisibility="Column" MaxHeight="180">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="40"/>
+                                <DataGridTextColumn Header="Nation" Binding="{Binding Name}" Width="120"/>
+                                <DataGridTextColumn Header="Bonus" Binding="{Binding Bonus}" Width="*"/>
+                                <DataGridTextColumn Header="Free unit" Binding="{Binding StartUnit}" Width="120"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <TextBlock Text="Difficulty levels" FontWeight="Bold" Margin="0,10,0,4"/>
+                        <DataGrid ItemsSource="{Binding Difficulties}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" HeadersVisibility="Column" MaxHeight="180">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="50"/>
+                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="130"/>
+                                <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+                </TabItem>
+                <TabItem Header="Strategy">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Strategy}" Margin="8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,10">
+                                        <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="13"/>
+                                        <TextBlock Text="{Binding Body}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
+        </TabItem>
+    </TabControl>
+</Window>
