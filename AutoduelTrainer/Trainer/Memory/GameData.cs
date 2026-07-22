@@ -143,6 +143,10 @@ public static class GameData
     public const int SkillMax = 99;
     public const int HealthMax = 3;
 
+    /// <summary>Full power-cell capacity/charge — the 99 ceiling of the single-byte
+    /// battery fields (<see cref="CarOffBattery"/> / <see cref="CarOffBatteryMax"/>).</summary>
+    public const int BatteryFull = 99;
+
     // --- base-100 ("centimal") integer codec --------------------------------
     // Valid digits are 0..99; any byte above that (0xFF = empty, 0xDD = self-powered
     // weapon sentinel, or leftover garbage) is not a real digit and contributes 0.

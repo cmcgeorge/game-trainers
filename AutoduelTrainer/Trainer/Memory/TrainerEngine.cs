@@ -276,13 +276,13 @@ public sealed class TrainerEngine : IDisposable
     {
         var c = Mem.Read(CarAddress, GameData.CarRecordSize);
         int max = c[GameData.CarOffBatteryMax];
-        if (max == 0) max = 99; // fallback, mirroring ChargeBatteryFull
+        if (max == 0) max = GameData.BatteryFull; // fallback, mirroring ChargeBatteryFull
         byte v = (byte)Math.Clamp(value, 0, max);
         Mem.WriteByte(CarField(GameData.CarOffBattery), v);
     }
 
     public void SetBatteryMax(int value) =>
-        Mem.WriteByte(CarField(GameData.CarOffBatteryMax), (byte)Math.Clamp(value, 0, 99));
+        Mem.WriteByte(CarField(GameData.CarOffBatteryMax), (byte)Math.Clamp(value, 0, GameData.BatteryFull));
 
     // --- editable car stats (base-100 pairs are clamped by EncodeBase100) ---
     public void SetMaxWeight(int value) =>
@@ -349,9 +349,13 @@ public sealed class TrainerEngine : IDisposable
 
     public void ChargeBatteryFull()
     {
-        var c = Mem.Read(CarAddress, GameData.CarRecordSize);
-        byte max = c[GameData.CarOffBatteryMax];
-        Mem.WriteByte(CarField(GameData.CarOffBattery), max == 0 ? (byte)99 : max);
+        // "Full" means a full-capacity cell: raise the max to the 99 ceiling as well
+        // as the charge. The car's stored max can be lower (e.g. 77 on a stock cell);
+        // only topping the current charge up to that smaller max would leave both the
+        // freeze and the Charge button stuck below full. Writing the max is safe — the
+        // game does not recompute it from the power plant (verified live).
+        Mem.WriteByte(CarField(GameData.CarOffBatteryMax), GameData.BatteryFull);
+        Mem.WriteByte(CarField(GameData.CarOffBattery), GameData.BatteryFull);
     }
 
     /// <summary>Refill every mounted weapon's magazine (skips self-powered laser / heavy rocket).</summary>
