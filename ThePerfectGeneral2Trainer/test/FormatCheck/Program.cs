@@ -178,6 +178,60 @@ mineItem.Target = 300;                        // does not fit a byte
 Check("byte out-of-width rejected", mineItem.Target, 10L);
 Console.WriteLine();
 
+Console.WriteLine("Unit-health view model (pin / tag / max / freeze / player gate):");
+var uhHost = new CaptureHost();
+var uh = new UnitHealthViewModel(uhHost, (nuint)0x7000, ScanWidth.Byte, 8);
+Check("unit HP target starts at captured value", uh.Target, 8L);
+Check("unit HP is Byte width", uh.Width, ScanWidth.Byte);
+Check("unit HP IsPlayer defaults to true", uh.IsPlayer, true);
+Check("unit HP MaxHp is null when untagged", uh.MaxHp, null);
+Check("unit HP MaxHpDisplay is dash when untagged", uh.MaxHpDisplay, "—");
+Check("unit HP UnitName is untagged when no type selected", uh.UnitName, "(untagged)");
+uh.Target = 3;
+Check("editing unit HP target pokes RAM", uhHost.LastWrite, 3L);
+Check("unit HP poke uses Byte width", uhHost.LastWidth, ScanWidth.Byte);
+uh.Target = 300;  // does not fit a byte
+Check("unit HP out-of-width target rejected", uh.Target, 3L);
+
+// Tag as Medium Tank (HP=8) and test Max HP.
+var mtank = UnitReference.Units.First(u => u.Code == "MTANK");
+uh.SelectedUnit = mtank;
+Check("tagging MTANK sets MaxHp to 8", uh.MaxHp, 8);
+Check("tagging MTANK sets MaxHpDisplay to 8", uh.MaxHpDisplay, "8");
+Check("tagging MTANK sets UnitName", uh.UnitName, "Medium Tank");
+uh.SetToMaxCommand.Execute(null);
+Check("SetToMax pokes MTANK max HP (8)", uhHost.LastWrite, 8L);
+Check("SetToMax updates target", uh.Target, 8L);
+
+// Tag as Elephant Tank (HP=21) and test Max HP.
+var etank2 = UnitReference.Units.First(u => u.Code == "ETANK");
+uh.SelectedUnit = etank2;
+Check("tagging ETANK sets MaxHp to 21", uh.MaxHp, 21);
+uh.SetToMaxCommand.Execute(null);
+Check("SetToMax pokes ETANK max HP (21)", uhHost.LastWrite, 21L);
+Check("SetToMax updates target to 21", uh.Target, 21L);
+
+// Tag as Mine (HP=null) — SetToMax should be unavailable.
+var mine2 = UnitReference.Units.First(u => u.Code == "MINE");
+uh.SelectedUnit = mine2;
+Check("tagging MINE sets MaxHp to null", uh.MaxHp, null);
+Check("MINE MaxHpDisplay is dash", uh.MaxHpDisplay, "—");
+
+// Freeze re-writes the target.
+uh.SelectedUnit = mtank;  // back to MTANK (HP=8)
+uh.Target = 6;
+uh.Frozen = true;
+uhHost.LastWrite = null;
+uh.ApplyFreeze();
+Check("unit HP freeze re-writes target", uhHost.LastWrite, 6L);
+
+// IsPlayer gate: un-tick player, freeze should still work individually.
+uh.IsPlayer = false;
+uhHost.LastWrite = null;
+uh.ApplyFreeze();
+Check("unit HP freeze works even when IsPlayer is false", uhHost.LastWrite, 6L);
+Console.WriteLine();
+
 Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : $"{failures} CHECK(S) FAILED");
 return failures == 0 ? 0 : 1;
 

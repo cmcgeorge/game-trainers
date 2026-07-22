@@ -48,6 +48,7 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     public ObservableCollection<ScanResultViewModel> Results { get; } = new();
     public ObservableCollection<FrozenValueViewModel> Frozen { get; } = new();
     public ObservableCollection<PurchaseItemViewModel> PurchaseItems { get; } = new();
+    public ObservableCollection<UnitHealthViewModel> UnitHealthItems { get; } = new();
     public ObservableCollection<UnitInfo> Units { get; } = new(UnitReference.Units);
 
     /// <summary>The scan widths offered in the UI.</summary>
@@ -71,6 +72,9 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
 
     private FrozenValueViewModel? _selectedFrozen;
     public FrozenValueViewModel? SelectedFrozen { get => _selectedFrozen; set { SetField(ref _selectedFrozen, value); RaiseCommands(); } }
+
+    private UnitHealthViewModel? _selectedUnitHealth;
+    public UnitHealthViewModel? SelectedUnitHealth { get => _selectedUnitHealth; set { SetField(ref _selectedUnitHealth, value); RaiseCommands(); } }
 
     public bool IsAttached => _mem is { IsOpen: true };
     public bool HasResults => _searcher is { HasMatches: true };
@@ -126,6 +130,18 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     public ICommand FreezeAllPurchaseCommand { get; }
     /// <summary>Unfreezes every purchase item at once.</summary>
     public ICommand UnfreezeAllPurchaseCommand { get; }
+    /// <summary>Pins the selected scan result to the Unit Health tab as a unit HP entry.</summary>
+    public ICommand PinUnitHealthCommand { get; }
+    /// <summary>Removes the selected unit health row.</summary>
+    public ICommand RemoveUnitHealthCommand { get; }
+    /// <summary>Freezes every unit health row marked as a player unit.</summary>
+    public ICommand FreezeAllPlayerUnitHealthCommand { get; }
+    /// <summary>Unfreezes every unit health row marked as a player unit.</summary>
+    public ICommand UnfreezeAllPlayerUnitHealthCommand { get; }
+    /// <summary>Sets every player unit's HP target to its unit type's max HP.</summary>
+    public ICommand MaxAllPlayerUnitHealthCommand { get; }
+    /// <summary>Sets up and explains the guided scan for a unit's hit points.</summary>
+    public ICommand UnitHealthGuideCommand { get; }
 
     public MainViewModel()
     {
@@ -142,6 +158,12 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         AutoLocateCommand = new RelayCommand(_ => _ = AutoLocateAsync(), _ => IsAttached && !IsScanning);
         FreezeAllPurchaseCommand = new RelayCommand(_ => SetAllPurchaseFrozen(true), _ => PurchaseItems.Count > 0);
         UnfreezeAllPurchaseCommand = new RelayCommand(_ => SetAllPurchaseFrozen(false), _ => PurchaseItems.Count > 0);
+        PinUnitHealthCommand = new RelayCommand(_ => PinUnitHealth(), _ => SelectedResult != null);
+        RemoveUnitHealthCommand = new RelayCommand(_ => RemoveUnitHealth(), _ => SelectedUnitHealth != null);
+        FreezeAllPlayerUnitHealthCommand = new RelayCommand(_ => SetPlayerUnitHealthFrozen(true), _ => UnitHealthItems.Any(i => i.IsPlayer));
+        UnfreezeAllPlayerUnitHealthCommand = new RelayCommand(_ => SetPlayerUnitHealthFrozen(false), _ => UnitHealthItems.Any(i => i.IsPlayer));
+        MaxAllPlayerUnitHealthCommand = new RelayCommand(_ => MaxAllPlayerUnitHealth(), _ => UnitHealthItems.Any(i => i.IsPlayer && i.MaxHp.HasValue));
+        UnitHealthGuideCommand = new RelayCommand(_ => ShowUnitHealthGuide(), _ => IsAttached && !IsScanning);
 
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         _poll.Tick += (_, _) => PollTick();
@@ -208,8 +230,10 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         Results.Clear();
         Frozen.Clear();
         PurchaseItems.Clear();
+        UnitHealthItems.Clear();
         SelectedResult = null;
         SelectedFrozen = null;
+        SelectedUnitHealth = null;
         MatchCount = "";
         IsLocated = false;
         PurchaseScreenActive = false;
@@ -443,6 +467,62 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         Status = frozen ? "All purchase values frozen." : "Purchase freeze cleared.";
     }
 
+    // --- unit health --------------------------------------------------------
+    private void PinUnitHealth()
+    {
+        var r = SelectedResult;
+        if (r == null) return;
+        if (UnitHealthItems.Any(u => u.Address == r.Address))
+        {
+            Status = $"{r.AddressHex} is already pinned to the Unit Health tab.";
+            return;
+        }
+        UnitHealthItems.Add(new UnitHealthViewModel(this, r.Address, SelectedWidth, r.Value));
+        RaiseCommands();
+        Status = $"Pinned {r.AddressHex} to Unit Health. Tag the unit type to enable Max HP, " +
+                 "tick IsPlayer to include it in Freeze-all-player.";
+    }
+
+    private void RemoveUnitHealth()
+    {
+        if (SelectedUnitHealth == null) return;
+        UnitHealthItems.Remove(SelectedUnitHealth);
+        SelectedUnitHealth = null;
+        RaiseCommands();
+    }
+
+    private void SetPlayerUnitHealthFrozen(bool frozen)
+    {
+        int count = 0;
+        foreach (var u in UnitHealthItems)
+        {
+            if (u.IsPlayer) { u.Frozen = frozen; count++; }
+        }
+        Status = frozen
+            ? $"Froze {count} player unit{(count == 1 ? "" : "s")}."
+            : $"Cleared freeze on {count} player unit{(count == 1 ? "" : "s")}.";
+    }
+
+    private void MaxAllPlayerUnitHealth()
+    {
+        int count = 0;
+        foreach (var u in UnitHealthItems)
+        {
+            if (u.IsPlayer && u.MaxHp.HasValue) { u.Target = u.MaxHp.Value; count++; }
+        }
+        Status = $"Set {count} player unit{(count == 1 ? "" : "s")} to max HP.";
+    }
+
+    private void ShowUnitHealthGuide()
+    {
+        if (_selectedWidth != ScanWidth.Byte) SelectedWidth = ScanWidth.Byte;
+        else NewScan();
+        Status = "Unit Health guide: select a unit on the map, read its HP from the game → type the " +
+                 "number → First Scan; let the unit take damage → type the new HP → Exact. Repeat until " +
+                 "one row remains, then Pin to Unit Health. Tag the unit type for Max HP, tick IsPlayer, " +
+                 "and Freeze to hold it at full health.";
+    }
+
     // --- poll loop -----------------------------------------------------------
     private void PollTick()
     {
@@ -462,6 +542,13 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         {
             p.ApplyFreeze();
             if (ReadAt(p.Address, p.Width, out long live)) p.RefreshLive(live);
+        }
+
+        // Pinned unit HP values: same freeze/refresh cycle.
+        foreach (var u in UnitHealthItems)
+        {
+            u.ApplyFreeze();
+            if (ReadAt(u.Address, u.Width, out long live)) u.RefreshLive(live);
         }
 
         if (_searcher != null && !IsScanning && Results.Count > 0 && Results.Count <= LiveRefreshThreshold)
@@ -521,6 +608,12 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         (AutoLocateCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (FreezeAllPurchaseCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (UnfreezeAllPurchaseCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (PinUnitHealthCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (RemoveUnitHealthCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (FreezeAllPlayerUnitHealthCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (UnfreezeAllPlayerUnitHealthCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (MaxAllPlayerUnitHealthCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (UnitHealthGuideCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }
 
     public void Dispose()

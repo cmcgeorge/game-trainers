@@ -98,8 +98,12 @@
                         </StackPanel>
                     </Border>
                     <Border DockPanel.Dock="Bottom" Background="#F6F6F6" Padding="6">
-                        <Button Content="Pin selected →" Command="{Binding PinCommand}" HorizontalAlignment="Left"
-                                ToolTip="Add the selected candidate to the Freezes tab to edit or freeze it."/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Pin selected →" Command="{Binding PinCommand}" HorizontalAlignment="Left"
+                                    ToolTip="Add the selected candidate to the Freezes tab to edit or freeze it."/>
+                            <Button Content="Pin to Unit Health →" Command="{Binding PinUnitHealthCommand}" HorizontalAlignment="Left"
+                                    ToolTip="Add the selected candidate to the Unit Health tab to tag it with a unit type and freeze its HP."/>
+                        </StackPanel>
                     </Border>
                     <DataGrid ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
                               AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
@@ -133,6 +137,49 @@
                             <DataGridTextColumn Header="Target"
                                                 Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="*"/>
                             <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="70"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Unit Health (player unit HP freeze) -->
+            <TabItem Header="Unit Health">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Unit HP guide" Command="{Binding UnitHealthGuideCommand}"
+                                        ToolTip="Step-by-step to pin a unit's hit points on the battle map."/>
+                                <Button Content="Freeze all player" Command="{Binding FreezeAllPlayerUnitHealthCommand}"
+                                        ToolTip="Freeze HP on every row ticked as a player unit."/>
+                                <Button Content="Unfreeze all player" Command="{Binding UnfreezeAllPlayerUnitHealthCommand}"
+                                        ToolTip="Clear freeze on every player unit row."/>
+                                <Button Content="Max all player" Command="{Binding MaxAllPlayerUnitHealthCommand}"
+                                        ToolTip="Set every player unit's HP target to its unit type's max."/>
+                                <Button Content="Remove selected" Command="{Binding RemoveUnitHealthCommand}"/>
+                            </StackPanel>
+                            <TextBlock VerticalAlignment="Center" Margin="0,4,0,0" Foreground="#555"
+                                       TextWrapping="Wrap"
+                                       Text="Guided scan: select a unit on the map, read its HP → scan for that number (Byte width) → let it take damage → narrow with the new HP → repeat until one candidate remains → Pin to Unit Health. Tag the unit type for Max HP, tick IsPlayer, then Freeze to hold it at full health. Use 'Max all player' to set every player unit to max HP in one click."/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding UnitHealthItems}" SelectedItem="{Binding SelectedUnitHealth}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                              HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" IsReadOnly="True" Width="160"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding WidthLabel}" IsReadOnly="True" Width="55"/>
+                            <DataGridTextColumn Header="Live" Binding="{Binding Live}" IsReadOnly="True" Width="55"/>
+                            <DataGridTextColumn Header="Target"
+                                                Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                            <DataGridTextColumn Header="Max HP" Binding="{Binding MaxHpDisplay}" IsReadOnly="True" Width="55"/>
+                            <DataGridComboBoxColumn Header="Unit Type"
+                                                    ItemsSource="{Binding UnitTypes}"
+                                                    DisplayMemberPath="Name"
+                                                    SelectedItemBinding="{Binding SelectedUnit}"
+                                                    Width="140"/>
+                            <DataGridCheckBoxColumn Header="Player" Binding="{Binding IsPlayer}" Width="55"/>
+                            <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="55"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
