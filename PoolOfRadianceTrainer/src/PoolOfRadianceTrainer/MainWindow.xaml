@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:PoolOfRadianceTrainer.ViewModels"
         Title="Pool of Radiance — Live Trainer" Height="820" Width="1240" WindowState="Maximized"
+        Icon="Assets/app.ico"
         Background="{StaticResource Bg}" FontFamily="Segoe UI" FontSize="12">
 
     <DockPanel LastChildFill="True">

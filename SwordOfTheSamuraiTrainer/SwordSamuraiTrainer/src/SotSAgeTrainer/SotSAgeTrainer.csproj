@@ -12,7 +12,11 @@
     <SelfContained>false</SelfContained>
     <AssemblyName>SotSAgeTrainer</AssemblyName>
     <RootNamespace>SotSAgeTrainer</RootNamespace>
-    <ApplicationIcon></ApplicationIcon>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
 
 </Project>

@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:DragonWarsTrainer"
         Title="Dragon Wars Trainer" Height="720" Width="960"
+        Icon="Assets/app.ico"
         WindowStartupLocation="CenterScreen" WindowState="Maximized">
     <Window.Resources>
         <local:MapScaleConverter x:Key="MapScale" Cell="15"/>

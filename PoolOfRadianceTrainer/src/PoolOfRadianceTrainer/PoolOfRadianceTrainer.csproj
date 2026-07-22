@@ -10,6 +10,7 @@
     <AssemblyName>PoRTrainer</AssemblyName>
     <RootNamespace>PoolOfRadianceTrainer</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
@@ -26,6 +27,10 @@
     <!-- The create-screen roller taps the 'n' key to re-roll via Common's scancode-based SendInput
          wrapper; it works with DOSBox/SDL emulators where PostMessage can't. -->
     <Using Include="GameTrainers.Common.Memory.KeyboardSender" Alias="KeyboardSender" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
 </Project>

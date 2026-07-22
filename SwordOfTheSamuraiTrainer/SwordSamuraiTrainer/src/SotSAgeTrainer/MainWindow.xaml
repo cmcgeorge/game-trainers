@@ -4,6 +4,7 @@
         xmlns:vm="clr-namespace:SotSAgeTrainer.ViewModels"
         xmlns:inf="clr-namespace:SotSAgeTrainer.Infrastructure"
         Title="Sword of the Samurai — Trainer" Height="780" Width="660"
+        Icon="Assets/app.ico"
         Background="#12151C" ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen">
 
     <Window.Resources>

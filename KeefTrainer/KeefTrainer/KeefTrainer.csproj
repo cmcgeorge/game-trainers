@@ -11,6 +11,11 @@
     <AssemblyTitle>Keef the Thief — Trainer</AssemblyTitle>
     <Product>KeefTrainer</Product>
     <Version>1.0.0</Version>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
 
 </Project>

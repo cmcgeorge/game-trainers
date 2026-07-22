@@ -10,6 +10,7 @@
     <AssemblyName>BattleTechTrainer</AssemblyName>
     <RootNamespace>BattleTech1Trainer</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
@@ -20,6 +21,10 @@
   <ItemGroup>
     <Using Include="GameTrainers.Common.Memory" />
     <Using Include="GameTrainers.Common.Mvvm" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
 </Project>

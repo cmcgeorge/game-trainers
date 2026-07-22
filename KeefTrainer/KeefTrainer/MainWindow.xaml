@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="clr-namespace:KeefTrainer.UI"
         Title="Keef the Thief — Trainer"
+        Icon="Assets/app.ico"
         Width="960" Height="700" MinWidth="820" MinHeight="560"
         Background="{StaticResource Bg}"
         WindowStartupLocation="CenterScreen">

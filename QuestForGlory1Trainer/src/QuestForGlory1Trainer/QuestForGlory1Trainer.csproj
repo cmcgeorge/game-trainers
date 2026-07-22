@@ -10,6 +10,7 @@
     <AssemblyName>QuestForGlory1Trainer</AssemblyName>
     <RootNamespace>QuestForGlory1Trainer</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
@@ -24,6 +25,10 @@
     <Using Include="QuestForGlory1Trainer.ViewModels" />
     <Using Include="QuestForGlory1Trainer.Memory" />
     <Using Include="QuestForGlory1Trainer.Game" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
   </ItemGroup>
 
 </Project>

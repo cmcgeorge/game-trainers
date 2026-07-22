@@ -9,8 +9,4 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\ThePerfectGeneral2Trainer\ThePerfectGeneral2Trainer.csproj" />
-  </ItemGroup>
-
 </Project>

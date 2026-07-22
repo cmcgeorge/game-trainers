@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Lords of the Realm — Trainer" Height="940" Width="900"
+        Icon="Assets/app.ico"
         Background="{StaticResource Parchment}" FontFamily="Segoe UI" FontSize="13">
     <Grid Margin="14">
         <Grid.RowDefinitions>

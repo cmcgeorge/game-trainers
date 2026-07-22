@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:AutoduelTrainer"
         Title="Autoduel Trainer" Height="760" Width="880"
+        Icon="Assets/app.ico"
         MinHeight="600" MinWidth="720"
         Background="{StaticResource Bg}"
         FontFamily="Segoe UI" FontSize="13">
