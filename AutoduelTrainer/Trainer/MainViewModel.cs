@@ -108,12 +108,15 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         {
             Driving = Marksmanship = Mechanic = GameData.SkillMax;
             _engine.SetDriving(Driving); _engine.SetMarksmanship(Marksmanship); _engine.SetMechanic(Mechanic);
+            _playerStatsPending = false;   // written straight away; let refresh follow the game again
             ReadState();
         }), () => Attached);
         FullHealthCommand = new RelayCommand(() => Guard(() =>
         {
             Health = GameData.HealthMax; BodyArmor = 5;
-            _engine.SetHealth(Health); _engine.SetBodyArmor(BodyArmor); ReadState();
+            _engine.SetHealth(Health); _engine.SetBodyArmor(BodyArmor);
+            _playerStatsPending = false;   // body-armor written; let refresh follow the game again
+            ReadState();
         }), () => Attached);
         ApplyPlayerCommand = new RelayCommand(ApplyPlayer, () => Attached);
         TeleportCommand = new RelayCommand(() => Guard(() =>
@@ -176,7 +179,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             // Dropping the session clears any freezes so a previous target value
             // can never be written into a freshly-attached process, and drops any
             // pending city pick so a re-attach starts by following the game.
-            if (!value) { FreezeMoney = FreezeHealth = FreezeCarStats = FreezeTimeOfDay = false; _cityPending = _dayPending = false; _carStatsPending = _weaponsPending = _armorPending = _drivetrainPending = false; }
+            if (!value) { FreezeMoney = FreezeHealth = FreezeCarStats = FreezeTimeOfDay = false; _cityPending = _dayPending = _playerStatsPending = false; _carStatsPending = _weaponsPending = _armorPending = _drivetrainPending = false; }
             Set(ref _attached, value);
             Raise(nameof(NotAttached));
             RaiseCommands();
@@ -292,12 +295,21 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
             // Frozen fields are driven by the user's target value, so don't let a
             // refresh overwrite them with a momentary in-game reading.
             if (!FreezeMoney) Money = s.Money;
-            Prestige = s.Prestige;
             if (!FreezeHealth) Health = s.Health;
-            BodyArmor = s.BodyArmor;
-            Driving = s.Driving;
-            Marksmanship = s.Marksmanship;
-            Mechanic = s.Mechanic;
+            // Prestige, body armor and the three skills are "pending target" boxes like
+            // the city/day fields: once the user edits any of them, hold every player
+            // stat at the typed value until Apply Driver writes it, instead of letting
+            // the 900 ms refresh snap the box back to the game's reading first.
+            if (!_playerStatsPending)
+            {
+                _syncingPlayer = true;
+                Prestige = s.Prestige;
+                BodyArmor = s.BodyArmor;
+                Driving = s.Driving;
+                Marksmanship = s.Marksmanship;
+                Mechanic = s.Mechanic;
+                _syncingPlayer = false;
+            }
             // Always show the game's real city; follow it in the target combo only
             // when the user has no pending selection.
             CurrentLocation = s.CityName;
@@ -383,6 +395,7 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _engine.SetDriving(Driving);
         _engine.SetMarksmanship(Marksmanship);
         _engine.SetMechanic(Mechanic);
+        _playerStatsPending = false;   // prestige/armor/skills written; let refresh follow the game again
         _engine.SetDay(Day);
         _dayPending = false;   // day written; let refresh follow the game again
         // Apply Driver only sets the current city (no route cancel / car drag);
@@ -556,8 +569,25 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     private int _money;
     public int Money { get => _money; set => Set(ref _money, value); }
 
+    // Prestige, body armor and the three skills are *target* boxes: the first user edit
+    // flips _playerStatsPending so the auto-refresh stops overwriting them until Apply
+    // Driver is clicked. _syncingPlayer marks refresh-driven writes so they never count
+    // as user edits. (Money/health/time use their freeze toggles instead, because those
+    // values drain during play and want continuous re-application.)
+    private bool _syncingPlayer;
+    private bool _playerStatsPending;
+
+    /// <summary>Setter helper for the player-stat targets: sets the field and, when the
+    /// change comes from the user (not a refresh), marks the player stats pending.</summary>
+    private bool SetPlayer<T>(ref T field, T value, [CallerMemberName] string? name = null)
+    {
+        if (!Set(ref field, value, name)) return false;
+        if (!_syncingPlayer) _playerStatsPending = true;
+        return true;
+    }
+
     private int _prestige;
-    public int Prestige { get => _prestige; set => Set(ref _prestige, value); }
+    public int Prestige { get => _prestige; set => SetPlayer(ref _prestige, value); }
 
     private int _health;
     // Health has a tiny valid domain (0..3); bound it here so the "(max 3)" label
@@ -565,16 +595,16 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public int Health { get => _health; set => Set(ref _health, Math.Clamp(value, 0, GameData.HealthMax)); }
 
     private int _bodyArmor;
-    public int BodyArmor { get => _bodyArmor; set => Set(ref _bodyArmor, value); }
+    public int BodyArmor { get => _bodyArmor; set => SetPlayer(ref _bodyArmor, value); }
 
     private int _driving;
-    public int Driving { get => _driving; set => Set(ref _driving, value); }
+    public int Driving { get => _driving; set => SetPlayer(ref _driving, value); }
 
     private int _marksmanship;
-    public int Marksmanship { get => _marksmanship; set => Set(ref _marksmanship, value); }
+    public int Marksmanship { get => _marksmanship; set => SetPlayer(ref _marksmanship, value); }
 
     private int _mechanic;
-    public int Mechanic { get => _mechanic; set => Set(ref _mechanic, value); }
+    public int Mechanic { get => _mechanic; set => SetPlayer(ref _mechanic, value); }
 
     // The Location combo is a *target* selector. A user pick becomes "pending" so the
     // auto-refresh (which reads the game's real city) does not snap it back before the
