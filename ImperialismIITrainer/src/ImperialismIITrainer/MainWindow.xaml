@@ -1,0 +1,179 @@
+<Window x:Class="ImperialismIITrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Imperialism II — Trainer" Height="760" Width="1000"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Resources>
+
+    <TabControl Margin="6">
+        <!-- ============================ LIVE SCANNER ============================ -->
+        <TabItem Header="Live (Value Scanner)" DataContext="{Binding Live}">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Background="#EEE" Padding="6">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Process:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <ComboBox Width="300" ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                                  SelectedItem="{Binding SelectedProcess}"/>
+                        <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                        <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                        <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                    </StackPanel>
+                </Border>
+                <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+                </Border>
+
+                <TabControl Margin="0,6,0,0">
+                    <TabItem Header="Scan">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <Button Content="⚡ Auto-locate player (no scan)" Command="{Binding AutoLocateCommand}"
+                                                FontWeight="Bold"
+                                                ToolTip="Follows a fixed pointer to your nation object and pins Treasury + warehouse resources straight to the Freezes tab — no scanning."/>
+                                        <TextBlock Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                   Text="One click: finds your Treasury and warehouse and adds them to Freezes. The manual scan below is the fallback if a build differs."/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <ComboBox Width="80" ItemsSource="{Binding Widths}" SelectedItem="{Binding SelectedWidth}"
+                                                  IsEnabled="{Binding NotScanning}"
+                                                  ToolTip="Byte, 16-bit or 32-bit. Changing this starts a new scan. Treasury is Int32; warehouse resources are Int16."/>
+                                        <TextBlock Text="Value:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                        <TextBox Width="120" Text="{Binding ScanText, UpdateSourceTrigger=PropertyChanged}"
+                                                 ToolTip="Decimal (12000) or hex (0x2EE0). Leave blank for an unknown-value first scan."/>
+                                        <Button Content="First Scan" Command="{Binding FirstScanCommand}"/>
+                                        <Button Content="New Scan" Command="{Binding NewScanCommand}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <TextBlock Text="Guides:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <Button Content="Treasury" Command="{Binding TreasuryGuideCommand}"
+                                                ToolTip="Step-by-step to pin your cash / treasury (Int32)."/>
+                                        <Button Content="Resource" Command="{Binding ResourceGuideCommand}"
+                                                ToolTip="Step-by-step to pin a warehouse stockpile (Int16), labelled by the good on the right."/>
+                                        <TextBlock Text="of" VerticalAlignment="Center" Margin="4,0,4,0"/>
+                                        <ComboBox Width="120" ItemsSource="{Binding Commodities}" SelectedItem="{Binding SelectedCommodity}"
+                                                  ToolTip="Which good the Resource guide labels the pin as."/>
+                                        <Button Content="Labour" Command="{Binding LaborGuideCommand}" Margin="12,2,2,2"
+                                                ToolTip="Step-by-step to pin a workforce count (Int16)."/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <TextBlock Text="Narrow:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <Button Content="Exact" Command="{Binding NextScanCommand}" CommandParameter="Exact"/>
+                                        <Button Content="Increased" Command="{Binding NextScanCommand}" CommandParameter="Increased"/>
+                                        <Button Content="Decreased" Command="{Binding NextScanCommand}" CommandParameter="Decreased"/>
+                                        <Button Content="Changed" Command="{Binding NextScanCommand}" CommandParameter="Changed"/>
+                                        <Button Content="Unchanged" Command="{Binding NextScanCommand}" CommandParameter="Unchanged"/>
+                                        <TextBlock Text="{Binding MatchCount}" VerticalAlignment="Center" Margin="12,0,0,0" FontWeight="Bold"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                            <Border DockPanel.Dock="Bottom" Background="#F6F6F6" Padding="6">
+                                <Button Content="Pin selected →" Command="{Binding PinCommand}" HorizontalAlignment="Left"
+                                        ToolTip="Add the selected candidate to the Freezes tab to edit or freeze it."/>
+                            </Border>
+                            <DataGrid ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      IsReadOnly="True" HeadersVisibility="Column" Margin="0,6,0,0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="220"/>
+                                    <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+
+                    <TabItem Header="Freezes">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Freeze all" Command="{Binding FreezeAllCommand}"/>
+                                    <Button Content="Unfreeze all" Command="{Binding FreezeNoneCommand}"/>
+                                    <Button Content="Remove selected" Command="{Binding RemoveFrozenCommand}"/>
+                                    <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
+                                               Text="Edit Target to poke a value; tick Freeze to re-write it every ~200 ms so the turn tick can't undo it."/>
+                                </StackPanel>
+                            </Border>
+                            <DataGrid ItemsSource="{Binding Frozen}" SelectedItem="{Binding SelectedFrozen}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      HeadersVisibility="Column" Margin="0,6,0,0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Label" Binding="{Binding Label}" IsReadOnly="True" Width="110"/>
+                                    <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" IsReadOnly="True" Width="180"/>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding WidthLabel}" IsReadOnly="True" Width="60"/>
+                                    <DataGridTextColumn Header="Live" Binding="{Binding Live}" IsReadOnly="True" Width="110"/>
+                                    <DataGridTextColumn Header="Target" Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="*"/>
+                                    <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="60"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                </TabControl>
+            </DockPanel>
+        </TabItem>
+
+        <!-- ============================ REFERENCES ============================ -->
+        <TabItem Header="References" DataContext="{Binding Reference}">
+            <TabControl Margin="4">
+                <TabItem Header="Commodities">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="6"
+                                   Text="Names recovered verbatim from an internal table in Imperialism II.exe. A warehouse stockpile is a signed 16-bit value — use the Resource guide (Int16) to find one."/>
+                        <DataGrid ItemsSource="{Binding Commodities}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="#" Binding="{Binding Id}" Width="40"/>
+                                <DataGridTextColumn Header="Good" Binding="{Binding Name}" Width="120"/>
+                                <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" Width="120"/>
+                                <DataGridTextColumn Header="Production / use" Binding="{Binding Notes}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </TabItem>
+                <TabItem Header="Built-in cheats">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="6"
+                                   Text="Cheat and scenario-script hooks the game binary itself carries (symbol names from Imperialism II.map). Listed to show the data model; this trainer edits memory directly rather than calling them."/>
+                        <DataGrid ItemsSource="{Binding Cheats}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Command / symbol" Binding="{Binding Command}" Width="180"/>
+                                <DataGridTextColumn Header="Owner" Binding="{Binding Owner}" Width="110"/>
+                                <DataGridTextColumn Header="What it does" Binding="{Binding What}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </TabItem>
+                <TabItem Header="How it works / notes">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Notes}" Margin="8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,10">
+                                        <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="13"/>
+                                        <TextBlock Text="{Binding Body}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
+        </TabItem>
+    </TabControl>
+</Window>
