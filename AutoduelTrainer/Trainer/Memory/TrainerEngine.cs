@@ -169,7 +169,7 @@ public sealed class TrainerEngine : IDisposable
         snap.Acceleration = c[GameData.CarOffAccel];
         snap.Suspension = c[GameData.CarOffSuspension];
         snap.Chassis = c[GameData.CarOffChassis];
-        snap.CarValue = GameData.DecodeBase100(c.AsSpan(GameData.CarOffValue, 2));
+        snap.CarValue = GameData.DecodeBase100(c.AsSpan(GameData.CarOffValue, GameData.CarValueBytes));
         snap.Battery = c[GameData.CarOffBattery];
         snap.BatteryMax = c[GameData.CarOffBatteryMax];
 
@@ -310,7 +310,7 @@ public sealed class TrainerEngine : IDisposable
         Mem.WriteByte(CarField(GameData.CarOffChassis), (byte)Math.Clamp(value, 0, 99));
 
     public void SetCarValue(int value) =>
-        Mem.Write(CarField(GameData.CarOffValue), GameData.EncodeBase100(value, 2));
+        Mem.Write(CarField(GameData.CarOffValue), GameData.EncodeBase100(value, GameData.CarValueBytes));
 
     /// <summary>
     /// Set the time-of-day counter (player <see cref="GameData.OffTimeOfDay"/>). Freezing this

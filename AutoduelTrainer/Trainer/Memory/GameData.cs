@@ -60,8 +60,14 @@ public static class GameData
     public const int CarOffAccel = 0x1A;      // 1 byte
     public const int CarOffSuspension = 0x1B; // 1 byte type index (1 = Improved observed)
     public const int CarOffChassis = 0x1C;    // 1 byte type index (0 = Light observed)
-    public const int CarOffValue = 0x1D;      // 2 bytes base-100
+    public const int CarOffValue = 0x1D;      // 3 bytes base-100 (0x1D..0x1F); 0x20 is flags
     public const int CarOffCity = 0x21;       // 1 byte
+
+    /// <summary>Width of the car-value field in base-100 digits. It spans three bytes
+    /// (0x1D..0x1F): a fully-loaded car exceeds the $9,999 that two digits can hold, and
+    /// the high digit at +0x1F is worth $10,000 apiece (a $26,000 car reads $6,000 if the
+    /// field is treated as a 2-byte pair). The third byte sits before the flags at 0x20.</summary>
+    public const int CarValueBytes = 3;
     public const int CarOffBattery = 0x22;    // 1 byte current
     public const int CarOffBatteryMax = 0x23; // 1 byte max
     public const int CarOffComponents = 0x24; // 20 records x 8 bytes

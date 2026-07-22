@@ -153,7 +153,7 @@ it does not repaint the city you are currently standing in.
 | +0x1A | 1 | Acceleration | 10 observed | ~ |
 | +0x1B | 1 | Suspension | 1 = Improved (observed) | ~ |
 | +0x1C | 1 | Chassis? | 0 = Light (observed) | ~ |
-| +0x1D | 2 | **Car value $** | base-100 pair; dropped $2655→$1405 = exactly MG $1000 + Oil jet $250 + install margin | ✔ |
+| +0x1D | 3 | **Car value $** | base-100 (0x1D..0x1F); dropped $2655→$1405 = exactly MG $1000 + Oil jet $250 + install margin. Originally read as a 2-byte pair — fine below $9,999, but a loaded car sets the +0x1F ×$10,000 digit, so a $26,000 car mis-read as $6,000 until the field was widened to 3 digits | ✔ |
 | +0x20 | 1 | Flags | `0x80` observed | |
 | +0x21 | 1 | Car's city | garage location / current city | ✔ |
 | +0x22 | 1 | **Battery current** | 0–99 | ✔ |
