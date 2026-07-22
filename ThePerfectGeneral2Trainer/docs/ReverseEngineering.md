@@ -99,11 +99,13 @@ Notes / caveats:
 
 - The array is **byte-per-type** (each count 0–255), 16 entries, in the purchase-screen order above.
 - It sits inside a zero-padded DPMI heap block; the immediately surrounding bytes are far-pointer soup
-  (`77 07`, `DF`, `DE` selectors — classic 16:16 protected-mode pointers). There is **no strong constant
-  byte signature** immediately adjacent, so a robust value-independent auto-locator could **not** be derived
-  from two static dumps alone (Candidate for future work — see §6).
+  (`77 07`, `DF`, `DE` selectors — classic 16:16 protected-mode pointers). However, the constant ASCII
+  file-path string `D:\ICONS\MSGR.DAT` sits 0x16E bytes *after* the count array in the same heap block
+  — found exactly once in each of two ~400 MB dumps — and serves as a reliable anchor for the
+  `GameLocator` auto-locator (see §6).
 - Editing this array changes the counts the purchase screen shows; it does **not** by itself refund
-  **Buy Points** (see §4), which the engine tracks separately.
+  **Buy Points** (see §4), which the engine tracks separately. The auto-locator surfaces Buy Points at
+  anchor − 0x2E0 so it can be edited directly.
 
 ### Unit-type ordering (two different orders exist)
 
@@ -238,9 +240,13 @@ ETANK   97 97 97 95 85 80 70 60 50 60 97 97  0 40
 
 ### Open leads (Candidate)
 
-- Pin the **Buy Points** scalar to a fixed offset from a DGROUP string anchor (MM1-style) once a unique
-  static string near it is identified in `TPG2.EXE` via Ghidra.
+- ~~Pin the **Buy Points** scalar to a fixed offset from a DGROUP string anchor~~ — **Done**: the constant
+  ASCII file-path `D:\ICONS\MSGR.DAT` (found exactly once in each ~400 MB dump) anchors Buy Points at
+  −0x2E0, Units Purchased at −0x2E2, and the count array at −0x16E. The `GameLocator` auto-locator
+  requires no manual scan for purchase-phase values.
 - Recover the **unit-definition record stride** so the cost/HP/damage rules table can be located by signature
   (its values are constant across all games — an ideal "game is loaded" gate).
 - Decode the **placed-unit record** (round-start dump) to enable per-unit HP/max-out editing during battle.
+  When this is solved, a second anchor or a relative scan from the purchase anchor may extend the
+  auto-locator to battle-phase values.
 - Parse the `SCEN/*.SCN` scenario format (each ~82 KB) for buy budgets and VP-region layouts.

@@ -26,6 +26,8 @@
                 <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
                 <Button Content="Attach" Command="{Binding AttachCommand}"/>
                 <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                <Button Content="Auto-Locate" Command="{Binding AutoLocateCommand}"
+                        ToolTip="Scan for the game's purchase state (Buy Points + unit counts) automatically — no manual searching needed."/>
             </StackPanel>
         </Border>
 
@@ -35,6 +37,35 @@
         </Border>
 
         <TabControl Margin="6">
+            <!-- Purchase (auto-located) -->
+            <TabItem Header="Purchase">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Auto-Locate" Command="{Binding AutoLocateCommand}"
+                                    ToolTip="Find the game's purchase state by scanning for the D:\ICONS\MSGR.DAT anchor string."/>
+                            <Button Content="Freeze all" Command="{Binding FreezeAllPurchaseCommand}"/>
+                            <Button Content="Unfreeze all" Command="{Binding UnfreezeAllPurchaseCommand}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
+                                       Text="On the purchase screen, click Auto-Locate to find Buy Points and unit counts. Edit Target to poke a value; tick Freeze to hold it."/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding PurchaseItems}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                              HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Item" Binding="{Binding Label}" IsReadOnly="True" Width="180"/>
+                            <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" IsReadOnly="True" Width="160"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding WidthLabel}" IsReadOnly="True" Width="55"/>
+                            <DataGridTextColumn Header="Live" Binding="{Binding Live}" IsReadOnly="True" Width="70"/>
+                            <DataGridTextColumn Header="Target"
+                                                Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="*"/>
+                            <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="60"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
             <!-- Value Scanner -->
             <TabItem Header="Value Scanner">
                 <DockPanel>

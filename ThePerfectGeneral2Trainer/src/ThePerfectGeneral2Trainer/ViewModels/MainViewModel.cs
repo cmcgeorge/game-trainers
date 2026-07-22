@@ -21,12 +21,12 @@ public sealed class ProcessEntry
 }
 
 /// <summary>
-/// Root view-model. Because The Perfect General II is a DPMI program whose state lives in a run-time
-/// heap with no strong static signature (see <c>.docs/ReverseEngineering.md</c>), the reliable primitive
-/// is a Cheat-Engine-style <b>value scan</b>: attach to the emulator, snapshot memory, and narrow by
-/// what the on-screen number does (Buy Points, a unit's hit points, a turn counter…). Survivors are
-/// pinned to a freeze table that re-writes them every poll tick. A read-only Unit Reference surfaces the
-/// confirmed <c>UNITINFO.DOC</c> rules.
+/// Root view-model. The Perfect General II is a DPMI program whose state lives in a run-time heap.
+/// The trainer auto-locates the purchase state by scanning for the constant <c>D:\ICONS\MSGR.DAT</c>
+/// anchor string the game loads into its DPMI heap, then derives the count array, Buy Points, and
+/// Units Purchased at fixed offsets (see <c>Game/GameLocator.cs</c>). A Cheat-Engine-style value scan
+/// remains available for scalars the locator doesn't cover (a unit's hit points during battle, turn
+/// counters, etc.). A read-only Unit Reference surfaces the confirmed <c>UNITINFO.DOC</c> rules.
 /// </summary>
 public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
 {
@@ -47,6 +47,7 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     public ObservableCollection<ProcessEntry> Processes { get; } = new();
     public ObservableCollection<ScanResultViewModel> Results { get; } = new();
     public ObservableCollection<FrozenValueViewModel> Frozen { get; } = new();
+    public ObservableCollection<PurchaseItemViewModel> PurchaseItems { get; } = new();
     public ObservableCollection<UnitInfo> Units { get; } = new(UnitReference.Units);
 
     /// <summary>The scan widths offered in the UI.</summary>
@@ -84,6 +85,14 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     /// <summary>Inverse of <see cref="IsScanning"/>, so the width combo can disable itself during a scan.</summary>
     public bool NotScanning => !_isScanning;
 
+    /// <summary>True when the auto-locator found the game's anchor string (game is loaded).</summary>
+    public bool IsLocated { get => _isLocated; private set => SetField(ref _isLocated, value); }
+    private bool _isLocated;
+
+    /// <summary>True when the purchase screen is active (count array validated).</summary>
+    public bool PurchaseScreenActive { get => _purchaseScreenActive; private set => SetField(ref _purchaseScreenActive, value); }
+    private bool _purchaseScreenActive;
+
     private string _matchCountText = "";
     public string MatchCount { get => _matchCountText; private set => SetField(ref _matchCountText, value); }
 
@@ -111,6 +120,12 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     public ICommand FreezeAllCommand { get; }
     /// <summary>Sets up and explains the guided scan for Buy Points Remaining.</summary>
     public ICommand BuyPointsGuideCommand { get; }
+    /// <summary>Auto-locates the purchase state (Buy Points + unit counts) by scanning for the game's anchor string.</summary>
+    public ICommand AutoLocateCommand { get; }
+    /// <summary>Freezes every purchase item at once.</summary>
+    public ICommand FreezeAllPurchaseCommand { get; }
+    /// <summary>Unfreezes every purchase item at once.</summary>
+    public ICommand UnfreezeAllPurchaseCommand { get; }
 
     public MainViewModel()
     {
@@ -124,6 +139,9 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         RemoveFrozenCommand = new RelayCommand(_ => RemoveFrozen(), _ => SelectedFrozen != null);
         FreezeAllCommand = new RelayCommand(_ => SetAllFrozen(true), _ => Frozen.Count > 0);
         BuyPointsGuideCommand = new RelayCommand(_ => ShowBuyPointsGuide(), _ => IsAttached && !IsScanning);
+        AutoLocateCommand = new RelayCommand(_ => _ = AutoLocateAsync(), _ => IsAttached && !IsScanning);
+        FreezeAllPurchaseCommand = new RelayCommand(_ => SetAllPurchaseFrozen(true), _ => PurchaseItems.Count > 0);
+        UnfreezeAllPurchaseCommand = new RelayCommand(_ => SetAllPurchaseFrozen(false), _ => PurchaseItems.Count > 0);
 
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         _poll.Tick += (_, _) => PollTick();
@@ -189,9 +207,12 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         _searcher = null;
         Results.Clear();
         Frozen.Clear();
+        PurchaseItems.Clear();
         SelectedResult = null;
         SelectedFrozen = null;
         MatchCount = "";
+        IsLocated = false;
+        PurchaseScreenActive = false;
         OnPropertyChanged(nameof(IsAttached));
         OnPropertyChanged(nameof(HasResults));
         RaiseCommands();
@@ -345,6 +366,83 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
                  "row remains, then Pin it and edit the Target.";
     }
 
+    // --- auto-locate --------------------------------------------------------
+    /// <summary>
+    /// Scans the attached process for the <c>D:\ICONS\MSGR.DAT</c> anchor and, if found, populates the
+    /// Purchase tab with Buy Points and per-type unit counts at fixed offsets from the anchor. When the
+    /// game is not on the purchase screen, the count-array validator rejects the far-pointer soup that
+    /// overwrites the area, and the status line tells the user to navigate to the purchase screen.
+    /// </summary>
+    private async Task AutoLocateAsync()
+    {
+        var mem = _mem;
+        if (mem == null) return;
+
+        IsScanning = true;
+        Status = "Auto-locating purchase state…";
+        _scanCts?.Dispose();
+        _scanCts = new CancellationTokenSource();
+        var ct = _scanCts.Token;
+
+        LocatedState state;
+        try { state = await Task.Run(() => GameLocator.Locate(mem, ct), ct); }
+        catch (OperationCanceledException) { IsScanning = false; RaiseCommands(); return; }
+        catch (Exception ex) { IsScanning = false; Status = "Auto-locate error: " + ex.Message; RaiseCommands(); return; }
+
+        if (mem != _mem) { IsScanning = false; RaiseCommands(); return; }    // detached mid-scan
+
+        PurchaseItems.Clear();
+        IsLocated = state.AnchorFound;
+        PurchaseScreenActive = state.PurchaseScreenActive;
+
+        if (!state.AnchorFound)
+        {
+            Status = state.Truncated
+                ? "Game not found (memory scan was truncated — try again)."
+                : "Game not found. Launch The Perfect General II in DOSBox and play into a scenario first.";
+        }
+        else if (!state.PurchaseScreenActive)
+        {
+            Status = "Game loaded, but the purchase screen is not active. Navigate to the purchase screen " +
+                     "and click Auto-Locate again to edit Buy Points and unit counts.";
+        }
+        else
+        {
+            PopulatePurchaseItems(state);
+            Status = $"Purchase state located. Buy Points: {state.BuyPoints}, Units Purchased: {state.UnitsPurchased}. " +
+                     "Edit any Target to poke a value, or tick Freeze to hold it.";
+        }
+
+        IsScanning = false;
+        RaiseCommands();
+    }
+
+    private void PopulatePurchaseItems(LocatedState state)
+    {
+        PurchaseItems.Clear();
+
+        // Buy Points Remaining (Int16).
+        PurchaseItems.Add(new PurchaseItemViewModel(
+            this, "Buy Points Remaining", state.BuyPointsAddress, ScanWidth.Int16, state.BuyPoints));
+
+        // Per-type purchased-unit counts (Byte), in purchase-screen order.
+        for (int i = 0; i < PurchaseFormat.TypeCount; i++)
+        {
+            PurchaseItems.Add(new PurchaseItemViewModel(
+                this,
+                PurchaseFormat.TypeOrder[i],
+                state.CountArrayAddress + (nuint)i,
+                ScanWidth.Byte,
+                state.CountArray.Length > i ? state.CountArray[i] : 0));
+        }
+    }
+
+    private void SetAllPurchaseFrozen(bool frozen)
+    {
+        foreach (var p in PurchaseItems) p.Frozen = frozen;
+        Status = frozen ? "All purchase values frozen." : "Purchase freeze cleared.";
+    }
+
     // --- poll loop -----------------------------------------------------------
     private void PollTick()
     {
@@ -357,6 +455,13 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         {
             f.ApplyFreeze();
             if (ReadAt(f.Address, f.Width, out long live)) f.RefreshLive(live);
+        }
+
+        // Auto-located purchase items: same freeze/refresh cycle, reading at each item's own width.
+        foreach (var p in PurchaseItems)
+        {
+            p.ApplyFreeze();
+            if (ReadAt(p.Address, p.Width, out long live)) p.RefreshLive(live);
         }
 
         if (_searcher != null && !IsScanning && Results.Count > 0 && Results.Count <= LiveRefreshThreshold)
@@ -413,6 +518,9 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         (RemoveFrozenCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (FreezeAllCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (BuyPointsGuideCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (AutoLocateCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (FreezeAllPurchaseCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (UnfreezeAllPurchaseCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }
 
     public void Dispose()

@@ -6,10 +6,9 @@ public readonly record struct PurchaseCount(int Index, string Type, int Count);
 /// <summary>
 /// Models the <b>Confirmed</b> purchased-unit count array (see <c>.docs/ReverseEngineering.md</c> §3):
 /// 16 contiguous bytes, one per unit type, in purchase-screen order, each a 0–255 tally of how many of
-/// that type the player has bought. Its layout is documented here and exercised by the test harness; it
-/// is not wired into the live UI, because the DPMI heap exposes no static anchor to locate the block at
-/// runtime (the trainer reaches purchase state via the guided value scan instead — see
-/// <c>.docs/ReverseEngineering.md</c> §4/§6). Should a locator be recovered, this decoder is ready to use.
+/// that type the player has bought. The <c>GameLocator</c> auto-locator derives the count array address
+/// at a fixed offset from the <c>D:\ICONS\MSGR.DAT</c> anchor string and feeds the live bytes through
+/// <see cref="Decode"/> to populate the Purchase tab (see <c>.docs/ReverseEngineering.md</c> §6).
 ///
 /// <para>The order here is the <b>purchase-screen order</b>, which differs from the
 /// <see cref="UnitReference"/> stat-table order only in where MINE sits (first here, 14th there).</para>

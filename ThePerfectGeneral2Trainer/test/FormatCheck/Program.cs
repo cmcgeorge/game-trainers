@@ -1,7 +1,8 @@
 // Headless verification harness for The Perfect General II trainer. It asserts the game-knowledge layer
-// (the confirmed purchased-unit count-array format and the UNITINFO.DOC unit reference) plus the pure
-// value-scanner helpers and the frozen-value write/clamp logic. Exits 0 on success, 1 on any failure so
-// it can gate the build (Run.ps1 -Test). No live process or emulator is touched.
+// (the confirmed purchased-unit count-array format, the UNITINFO.DOC unit reference, and the
+// GameLocator anchor/offsets/validator), plus the pure value-scanner helpers and the frozen-value and
+// purchase-item write/clamp logic. Exits 0 on success, 1 on any failure so it can gate the build
+// (Run.ps1 -Test). No live process or emulator is touched.
 
 using GameTrainers.Common.Memory;
 using ThePerfectGeneral2Trainer.Game;
@@ -15,7 +16,11 @@ int failures = 0;
 
 void Check(string name, object? actual, object? expected)
 {
-    bool ok = Equals(actual, expected);
+    bool ok = (actual, expected) switch
+    {
+        (byte[] a, byte[] b) => a.SequenceEqual(b),
+        _ => Equals(actual, expected),
+    };
     Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] {name}: got {Fmt(actual)}, expected {Fmt(expected)}");
     if (!ok) failures++;
 }
@@ -115,6 +120,62 @@ var failing = new CaptureHost { Succeed = false };
 var pin2 = new FrozenValueViewModel(failing, (nuint)0x2000, ScanWidth.Byte, 10);
 pin2.Target = 20;
 Check("a failed write is reported", failing.Failures, 1);
+Console.WriteLine();
+
+Console.WriteLine("GameLocator anchor and offsets (Confirmed from memory dumps):");
+// The anchor is the ASCII string "D:\ICONS\MSGR.DAT" + NUL (18 bytes: 17 chars + NUL).
+byte[] expectedAnchor = System.Text.Encoding.ASCII.GetBytes("D:\\ICONS\\MSGR.DAT\0");
+Check("anchor length (17 chars + NUL)", GameLocator.Anchor.Length, 18);
+Check("anchor bytes match D:\\ICONS\\MSGR.DAT\\0", GameLocator.Anchor, expectedAnchor);
+// Offsets confirmed against the purchase-screen dump: anchor at 0x013350BA,
+// count array at 0x01334F4C (-0x16E), Buy Points at 0x01334DDA (-0x2E0),
+// Units Purchased at 0x01334DD8 (-0x2E2).
+Check("offset to count array", GameLocator.AnchorToCountArray, -0x16E);
+Check("offset to Buy Points", GameLocator.AnchorToBuyPoints, -0x2E0);
+Check("offset to Units Purchased", GameLocator.AnchorToUnitsPurchased, -0x2E2);
+Console.WriteLine();
+
+Console.WriteLine("GameLocator purchase-screen validator:");
+// Valid: the sample count array (sum 36) with Units Purchased = 36.
+Check("valid count array + matching units", GameLocator.LooksLikePurchaseScreen(SampleCounts, 36), true);
+// Reject: sum doesn't match Units Purchased.
+Check("sum mismatch rejected", GameLocator.LooksLikePurchaseScreen(SampleCounts, 35), false);
+// Reject: a byte exceeds the per-type max (far-pointer soup from dump 2).
+byte[] farPtrSoup = { 0x00, 0x00, 0x00, 0x00, 0x9A, 0xDF, 0x31, 0x12,
+                      0x77, 0x06, 0x68, 0xDF, 0x77, 0x07, 0x00, 0x00 };
+Check("far-pointer soup rejected", GameLocator.LooksLikePurchaseScreen(farPtrSoup, 0), false);
+// Reject: all zeros (no units purchased).
+Check("all-zero array rejected", GameLocator.LooksLikePurchaseScreen(new byte[16], 0), false);
+// Reject: negative Units Purchased.
+Check("negative units rejected", GameLocator.LooksLikePurchaseScreen(SampleCounts, -1), false);
+// Reject: wrong array length.
+Check("short array rejected", GameLocator.LooksLikePurchaseScreen(new byte[15], 36), false);
+Console.WriteLine();
+
+Console.WriteLine("Purchase-item write / freeze / width guard:");
+var pHost = new CaptureHost();
+var bp = new PurchaseItemViewModel(pHost, "Buy Points Remaining", (nuint)0x5000, ScanWidth.Int16, 39);
+Check("purchase item label", bp.Label, "Buy Points Remaining");
+Check("purchase item width is Int16", bp.Width, ScanWidth.Int16);
+Check("target starts at captured value", bp.Target, 39L);
+bp.Target = 99;
+Check("editing target pokes RAM", pHost.LastWrite, 99L);
+Check("poke uses Int16 width", pHost.LastWidth, ScanWidth.Int16);
+bp.Target = 70000;                        // does not fit Int16
+Check("out-of-width target rejected", bp.Target, 99L);
+bp.Frozen = true;
+pHost.LastWrite = null;
+bp.ApplyFreeze();
+Check("freeze re-writes target", pHost.LastWrite, 99L);
+
+var countHost = new CaptureHost();
+var mineItem = new PurchaseItemViewModel(countHost, "Mine", (nuint)0x6000, ScanWidth.Byte, 3);
+Check("byte item width is Byte", mineItem.Width, ScanWidth.Byte);
+mineItem.Target = 10;
+Check("byte poke writes", countHost.LastWrite, 10L);
+Check("byte poke uses Byte width", countHost.LastWidth, ScanWidth.Byte);
+mineItem.Target = 300;                        // does not fit a byte
+Check("byte out-of-width rejected", mineItem.Target, 10L);
 Console.WriteLine();
 
 Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : $"{failures} CHECK(S) FAILED");
