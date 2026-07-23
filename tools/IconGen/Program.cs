@@ -38,6 +38,7 @@ internal static class Program
         new("Moria",                "MoriaTrainer",                DrawMoria),
         new("Pool of Radiance",     "PoolOfRadianceTrainer",       DrawPoolOfRadiance),
         new("Quest for Glory I",    "QuestForGlory1Trainer",       DrawQuestForGlory),
+        new("Railroad Tycoon",      "RailroadTycoonTrainer",       DrawRailroadTycoon),
         new("Shogun",               "ShogunTrainer",               DrawShogun),
         new("Sword of the Samurai", "SwordOfTheSamuraiTrainer",    DrawSwordOfSamurai),
         new("Syndicate Plus",       "SyndicatePlusTrainer",        DrawSyndicate),
@@ -503,6 +504,42 @@ internal static class Program
         dc.DrawRectangle(gold, null, new Rect(108, 136, 40, 8));
         dc.DrawRectangle(brown, null, new Rect(124, 144, 8, 28));
         dc.DrawGeometry(gold, null, new EllipseGeometry(P(128, 176), 7, 7));
+    }
+
+    /// <summary>Steam locomotive — Railroad Tycoon is a railway-empire strategy.</summary>
+    private static void DrawRailroadTycoon(DrawingContext dc)
+    {
+        DrawTile(dc);
+        var gold = Brush(0xC9, 0xA2, 0x4B);
+        var goldDk = Brush(0x8E, 0x72, 0x30);
+        var steel = Brush(0xB8, 0xC4, 0xD0);
+        var smoke = Brush(0x9A, 0xA4, 0xB0);
+        var pen = new Pen(goldDk, 2);
+
+        // Rail bed (a horizontal line the wheels sit on).
+        dc.DrawRectangle(goldDk, null, new Rect(30, 196, 196, 6));
+
+        // Boiler (rounded, side-on) + cab at the rear.
+        dc.DrawRoundedRectangle(gold, pen, new Rect(60, 120, 104, 44), 12, 12);
+        dc.DrawRectangle(gold, pen, new Rect(150, 96, 46, 68));       // cab
+        dc.DrawRectangle(steel, null, new Rect(158, 106, 30, 24));    // cab window
+
+        // Smokestack + steam dome.
+        dc.DrawRectangle(gold, pen, new Rect(76, 92, 22, 30));
+        dc.DrawGeometry(gold, pen, new EllipseGeometry(P(120, 118), 12, 12));
+        // Cow-catcher (pilot) at the front.
+        dc.DrawGeometry(gold, null, Poly(P(60, 128), P(60, 164), P(40, 164)));
+
+        // Smoke puffs above the stack.
+        dc.DrawGeometry(smoke, null, new EllipseGeometry(P(90, 74), 12, 12));
+        dc.DrawGeometry(smoke, null, new EllipseGeometry(P(110, 58), 16, 16));
+        dc.DrawGeometry(smoke, null, new EllipseGeometry(P(136, 46), 20, 20));
+
+        // Driving wheels.
+        dc.DrawGeometry(steel, new Pen(goldDk, 3), new EllipseGeometry(P(88, 190), 24, 24));
+        dc.DrawGeometry(steel, new Pen(goldDk, 3), new EllipseGeometry(P(150, 190), 24, 24));
+        dc.DrawGeometry(goldDk, null, new EllipseGeometry(P(88, 190), 6, 6));
+        dc.DrawGeometry(goldDk, null, new EllipseGeometry(P(150, 190), 6, 6));
     }
 
     /// <summary>Rising sun — Shogun is a feudal-Japan strategy.</summary>
