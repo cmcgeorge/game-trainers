@@ -1,0 +1,263 @@
+<Window x:Class="BeachHead2000Trainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="BeachHead 2000 — Trainer" Height="720" Width="900"
+        Icon="Assets/app.ico"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Background="#EEE" Padding="6">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Process:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <ComboBox Width="300" ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                          SelectedItem="{Binding SelectedProcess}"/>
+                <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                <Button Content="Detach" Command="{Binding DetachCommand}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+        </Border>
+
+        <TabControl Margin="6">
+            <!-- Value Scanner -->
+            <TabItem Header="Value Scanner">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <ComboBox Width="80" ItemsSource="{Binding Widths}"
+                                          SelectedItem="{Binding SelectedWidth}"
+                                          IsEnabled="{Binding NotScanning}"
+                                          ToolTip="Byte, 16-bit or 32-bit value. Changing this starts a new scan."/>
+                                <TextBlock Text="Value:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                <TextBox Width="120" Text="{Binding ScanText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Decimal (100) or hex (0x64). Leave blank for an unknown-value first scan."/>
+                                <Button Content="First Scan" Command="{Binding FirstScanCommand}"/>
+                                <Button Content="New Scan" Command="{Binding NewScanCommand}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="Guides:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <Button Content="Health" Command="{Binding HealthGuideCommand}"
+                                        ToolTip="Step-by-step to pin the player's bunker health (Int32)."/>
+                                <Button Content="Bullets" Command="{Binding BulletsGuideCommand}"
+                                        ToolTip="Step-by-step to pin the bullet count (Int32)."/>
+                                <Button Content="Projectiles" Command="{Binding ProjectilesGuideCommand}"
+                                        ToolTip="Step-by-step to pin the projectile count (Int32)."/>
+                                <Button Content="Missiles" Command="{Binding MissilesGuideCommand}"
+                                        ToolTip="Step-by-step to pin the missile count (Int32)."/>
+                                <Button Content="Score" Command="{Binding ScoreGuideCommand}"
+                                        ToolTip="Step-by-step to pin the player's score (Int32)."/>
+                                <Button Content="Level" Command="{Binding LevelGuideCommand}"
+                                        ToolTip="Step-by-step to pin the current level number (Int32)."/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="Narrow:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <Button Content="Exact" Command="{Binding NextScanCommand}" CommandParameter="Exact"/>
+                                <Button Content="Increased" Command="{Binding NextScanCommand}" CommandParameter="Increased"/>
+                                <Button Content="Decreased" Command="{Binding NextScanCommand}" CommandParameter="Decreased"/>
+                                <Button Content="Changed" Command="{Binding NextScanCommand}" CommandParameter="Changed"/>
+                                <Button Content="Unchanged" Command="{Binding NextScanCommand}" CommandParameter="Unchanged"/>
+                                <TextBlock Text="{Binding MatchCount}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                           FontWeight="Bold"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Bottom" Background="#F6F6F6" Padding="6">
+                        <Button Content="Pin selected →" Command="{Binding PinCommand}" HorizontalAlignment="Left"
+                                ToolTip="Add the selected candidate to the Freezes tab to edit or freeze it."/>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                              IsReadOnly="True" HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="220"/>
+                            <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Freezes -->
+            <TabItem Header="Freezes">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Freeze all" Command="{Binding FreezeAllCommand}"/>
+                            <Button Content="Unfreeze all" Command="{Binding FreezeNoneCommand}"/>
+                            <Button Content="Remove selected" Command="{Binding RemoveFrozenCommand}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
+                                       Text="Edit Target to poke a value; tick Freeze to re-write it every ~200 ms."/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Frozen}" SelectedItem="{Binding SelectedFrozen}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                              HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Label" Binding="{Binding Label}" IsReadOnly="True" Width="110"/>
+                            <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" IsReadOnly="True" Width="180"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding WidthLabel}" IsReadOnly="True" Width="60"/>
+                            <DataGridTextColumn Header="Live" Binding="{Binding Live}" IsReadOnly="True" Width="90"/>
+                            <DataGridTextColumn Header="Target"
+                                                Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="*"/>
+                            <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="60"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Level Editor -->
+            <TabItem Header="Level Editor">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Load Level..." Command="{Binding LoadLevelCommand}"
+                                    ToolTip="Open a BeachHead 2000 level file (Level_00 through Level_60)."/>
+                            <Button Content="Save" Command="{Binding SaveLevelCommand}"
+                                    ToolTip="Write the edited values back to the loaded file."/>
+                            <Button Content="Max Ammo" Command="{Binding MaxAmmoCommand}"
+                                    ToolTip="Set bullets to 999, projectiles to 99, missiles to 99."/>
+                            <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
+                                       Text="{Binding LevelFilePath}" TextTrimming="CharacterEllipsis"/>
+                        </StackPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <TextBlock TextWrapping="Wrap" Foreground="#555"
+                                   Text="Edit the starting ammo, time limit, and enemy aggression for a level file. Changes take effect when the level is loaded in-game (restart the level or advance to it). Always back up level files before editing."/>
+                    </Border>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+                        <StackPanel>
+                            <TextBlock Text="Ammo" FontWeight="Bold" Margin="0,0,0,4"/>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Bullets:" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding LevelBullets}" Width="80"/>
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="Machine-gun ammo (left mouse)" Foreground="#555" VerticalAlignment="Center"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Projectiles:" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LevelProjectiles}" Width="80"/>
+                                <TextBlock Grid.Row="1" Grid.Column="2" Text="Cannon shells (right mouse)" Foreground="#555" VerticalAlignment="Center"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Missiles:" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding LevelMissiles}" Width="80"/>
+                                <TextBlock Grid.Row="2" Grid.Column="2" Text="Guided missiles (spacebar)" Foreground="#555" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <TextBlock Text="Level Settings" FontWeight="Bold" Margin="0,0,0,4"/>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Time (sec):" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding LevelTime}" Width="80"/>
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="Time limit for the level" Foreground="#555" VerticalAlignment="Center"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Artillery:" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LevelArtillery}" Width="80"/>
+                                <TextBlock Grid.Row="1" Grid.Column="2" Text="0 = off, 1 = artillery strikes enabled" Foreground="#555" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <TextBlock Text="Aggression (1 = easy, 9 = hard)" FontWeight="Bold" Margin="0,0,0,4"/>
+                            <Grid Margin="0,0,0,12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Tank:" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding LevelAggrTank}" Width="80"/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Jet:" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding LevelAggrJet}" Width="80"/>
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Heli-Gun:" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding LevelAggrHeliGun}" Width="80"/>
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Heli-Rocket:" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding LevelAggrHeliRocket}" Width="80"/>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+
+            <!-- Reference -->
+            <TabItem Header="Reference">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <TextBlock TextWrapping="Wrap" Foreground="#555"
+                                   Text="BeachHead 2000 (Digital Fusion / WizardWorks, 2000) — a native 32-bit Windows game. You man a beach bunker and defend against waves of infantry, tanks, APCs, helicopters, jets, and bombers. The game ships 61 level files (Level_00 to Level_60), each a plain-text script defining starting ammo, time limit, enemy aggression, and unit waves."/>
+                    </Border>
+                    <TabControl Margin="0,6,0,0">
+                        <TabItem Header="Weapons">
+                            <DataGrid ItemsSource="{Binding Weapons}" AutoGenerateColumns="False"
+                                      CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True"
+                                      HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="40"/>
+                                    <DataGridTextColumn Header="Weapon" Binding="{Binding Name}" Width="120"/>
+                                    <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem Header="Enemies">
+                            <DataGrid ItemsSource="{Binding Enemies}" AutoGenerateColumns="False"
+                                      CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True"
+                                      HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="40"/>
+                                    <DataGridTextColumn Header="Enemy" Binding="{Binding Name}" Width="160"/>
+                                    <DataGridTextColumn Header="Description" Binding="{Binding Description}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                        <TabItem Header="Controls">
+                            <DataGrid ItemsSource="{Binding Controls}" AutoGenerateColumns="False"
+                                      CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True"
+                                      HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Key" Binding="{Binding Key}" Width="180"/>
+                                    <DataGridTextColumn Header="Action" Binding="{Binding Action}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </TabItem>
+                    </TabControl>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>
