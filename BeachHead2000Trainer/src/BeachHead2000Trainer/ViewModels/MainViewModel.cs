@@ -131,6 +131,7 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     public int LevelArtillery { get => _levelArtillery; set => SetField(ref _levelArtillery, value); }
 
     private LevelFile? _levelFile;
+    private string? _lastLevelDir;
 
     // --- commands ------------------------------------------------------------
     public ICommand RefreshProcessesCommand { get; }
@@ -453,6 +454,7 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
             Title = "Open BeachHead 2000 Level File",
             Filter = "Level files (Level_*)|Level_*",
             DefaultExt = "",
+            InitialDirectory = LevelDirectory.Find(_targetPid, _lastLevelDir) ?? "",
         };
 
         if (dialog.ShowDialog() != true) return;
@@ -461,6 +463,7 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         {
             _levelFile = LevelFile.Load(dialog.FileName);
             LevelFilePath = dialog.FileName;
+            _lastLevelDir = Path.GetDirectoryName(dialog.FileName);
             LevelBullets = _levelFile.Bullets;
             LevelProjectiles = _levelFile.Projectiles;
             LevelMissiles = _levelFile.Missiles;

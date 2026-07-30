@@ -111,6 +111,19 @@ public static class GameFacts
     /// </summary>
     public const string LevelFilePattern = "Level_{0:00}";
 
+    /// <summary>The Steam "BeachHead Gold Edition" app folder under <c>steamapps\common</c>.</summary>
+    public const string SteamAppFolder = "509610";
+
+    /// <summary>
+    /// The Steam Gold Edition install directory under <c>steamapps\common</c>; the game ships
+    /// at <c>steamapps\common\BeachHead Gold Edition\509610</c> (the Gold Edition bundles several
+    /// BeachHead titles, each in its own numbered subfolder).
+    /// </summary>
+    public const string SteamInstallFolder = "BeachHead Gold Edition";
+
+    /// <summary>The subdirectory of the game install that holds the <c>Level_00</c>…<c>Level_60</c> files.</summary>
+    public const string LevelSubdirectory = "beachhead";
+
     /// <summary>
     /// Enemy types that appear in the level file's Object sections, in the order
     /// the game expects them. <c>ObjectInc</c> entries after each <c>Object</c>
