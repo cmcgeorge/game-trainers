@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>FormatCheck</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SwordOfAragonTrainer\SwordOfAragonTrainer.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Same global usings the trainer project declares, so the harness can name ScanWidth etc. -->
+    <Using Include="GameTrainers.Common.Memory" />
+    <Using Include="GameTrainers.Common.Mvvm" />
+  </ItemGroup>
+
+</Project>

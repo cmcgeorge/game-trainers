@@ -1,0 +1,433 @@
+<Window x:Class="SwordOfAragonTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sword of Aragon — Trainer" Height="760" Width="1060"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Margin" Value="2"/>
+        </Style>
+        <Style x:Key="Caption" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="6,0,3,0"/>
+            <Setter Property="Foreground" Value="#444"/>
+        </Style>
+        <Style x:Key="Figure" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style x:Key="Note" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="Margin" Value="0,0,0,6"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+        </Border>
+
+        <TabControl Margin="6">
+            <!-- ============================================================ Kingdom -->
+            <TabItem Header="Kingdom">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Open save…" Command="{Binding BrowseSaveCommand}"
+                                        ToolTip="Pick an ARAGON.HS? file from the game folder."/>
+                                <TextBlock Text="Save:" Style="{StaticResource Caption}"/>
+                                <ComboBox Width="290" ItemsSource="{Binding SaveSets}" DisplayMemberPath="Display"
+                                          SelectedItem="{Binding SelectedSaveSet}"/>
+                                <Button Content="Load" Command="{Binding LoadSaveCommand}"/>
+                                <Button Content="Rescan folder" Command="{Binding RefreshSavesCommand}"/>
+                                <Button Content="Save" Command="{Binding SaveChangesCommand}" FontWeight="Bold"/>
+                                <Button Content="Discard" Command="{Binding DiscardChangesCommand}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <TextBlock Text="{Binding LoadedLabel}" Style="{StaticResource Figure}"/>
+                                <TextBlock Text="Ruler:" Style="{StaticResource Caption}"/>
+                                <TextBlock Text="{Binding PlayerSummary}" Style="{StaticResource Figure}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <TextBlock Text="Treasury:" Style="{StaticResource Caption}"/>
+                                <TextBox Width="110" Text="{Binding Wealth, UpdateSourceTrigger=LostFocus, StringFormat=0.##}"
+                                         IsEnabled="{Binding IsSaveLoaded}"/>
+                                <Button Content="Max" Command="{Binding MaxWealthCommand}"/>
+                                <TextBlock Text="Score:" Style="{StaticResource Caption}"/>
+                                <TextBox Width="60" Text="{Binding Score, UpdateSourceTrigger=LostFocus}"
+                                         IsEnabled="{Binding IsSaveLoaded}"/>
+                                <TextBlock Text="{Binding ScoreOutOf}" Style="{StaticResource Caption}"/>
+                                <Button Content="Max" Command="{Binding MaxScoreCommand}"/>
+                                <TextBlock Text="Income:" Style="{StaticResource Caption}"/>
+                                <TextBlock Text="{Binding SaveIncome}" Style="{StaticResource Figure}"/>
+                                <TextBlock Text="Upkeep:" Style="{StaticResource Caption}"/>
+                                <TextBlock Text="{Binding SaveMaintenance}" Style="{StaticResource Figure}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <TextBlock Text="All your cities:" Style="{StaticResource Caption}"/>
+                                <Button Content="Develop to resource ceiling" Command="{Binding DevelopAllOwnedCommand}"
+                                        ToolTip="Raises every category to the city's own Resrc figure, where further investment stops being cheap."/>
+                                <Button Content="Restore morale / loyalty / health" Command="{Binding RestoreAllOwnedCommand}"/>
+                                <TextBlock Text="Selected city:" Style="{StaticResource Caption}"/>
+                                <Button Content="Develop" Command="{Binding DevelopCityCommand}"/>
+                                <Button Content="Restore" Command="{Binding RestoreCityCommand}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="3*"/>
+                            <ColumnDefinition Width="2*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <DataGrid Grid.Column="0" ItemsSource="{Binding Cities}" SelectedItem="{Binding SelectedCity}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  HeadersVisibility="Column" Margin="0,6,3,0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="City" Binding="{Binding Name}" IsReadOnly="True" Width="110"/>
+                                <DataGridTextColumn Header="Hex" Binding="{Binding Position}" IsReadOnly="True" Width="52"/>
+                                <DataGridTextColumn Header="Owner" Binding="{Binding Owner}" IsReadOnly="True" Width="60"/>
+                                <DataGridTextColumn Header="Population" Binding="{Binding Population, UpdateSourceTrigger=LostFocus}" Width="80"/>
+                                <DataGridTextColumn Header="Morale" Binding="{Binding Morale, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                                <DataGridTextColumn Header="Loyalty" Binding="{Binding Loyalty, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                                <DataGridTextColumn Header="Health" Binding="{Binding Health, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                                <DataGridTextColumn Header="Tax %" Binding="{Binding TaxRate, UpdateSourceTrigger=LostFocus}" Width="55"/>
+                                <DataGridTextColumn Header="Recruits" Binding="{Binding Recruits, UpdateSourceTrigger=LostFocus}" Width="70"/>
+                                <DataGridTextColumn Header="City gold" Binding="{Binding CityGold, UpdateSourceTrigger=LostFocus}" Width="75"/>
+                                <DataGridTextColumn Header="Income" Binding="{Binding Income, StringFormat=0.#}" IsReadOnly="True" Width="70"/>
+                                <DataGridTextColumn Header="Devel" Binding="{Binding RevenueDevelopment}" IsReadOnly="True" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <DockPanel Grid.Column="1" Margin="3,6,0,0">
+                            <TextBlock DockPanel.Dock="Top" Style="{StaticResource Note}"
+                                       Text="Development: while Devel is below Resrc the game charges the listed Cost per step; past it, investment becomes much more expensive. Prod and Income are recomputed by the game at the start of each month."/>
+                            <DataGrid ItemsSource="{Binding SelectedCity.Development}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Category" Binding="{Binding Name}" IsReadOnly="True" Width="100"/>
+                                    <DataGridTextColumn Header="Devel" Binding="{Binding Develop, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                                    <DataGridTextColumn Header="Resrc" Binding="{Binding Resource, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                                    <DataGridTextColumn Header="Cost" Binding="{Binding Cost}" IsReadOnly="True" Width="60"/>
+                                    <DataGridTextColumn Header="Prod" Binding="{Binding Production}" IsReadOnly="True" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- =============================================================== Army -->
+            <TabItem Header="Army">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Max level" Command="{Binding MaxLevelCommand}"/>
+                            <Button Content="Fill to stacking limit" Command="{Binding FillUnitCommand}"
+                                    ToolTip="Sets the strength to the most figures that still fit one hex (200 size points)."/>
+                            <Button Content="Restore movement" Command="{Binding RefillMoveCommand}"/>
+                            <Button Content="Equip best for level" Command="{Binding EquipBestCommand}"/>
+                            <TextBlock Text="Move to:" Style="{StaticResource Caption}"/>
+                            <ComboBox Width="150" ItemsSource="{Binding TeleportTargets}" DisplayMemberPath="DisplayName"
+                                      SelectedItem="{Binding TeleportTarget}"/>
+                            <Button Content="Selected" Command="{Binding TeleportCommand}"/>
+                            <Button Content="Whole army" Command="{Binding GatherArmyCommand}"/>
+                            <CheckBox Content="Show empty slots" IsChecked="{Binding ShowEmptySlots}"
+                                      VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="3*"/>
+                            <ColumnDefinition Width="2*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <DataGrid Grid.Column="0" ItemsSource="{Binding RosterSlots}" SelectedItem="{Binding SelectedSlot}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  HeadersVisibility="Column" Margin="0,6,3,0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Slot" Binding="{Binding SlotLabel}" IsReadOnly="True" Width="60"/>
+                                <DataGridTextColumn Header="Name" Binding="{Binding Name, UpdateSourceTrigger=LostFocus}" Width="130"/>
+                                <DataGridTextColumn Header="Type" Binding="{Binding TypeName}" IsReadOnly="True" Width="95"/>
+                                <DataGridTextColumn Header="Level" Binding="{Binding Level, UpdateSourceTrigger=LostFocus}" Width="55"/>
+                                <DataGridTextColumn Header="Men" Binding="{Binding Men, UpdateSourceTrigger=LostFocus}" Width="55"/>
+                                <DataGridTextColumn Header="Hits" Binding="{Binding Hits, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                                <DataGridTextColumn Header="XP" Binding="{Binding Experience, StringFormat=0}" IsReadOnly="True" Width="75"/>
+                                <DataGridTextColumn Header="Hex" Binding="{Binding Position}" IsReadOnly="True" Width="55"/>
+                                <DataGridTextColumn Header="Make" Binding="{Binding MakeCost}" IsReadOnly="True" Width="55"/>
+                                <DataGridTextColumn Header="Upkeep" Binding="{Binding MaintGold, StringFormat=0.0}" IsReadOnly="True" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <DockPanel Grid.Column="1" Margin="3,6,0,0">
+                            <StackPanel DockPanel.Dock="Top">
+                                <TextBlock Text="{Binding SelectedSlot.DisplayName}" FontWeight="Bold" FontSize="14"/>
+                                <TextBlock Style="{StaticResource Note}"
+                                           Text="Changing type or equipment recomputes the make/train/upkeep costs and the stacking size from the game's own price tables. Armour class, hand damage and hits are shown as the game last computed them — their formulas are not reverse-engineered, so the game refreshes them itself the next time the unit is equipped or trained in-game."/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Type:" Style="{StaticResource Caption}"/>
+                                    <ComboBox Width="130" ItemsSource="{Binding SelectedSlot.AllowedTypes}"
+                                              DisplayMemberPath="Name" SelectedItem="{Binding SelectedSlot.Type}"
+                                              IsEnabled="{Binding SelectedSlot.IsOccupied}"
+                                              ToolTip="Disabled on an empty slot — the trainer edits existing units, it does not create them."/>
+                                    <TextBlock Text="Hex X/Y:" Style="{StaticResource Caption}"/>
+                                    <TextBox Width="40" Text="{Binding SelectedSlot.X, UpdateSourceTrigger=LostFocus}"/>
+                                    <TextBox Width="40" Text="{Binding SelectedSlot.Y, UpdateSourceTrigger=LostFocus}"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="AC hand/missile:" Style="{StaticResource Caption}"/>
+                                    <TextBlock Text="{Binding SelectedSlot.ArmorClassHand}" Style="{StaticResource Figure}"/>
+                                    <TextBlock Text="{Binding SelectedSlot.ArmorClassMissile}" Style="{StaticResource Figure}"/>
+                                    <TextBlock Text="Hand dmg:" Style="{StaticResource Caption}"/>
+                                    <TextBlock Text="{Binding SelectedSlot.HandDamage}" Style="{StaticResource Figure}"/>
+                                    <TextBlock Text="+" Style="{StaticResource Caption}"/>
+                                    <TextBlock Text="{Binding SelectedSlot.HandBonus}" Style="{StaticResource Figure}"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Stacking:" Style="{StaticResource Caption}"/>
+                                    <TextBlock Text="{Binding SelectedSlot.StackingCost}" Style="{StaticResource Figure}"/>
+                                    <TextBlock Text="points  ·  size" Style="{StaticResource Caption}"/>
+                                    <TextBlock Text="{Binding SelectedSlot.SizePoints}" Style="{StaticResource Figure}"/>
+                                    <TextBlock Text="Move:" Style="{StaticResource Caption}"/>
+                                    <TextBlock Text="{Binding SelectedSlot.MoveMax}" Style="{StaticResource Figure}"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="Spells:" Style="{StaticResource Caption}"/>
+                                    <TextBlock Text="{Binding SelectedSlot.SpellList}" TextWrapping="Wrap" MaxWidth="330"/>
+                                </StackPanel>
+                            </StackPanel>
+                            <DataGrid ItemsSource="{Binding SelectedSlot.Equipment}" Margin="0,6,0,0"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Slot" Binding="{Binding Name}" IsReadOnly="True" Width="80"/>
+                                    <DataGridComboBoxColumn Header="Item" Width="130"
+                                                            SelectedItemBinding="{Binding Selected, UpdateSourceTrigger=PropertyChanged}"
+                                                            DisplayMemberPath="Name">
+                                        <DataGridComboBoxColumn.ElementStyle>
+                                            <Style TargetType="ComboBox">
+                                                <Setter Property="ItemsSource" Value="{Binding Items}"/>
+                                            </Style>
+                                        </DataGridComboBoxColumn.ElementStyle>
+                                        <DataGridComboBoxColumn.EditingElementStyle>
+                                            <Style TargetType="ComboBox">
+                                                <Setter Property="ItemsSource" Value="{Binding Items}"/>
+                                            </Style>
+                                        </DataGridComboBoxColumn.EditingElementStyle>
+                                    </DataGridComboBoxColumn>
+                                    <DataGridTextColumn Header="Note" Binding="{Binding Requirement}" IsReadOnly="True" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ========================================================== Chronicle -->
+            <TabItem Header="Chronicle">
+                <DockPanel Margin="0,6,0,0">
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Note}"
+                               Text="The Chronicle of Deeds from ARAGON.HI? — the game's own record of your conquests. Read-only."/>
+                    <TextBox Text="{Binding Chronicle, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True"
+                             VerticalScrollBarVisibility="Auto" FontFamily="Consolas"/>
+                </DockPanel>
+            </TabItem>
+
+            <!-- =============================================================== Live -->
+            <TabItem Header="Live (DOSBox)">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Process:" Style="{StaticResource Caption}"/>
+                                <ComboBox Width="260" ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                                          SelectedItem="{Binding SelectedProcess}"/>
+                                <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                                <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                                <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                                <Button Content="Locate data segment" Command="{Binding LocateDgroupCommand}"
+                                        ToolTip="Signature-scans DOSBox for four ARAGON.EXE string literals and derives DS:0000 from them."/>
+                                <TextBlock Text="{Binding DgroupLabel}" Style="{StaticResource Figure}" Margin="8,0,0,0"/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Note}" Margin="0,6,0,0"
+                                       Text="Guided finds search only the located 64 KiB data segment. Read a figure off the City Status screen, type it below, and pick the matching button — gold is a QuickBASIC (MBF) float, everything else is a 16-bit counter."/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Value:" Style="{StaticResource Caption}"/>
+                                <TextBox Width="120" Text="{Binding ScanText, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="Decimal, or hex as 0x1234. Leave blank for an unknown-value first scan."/>
+                                <Button Content="Find gold" Command="{Binding FindWealthCommand}"/>
+                                <Button Content="Find counter" Command="{Binding FindCounterCommand}"/>
+                                <TextBlock Text="   Whole process:" Style="{StaticResource Caption}"/>
+                                <ComboBox Width="70" ItemsSource="{Binding Widths}" SelectedItem="{Binding SelectedWidth}"
+                                          IsEnabled="{Binding NotScanning}"/>
+                                <Button Content="First Scan" Command="{Binding FirstScanCommand}"/>
+                                <Button Content="New Scan" Command="{Binding NewScanCommand}"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="Narrow:" Style="{StaticResource Caption}"/>
+                                <Button Content="Exact" Command="{Binding NextScanCommand}" CommandParameter="Exact"/>
+                                <Button Content="Increased" Command="{Binding NextScanCommand}" CommandParameter="Increased"/>
+                                <Button Content="Decreased" Command="{Binding NextScanCommand}" CommandParameter="Decreased"/>
+                                <Button Content="Changed" Command="{Binding NextScanCommand}" CommandParameter="Changed"/>
+                                <Button Content="Unchanged" Command="{Binding NextScanCommand}" CommandParameter="Unchanged"/>
+                                <TextBlock Text="{Binding MatchCount}" Style="{StaticResource Figure}" Margin="12,0,0,0"/>
+                                <Button Content="Pin selected →" Command="{Binding PinCommand}" Margin="12,2,2,2"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <DataGrid Grid.Column="0" ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                  IsReadOnly="True" HeadersVisibility="Column" Margin="0,6,3,0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="140"/>
+                                <DataGridTextColumn Header="Segment" Binding="{Binding DsOffsetHex}" Width="80"/>
+                                <DataGridTextColumn Header="Value" Binding="{Binding ValueText}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <DockPanel Grid.Column="1" Margin="3,6,0,0">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                                <Button Content="Freeze all" Command="{Binding FreezeAllCommand}"/>
+                                <Button Content="Unfreeze all" Command="{Binding FreezeNoneCommand}"/>
+                                <Button Content="Remove" Command="{Binding RemoveFrozenCommand}"/>
+                            </StackPanel>
+                            <DataGrid ItemsSource="{Binding Frozen}" SelectedItem="{Binding SelectedFrozen}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      HeadersVisibility="Column" Margin="0,4,0,0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Label" Binding="{Binding Label}" IsReadOnly="True" Width="80"/>
+                                    <DataGridTextColumn Header="Segment" Binding="{Binding DsOffsetHex}" IsReadOnly="True" Width="75"/>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding KindLabel}" IsReadOnly="True" Width="70"/>
+                                    <DataGridTextColumn Header="Live" Binding="{Binding LiveText}" IsReadOnly="True" Width="85"/>
+                                    <DataGridTextColumn Header="Target" Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="*"/>
+                                    <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="55"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ==================================================== Copy protection -->
+            <TabItem Header="Copy Protection">
+                <DockPanel Margin="0,6,0,0">
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Text="{Binding ProtectionPrompt}" Style="{StaticResource Note}" FontStyle="Italic"/>
+                        <TextBlock Style="{StaticResource Note}"
+                                   Text="The game then prompts &quot;First word of: FIELD&quot;. Find the city in the table and type its word for that field. You do not need the poster — the prompt names the field and at least one retry is granted, so working down the candidate list below always gets there."/>
+                        <ItemsControl ItemsSource="{Binding ProtectionFieldSummaries}" Margin="0,0,0,6">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,1" FontFamily="Consolas"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding ProtectionAnswers}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="City" Binding="{Binding City}" Width="110"/>
+                            <DataGridTextColumn Header="LOCATION" Binding="{Binding Location}" Width="*"/>
+                            <DataGridTextColumn Header="RESOURCES" Binding="{Binding Resources}" Width="*"/>
+                            <DataGridTextColumn Header="ECONOMY" Binding="{Binding Economy}" Width="*"/>
+                            <DataGridTextColumn Header="RULER" Binding="{Binding Ruler}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ========================================================== Reference -->
+            <TabItem Header="Reference">
+                <TabControl Margin="0,6,0,0">
+                    <TabItem Header="Cities">
+                        <DataGrid ItemsSource="{Binding ReferenceCities}" AutoGenerateColumns="False"
+                                  CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="City" Binding="{Binding DisplayName}" Width="130"/>
+                                <DataGridTextColumn Header="Hex" Binding="{Binding Position}" Width="60"/>
+                                <DataGridTextColumn Header="Pop" Binding="{Binding Population}" Width="60"/>
+                                <DataGridTextColumn Header="Mor" Binding="{Binding Morale}" Width="45"/>
+                                <DataGridTextColumn Header="Loy" Binding="{Binding Loyalty}" Width="45"/>
+                                <DataGridTextColumn Header="Hlth" Binding="{Binding Health}" Width="45"/>
+                                <DataGridTextColumn Header="Gold" Binding="{Binding CityGold}" Width="65"/>
+                                <DataGridTextColumn Header="Ruler" Binding="{Binding Ruler}" Width="170"/>
+                                <DataGridTextColumn Header="Notes" Binding="{Binding Note}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Units">
+                        <DataGrid ItemsSource="{Binding UnitTypes}" AutoGenerateColumns="False"
+                                  CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="55"/>
+                                <DataGridTextColumn Header="Type" Binding="{Binding Name}" Width="130"/>
+                                <DataGridTextColumn Header="Abbr" Binding="{Binding Abbreviation}" Width="60"/>
+                                <DataGridTextColumn Header="Buy" Binding="{Binding Buy}" Width="60"/>
+                                <DataGridTextColumn Header="Train" Binding="{Binding Train}" Width="60"/>
+                                <DataGridTextColumn Header="Upkeep" Binding="{Binding MaintGold, StringFormat=0.0}" Width="70"/>
+                                <DataGridTextColumn Header="Capacity" Binding="{Binding Capacity}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Equipment">
+                        <DataGrid ItemsSource="{Binding EquipmentReference}" AutoGenerateColumns="False"
+                                  CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Slot" Binding="{Binding Slot}" Width="90"/>
+                                <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="130"/>
+                                <DataGridTextColumn Header="Buy" Binding="{Binding Buy}" Width="60"/>
+                                <DataGridTextColumn Header="Train" Binding="{Binding Train}" Width="60"/>
+                                <DataGridTextColumn Header="Upkeep" Binding="{Binding Maint, StringFormat=0.0}" Width="70"/>
+                                <DataGridTextColumn Header="Weight" Binding="{Binding Weight}" Width="70"/>
+                                <DataGridTextColumn Header="Min level" Binding="{Binding Level}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Spells">
+                        <DataGrid ItemsSource="{Binding Spells}" AutoGenerateColumns="False"
+                                  CanUserAddRows="False" IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Spell" Binding="{Binding Name}" Width="110"/>
+                                <DataGridTextColumn Header="Menu" Binding="{Binding MenuLabel}" Width="60"/>
+                                <DataGridTextColumn Header="Ranger" Binding="{Binding RangerAt}" Width="60"/>
+                                <DataGridTextColumn Header="Priest" Binding="{Binding PriestAt}" Width="60"/>
+                                <DataGridTextColumn Header="Mage" Binding="{Binding MageAt}" Width="60"/>
+                                <DataGridTextColumn Header="Effect" Binding="{Binding Effect}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Terrain">
+                        <DockPanel Margin="6">
+                            <TextBlock DockPanel.Dock="Top" Style="{StaticResource Note}"
+                                       Text="World-terrain codes 0–31. Each name is also a file in the game's terrain\ folder — the tactical map a battle fought on that terrain loads."/>
+                            <ListBox ItemsSource="{Binding WorldTerrain}" FontFamily="Consolas"/>
+                        </DockPanel>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

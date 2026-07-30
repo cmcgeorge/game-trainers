@@ -1,0 +1,339 @@
+<Window x:Class="PiratesTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sid Meier's Pirates! — Trainer" Height="800" Width="1080"
+        Icon="Assets/app.ico"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#555"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Resources>
+
+    <TabControl Margin="6">
+        <!-- ============================ LIVE ============================ -->
+        <TabItem Header="Live (Gold &amp; Value Scanner)" DataContext="{Binding Live}">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Background="#EEE" Padding="6">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="DOSBox process:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <ComboBox Width="300" ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                                  SelectedItem="{Binding SelectedProcess}"/>
+                        <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                        <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                        <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                    </StackPanel>
+                </Border>
+                <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+                </Border>
+
+                <TabControl Margin="0,6,0,0">
+                    <TabItem Header="Scan">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                        <Button Content="⚡ Auto-locate (no scan)" Command="{Binding AutoLocateCommand}"
+                                                FontWeight="Bold"
+                                                ToolTip="Finds the game's data segment by three static literals, pins gold / crew / estate / clock, and reads the live settlement table."/>
+                                        <Button Content="💰 Max gold (65,535)" Command="{Binding MaxGoldCommand}"
+                                                ToolTip="Auto-locates if needed, sets your purse to the largest value its 16-bit word holds, and freezes it."/>
+                                        <TextBlock Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="8,0,0,0"
+                                                   Text="One click each. The manual scan below is the fallback."/>
+                                    </StackPanel>
+                                    <Border Background="#FFF8E1" BorderBrush="#E0C97F" BorderThickness="1" Padding="6" Margin="0,0,0,6">
+                                        <StackPanel>
+                                            <TextBlock Text="Located game" FontWeight="Bold"/>
+                                            <TextBlock Text="{Binding GameSummary}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                            <TextBlock Style="{StaticResource Hint}" Margin="0,2,0,0"
+                                                       Text="Check this against what Pirates! is showing before you poke anything. Wrong captain or date means the base is wrong — Detach and use a guided scan."/>
+                                        </StackPanel>
+                                    </Border>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <ComboBox Width="80" ItemsSource="{Binding Widths}" SelectedItem="{Binding SelectedWidth}"
+                                                  IsEnabled="{Binding NotScanning}"
+                                                  ToolTip="Byte, 16-bit or 32-bit. Changing this starts a new scan. Gold and crew are both Int16."/>
+                                        <TextBlock Text="Value:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                        <TextBox Width="120" Text="{Binding ScanText, UpdateSourceTrigger=PropertyChanged}"
+                                                 ToolTip="Decimal (1500) or hex (0x5DC). Leave blank for an unknown-value first scan."/>
+                                        <Button Content="First Scan" Command="{Binding FirstScanCommand}"/>
+                                        <Button Content="New Scan" Command="{Binding NewScanCommand}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <TextBlock Text="Guides:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <Button Content="Gold" Command="{Binding GoldGuideCommand}"
+                                                ToolTip="Step-by-step to pin your purse by scanning (Int16, exact gold pieces)."/>
+                                        <Button Content="Crew" Command="{Binding CrewGuideCommand}"
+                                                ToolTip="Step-by-step to pin your crew count (Int16)."/>
+                                        <Button Content="Any value" Command="{Binding ValueGuideCommand}"
+                                                ToolTip="Step-by-step to pin any on-screen number you can watch change."/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <TextBlock Text="Narrow:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                        <Button Content="Exact" Command="{Binding NextScanCommand}" CommandParameter="Exact"/>
+                                        <Button Content="Increased" Command="{Binding NextScanCommand}" CommandParameter="Increased"/>
+                                        <Button Content="Decreased" Command="{Binding NextScanCommand}" CommandParameter="Decreased"/>
+                                        <Button Content="Changed" Command="{Binding NextScanCommand}" CommandParameter="Changed"/>
+                                        <Button Content="Unchanged" Command="{Binding NextScanCommand}" CommandParameter="Unchanged"/>
+                                        <TextBlock Text="{Binding MatchCount}" VerticalAlignment="Center" Margin="12,0,0,0" FontWeight="Bold"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                            <Border DockPanel.Dock="Bottom" Background="#F6F6F6" Padding="6">
+                                <Button Content="Pin selected →" Command="{Binding PinCommand}" HorizontalAlignment="Left"
+                                        ToolTip="Add the selected candidate to the Freezes tab to edit or freeze it."/>
+                            </Border>
+                            <DataGrid ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      IsReadOnly="True" HeadersVisibility="Column" Margin="0,6,0,0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="240"/>
+                                    <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+
+                    <TabItem Header="Freezes">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Freeze all" Command="{Binding FreezeAllCommand}"/>
+                                    <Button Content="Unfreeze all" Command="{Binding FreezeNoneCommand}"/>
+                                    <Button Content="Remove selected" Command="{Binding RemoveFrozenCommand}"/>
+                                    <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
+                                               Text="Wealth is in tens of gold; Land is in units of 50 acres. Tick Freeze to re-write a value every ~200 ms so the game's tick can't undo it."/>
+                                </StackPanel>
+                            </Border>
+                            <DataGrid ItemsSource="{Binding Frozen}" SelectedItem="{Binding SelectedFrozen}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      HeadersVisibility="Column" Margin="0,6,0,0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Label" Binding="{Binding Label}" IsReadOnly="True" Width="170"/>
+                                    <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" IsReadOnly="True" Width="180"/>
+                                    <DataGridTextColumn Header="Type" Binding="{Binding WidthLabel}" IsReadOnly="True" Width="60"/>
+                                    <DataGridTextColumn Header="Live" Binding="{Binding Live}" IsReadOnly="True" Width="110"/>
+                                    <DataGridTextColumn Header="Target" Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="*"/>
+                                    <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="60"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+
+                    <TabItem Header="Settlements (live)">
+                        <DockPanel>
+                            <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Pin selected town's treasury" Command="{Binding PinCityGoldCommand}"
+                                            ToolTip="Adds the town's gold byte (in thousands) to the Freezes tab."/>
+                                    <TextBlock Style="{StaticResource Hint}" VerticalAlignment="Center" Margin="10,0,0,0"
+                                               Text="Read live from the running game after Auto-locate. Treasury is in thousands of gold pieces; garrison is soldiers. These drift as you sack towns."/>
+                                </StackPanel>
+                            </Border>
+                            <DataGrid ItemsSource="{Binding Cities}" SelectedItem="{Binding SelectedCity}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
+                                      HeadersVisibility="Column" Margin="0,6,0,0">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="40"/>
+                                    <DataGridTextColumn Header="Settlement" Binding="{Binding Name}" Width="160"/>
+                                    <DataGridTextColumn Header="Nation" Binding="{Binding Nation}" Width="90"/>
+                                    <DataGridTextColumn Header="Forts" Binding="{Binding Forts}" Width="60"/>
+                                    <DataGridTextColumn Header="Soldiers" Binding="{Binding Soldiers}" Width="90"/>
+                                    <DataGridTextColumn Header="Citizens" Binding="{Binding Citizens}" Width="90"/>
+                                    <DataGridTextColumn Header="Treasury" Binding="{Binding Gold, StringFormat={}{0:N0}}" Width="110"/>
+                                    <DataGridTextColumn Header="Record" Binding="{Binding Address, StringFormat=0x{0:X}}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                </TabControl>
+            </DockPanel>
+        </TabItem>
+
+        <!-- ============================ REFERENCES ============================ -->
+        <TabItem Header="References" DataContext="{Binding Reference}">
+            <TabControl Margin="4">
+                <TabItem Header="Convoys (copy-protection key)">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Hint}"
+                                           Text="The Treasure Fleet and Silver Train itineraries, decoded from the game's own route tables in DISK1. This is both the answer key to the 1987 manual's date-lookup copy protection and the schedule the convoys actually sail — intercept them where the table says they will be."/>
+                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                    <TextBlock Text="Era:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <ComboBox Width="260" ItemsSource="{Binding EraNames}" SelectedIndex="{Binding SelectedEraIndex}"/>
+                                    <TextBlock Text="Filter town:" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                    <TextBox Width="160" Text="{Binding CityFilter, UpdateSourceTrigger=PropertyChanged}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <DataGrid ItemsSource="{Binding Schedule}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" HeadersVisibility="Column" Margin="0,6,0,0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Year" Binding="{Binding Year}" Width="70"/>
+                                <DataGridTextColumn Header="Convoy" Binding="{Binding Convoy}" Width="140"/>
+                                <DataGridTextColumn Header="Arrives at" Binding="{Binding City}" Width="180"/>
+                                <DataGridTextColumn Header="Month" Binding="{Binding Month}" Width="80"/>
+                                <DataGridTextColumn Header="Half" Binding="{Binding Half}" Width="80"/>
+                                <DataGridTextColumn Header="Route slot" Binding="{Binding Slot}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </TabItem>
+
+                <TabItem Header="Settlements (by era)">
+                    <DockPanel>
+                        <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Hint}"
+                                           Text="Starting state of every settlement in the selected era, decoded from DISK1. X/Y are the game's own map coordinates (0-255, west-to-east and north-to-south). Treasury is what the town holds when the era begins."/>
+                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                    <TextBlock Text="Era:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <ComboBox Width="260" ItemsSource="{Binding EraNames}" SelectedIndex="{Binding SelectedEraIndex}"/>
+                                    <TextBlock Text="Filter town:" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                                    <TextBox Width="160" Text="{Binding CityFilter, UpdateSourceTrigger=PropertyChanged}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <DataGrid ItemsSource="{Binding Cities}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" HeadersVisibility="Column" Margin="0,6,0,0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="40"/>
+                                <DataGridTextColumn Header="Settlement" Binding="{Binding Name}" Width="150"/>
+                                <DataGridTextColumn Header="Nation" Binding="{Binding Nation}" Width="80"/>
+                                <DataGridTextColumn Header="X" Binding="{Binding X}" Width="45"/>
+                                <DataGridTextColumn Header="Y" Binding="{Binding Y}" Width="45"/>
+                                <DataGridTextColumn Header="Forts" Binding="{Binding Forts}" Width="55"/>
+                                <DataGridTextColumn Header="Soldiers" Binding="{Binding Soldiers}" Width="80"/>
+                                <DataGridTextColumn Header="Citizens" Binding="{Binding Citizens}" Width="80"/>
+                                <DataGridTextColumn Header="Treasury" Binding="{Binding Gold, StringFormat={}{0:N0}}" Width="100"/>
+                                <DataGridTextColumn Header="Prosperity" Binding="{Binding Prosperity}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </TabItem>
+
+                <TabItem Header="Ships, goods &amp; ranks">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="8">
+                            <TextBlock Text="Hulls" FontWeight="Bold" FontSize="13" Margin="0,0,0,4"/>
+                            <DataGrid ItemsSource="{Binding Ships}" AutoGenerateColumns="False" IsReadOnly="True"
+                                      CanUserAddRows="False" HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Ship" Binding="{Binding Name}" Width="160"/>
+                                    <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <TextBlock Text="Cargo" FontWeight="Bold" FontSize="13" Margin="0,10,0,4"/>
+                            <DataGrid ItemsSource="{Binding Goods}" AutoGenerateColumns="False" IsReadOnly="True"
+                                      CanUserAddRows="False" HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Good" Binding="{Binding Name}" Width="160"/>
+                                    <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <TextBlock Text="Ranks" FontWeight="Bold" FontSize="13" Margin="0,10,0,4"/>
+                            <DataGrid ItemsSource="{Binding Ranks}" AutoGenerateColumns="False" IsReadOnly="True"
+                                      CanUserAddRows="False" HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="40"/>
+                                    <DataGridTextColumn Header="Title" Binding="{Binding Name}" Width="140"/>
+                                    <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <TextBlock Text="Specialities" FontWeight="Bold" FontSize="13" Margin="0,10,0,4"/>
+                            <DataGrid ItemsSource="{Binding Specialities}" AutoGenerateColumns="False" IsReadOnly="True"
+                                      CanUserAddRows="False" HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Ability" Binding="{Binding Name}" Width="180"/>
+                                    <DataGridTextColumn Header="Effect" Binding="{Binding Effect}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <TextBlock Text="Difficulty" FontWeight="Bold" FontSize="13" Margin="0,10,0,4"/>
+                            <DataGrid ItemsSource="{Binding Difficulties}" AutoGenerateColumns="False" IsReadOnly="True"
+                                      CanUserAddRows="False" HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Level" Binding="{Binding Name}" Width="180"/>
+                                    <DataGridTextColumn Header="Effect" Binding="{Binding Effect}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <TextBlock Text="Famous expeditions" FontWeight="Bold" FontSize="13" Margin="0,10,0,4"/>
+                            <DataGrid ItemsSource="{Binding Expeditions}" AutoGenerateColumns="False" IsReadOnly="True"
+                                      CanUserAddRows="False" HeadersVisibility="Column">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Scenario" Binding="{Binding Name}" Width="260"/>
+                                    <DataGridTextColumn Header="Commander" Binding="{Binding Captain}" Width="180"/>
+                                    <DataGridTextColumn Header="Year" Binding="{Binding Year}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="Controls">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="6"
+                                   Text="Taken from the game's own setup and prompt strings, and from PIR.EXE's interrupt hooks. The setup screen chooses between joystick and keyboard; every listed key works on the keyboard path."/>
+                        <DataGrid ItemsSource="{Binding Controls}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Input" Binding="{Binding Input}" Width="200"/>
+                                <DataGridTextColumn Header="Where" Binding="{Binding Context}" Width="150"/>
+                                <DataGridTextColumn Header="Effect" Binding="{Binding Effect}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </TabItem>
+
+                <TabItem Header="Offsets">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Style="{StaticResource Hint}" Margin="6"
+                                   Text="What auto-locate pins, and how firmly each offset was established. 'Confirmed' means a routine in the disassembly can only mean this field; 'Inferred' means it is consistent with the code but not pinned by a single unambiguous routine. All offsets are relative to the game's data segment (DGROUP)."/>
+                        <DataGrid ItemsSource="{Binding KnownValues}" AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserAddRows="False" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Value" Binding="{Binding Label}" Width="170"/>
+                                <DataGridTextColumn Header="DGROUP offset" Binding="{Binding Offset, StringFormat=0x{0:X4}}" Width="120"/>
+                                <DataGridTextColumn Header="Bytes" Binding="{Binding Bytes}" Width="60"/>
+                                <DataGridTextColumn Header="Evidence" Binding="{Binding Evidence}" Width="90"/>
+                                <DataGridTextColumn Header="Notes" Binding="{Binding Note}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </TabItem>
+
+                <TabItem Header="How it works / notes">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Notes}" Margin="8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,10">
+                                        <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="13"/>
+                                        <TextBlock Text="{Binding Body}" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
+        </TabItem>
+    </TabControl>
+</Window>

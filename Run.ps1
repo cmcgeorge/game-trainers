@@ -11,7 +11,10 @@
 
 .PARAMETER Trainer
     Name (or list number) of the trainer to run, skipping the interactive menu.
-    Accepts an exact folder name, a unique partial match, or a menu index.
+    Accepts an exact folder name, a unique partial match, or a menu index. A partial
+    match that hits more than one trainer is rejected with the candidates listed --
+    e.g. 'Sword' matches both SwordOfAragonTrainer and SwordOfTheSamuraiTrainer, so
+    pass enough of the name to be unique ('SwordOfAragon') or use the menu index.
 
 .PARAMETER Configuration
     Build configuration: Debug or Release. Default: Release.
@@ -45,6 +48,17 @@
 .EXAMPLE
     .\Run.ps1 -Trainer 4 -Clean
     Cleans and runs the 4th trainer in the list.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer SwordOfAragon -Test -NoRun
+    Builds the Sword of Aragon trainer and runs its verification harness without
+    launching the GUI. New trainers are picked up automatically: any top-level
+    folder containing a Run.ps1 appears in the menu with no change to this script.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer Pirates
+    Builds and launches the Sid Meier's Pirates! trainer. 'Pirates' is enough to
+    be unique, so the partial match resolves without the menu.
 #>
 [CmdletBinding()]
 param(
