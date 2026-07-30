@@ -39,13 +39,25 @@ Three projects in `BeachHead2000Trainer.sln`: the WPF app, its test harness, and
       `Aggression`/`Artillery` fields while preserving all raw lines for round-trip.
       `ToText` rewrites only the header fields, leaving comments, `Object`/`ObjectInc`
       blocks, and unknown lines untouched. `Load`/`Save` handle disk I/O (ASCII encoding).
+    - `LevelDirectory.cs` — resolves the game's `beachhead\` folder from the attached
+      process's exe path or the Steam libraries (registry + `libraryfolders.vdf`).
+    - `LevelBackup.cs` — one-shot `Level_nn.bak` copies (`EnsureFor` never overwrites an
+      existing backup, so a `.bak` is always the pre-trainer original) plus `EnumerateLevelFiles`
+      / `EnumerateBackups`, which walk the `Level_00`…`Level_60` name pattern rather than
+      globbing so the bulk operations can't touch unrelated files or the `.bak`s themselves.
+    - `LevelBatch.cs` — the bulk operations over one folder: `MaxAmmoAll`/`SetAmmoAll` (back up
+      first, then rewrite the `Ammo` line of every level) and `RestoreAll` (copy each `.bak`
+      back, keeping it). Both return a `LevelBatchResult` (total / succeeded / newly backed up /
+      per-file errors) and keep going past a failed file instead of aborting the batch.
   - `ViewModels/` — hand-rolled MVVM using `GameTrainers.Common.Mvvm` (`ObservableObject`
     exposes `SetField(ref field, value)`; `RelayCommand`).
     - `MainViewModel` — attach/detach, background scan `Task` with cancellation, 200 ms poll
       loop (re-writes frozen pins, live-refreshes a small result set, detaches if the target
       exits), pin/freeze, the six guided scans, and the level-file editor (load/edit/save/max
-      ammo). Implements `IScanHost` and `IDisposable`. Process picker targets `Bh`/`BH2000`/
-      `beachhead` (not emulator hints — this is a native Windows game).
+      ammo, plus the bulk back-up-and-max-ammo and restore over the whole level folder, each
+      behind an OK/Cancel confirm naming the folder and file count). Implements `IScanHost` and
+      `IDisposable`. Process picker targets `Bh`/`BH2000`/`beachhead` (not emulator hints — this
+      is a native Windows game).
     - `ScanValue` — decimal/hex parsing + width-fit helpers (pure, unit-tested).
     - `ScanResultViewModel` — one scan candidate (address + live value).
     - `FrozenValueViewModel` — a pinned address: label, live value, target poked on edit,
@@ -80,12 +92,16 @@ read-validate-write pattern so a shifted layout is never corrupted.
 There is no xUnit/NUnit suite. `FormatCheck` asserts the Confirmed game-facts constants
 (process name, image base, level count, aggression range, weapon/enemy/control counts), the
 level-file parser (parse, field extraction, round-trip with comments/End marker preserved,
-edge cases for minimal and empty files), the value-parsing/width-fit helpers (decimal/hex,
-width-fit, canonicalization), and the frozen-value view-model logic (poke, freeze re-write,
-out-of-width rejection, write-failure report). It runs individual `Check(...)` assertions and
-returns exit code 0 (pass) or 1 (fail). Any parser/format or view-model change must keep the
-assertions green. The harness never reads the copyrighted level files — it rebuilds the
-fixture in code from the Confirmed format observed in the shipped `Level_00`.
+edge cases for minimal and empty files), the bulk `LevelBackup`/`LevelBatch` operations, the
+value-parsing/width-fit helpers (decimal/hex, width-fit, canonicalization), and the
+frozen-value view-model logic (poke, freeze re-write, out-of-width rejection, write-failure
+report). It runs individual `Check(...)` assertions and returns exit code 0 (pass) or 1 (fail).
+Any parser/format or view-model change must keep the assertions green. The harness never reads
+the copyrighted level files — it rebuilds the fixture in code from the Confirmed format observed
+in the shipped `Level_00`. The batch tests are the one part that touches disk: they write the
+fixture into a `Path.GetTempPath()` directory, exercise backup / max-ammo / restore against it,
+and delete it in a `finally`. Keep them self-contained that way — never point them at a real
+game folder.
 
 ## Commit & Pull Request Guidelines
 
@@ -100,6 +116,8 @@ game's mutable state (health, ammo, score, current level) is heap-allocated with
 static anchor, so all live edits go through the scanner. The level files are the only
 offline-editable surface — they are plain-text scripts that define starting conditions per
 level, and the editor preserves their full structure (comments, Object/ObjectInc blocks,
-unknown lines) on round-trip. All guided scans default to Int32; if a scan finds nothing, try
+unknown lines) on round-trip. Because those files live in the user's game install, anything
+that writes them in bulk must take a one-shot `.bak` **before** the write (a failed backup skips
+that file rather than losing it) and must be undoable via Restore Backups. All guided scans default to Int32; if a scan finds nothing, try
 Int16 — some values may be stored as 16-bit words. The game process is `Bh.exe` (not the Steam
 launcher); the process picker auto-sorts `bh`/`bh2000`/`beachhead` matches to the top.

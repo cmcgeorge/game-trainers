@@ -1,10 +1,12 @@
 // Headless verification for the BeachHead 2000 trainer. Exercises the level-file parser
-// (parse + round-trip + field extraction), the game-facts constants, the scan-value parsing
-// helpers, and the frozen-value write / freeze / width-guard logic. Exits 0 on success,
-// 1 on any failure so it can gate the build (Run.ps1 -Test). No live process or copyrighted
-// game file is touched — the level-file tests use a synthetic fixture built from the Confirmed
-// format observed in the shipped Level_00.
+// (parse + round-trip + field extraction), the bulk backup / max-ammo / restore batch over a
+// throwaway directory, the game-facts constants, the scan-value parsing helpers, and the
+// frozen-value write / freeze / width-guard logic. Exits 0 on success, 1 on any failure so it
+// can gate the build (Run.ps1 -Test). No live process or copyrighted game file is touched — the
+// level-file tests use a synthetic fixture built from the Confirmed format observed in the
+// shipped Level_00, written into a temp directory that is deleted again afterwards.
 
+using System.IO;
 using BeachHead2000Trainer.Game;
 using BeachHead2000Trainer.ViewModels;
 using GameTrainers.Common.Memory;
@@ -91,6 +93,80 @@ var level60 = LevelFile.Parse("Ammo 200 3 10\r\nTime 200\r\nAggression 9 9 9 9\r
 Check("level-60-style bullets", level60.Bullets, 200);
 Check("level-60-style missiles", level60.Missiles, 10);
 Check("level-60-style aggr all max", (level60.AggressionTank, level60.AggressionJet, level60.AggressionHeliGun, level60.AggressionHeliRocket), (9, 9, 9, 9));
+Console.WriteLine();
+
+Console.WriteLine("Bulk backup / max ammo / restore (throwaway directory):");
+string tempDir = Path.Combine(Path.GetTempPath(), "bh2000-formatcheck-" + Guid.NewGuid().ToString("N"));
+try
+{
+    Directory.CreateDirectory(tempDir);
+    for (int i = 0; i < 3; i++)
+        File.WriteAllText(Path.Combine(tempDir, LevelBackup.FileNameFor(i)), BuildLevelFixture());
+    // An unrelated file the batch must never touch.
+    string bystander = Path.Combine(tempDir, "Readme.txt");
+    File.WriteAllText(bystander, "not a level");
+
+    string Level(int i) => Path.Combine(tempDir, LevelBackup.FileNameFor(i));
+
+    Check("level file names are zero-padded", LevelBackup.FileNameFor(7), "Level_07");
+    Check("backup path appends .bak", LevelBackup.PathFor(@"C:\g\Level_00"), @"C:\g\Level_00.bak");
+    Check("enumerates the level files", LevelBackup.EnumerateLevelFiles(tempDir).Count, 3);
+    Check("no backups before the first run", LevelBackup.EnumerateBackups(tempDir).Count, 0);
+
+    var maxed = LevelBatch.MaxAmmoAll(tempDir);
+    Check("max-ammo total is every level file", maxed.Total, 3);
+    Check("max-ammo wrote every file", maxed.Succeeded, 3);
+    Check("max-ammo backed every file up", maxed.BackedUp, 3);
+    Check("max-ammo reported no errors", maxed.HasErrors, false);
+
+    var edited = LevelFile.Load(Level(0));
+    Check("edited bullets are max", edited.Bullets, GameFacts.MaxBullets);
+    Check("edited projectiles are max", edited.Projectiles, GameFacts.MaxProjectiles);
+    Check("edited missiles are max", edited.Missiles, GameFacts.MaxMissiles);
+    Check("the edit leaves the time limit alone", edited.Time, 60);
+    Check("the edit preserves the End marker", edited.Lines.Contains("End"), true);
+    Check("the edit preserves comments", edited.Lines.Any(l => l.Contains("Infantry Barges")), true);
+    Check("every level file was edited, not just the first", LevelFile.Load(Level(2)).Bullets, GameFacts.MaxBullets);
+
+    Check("the backup holds the original ammo", LevelFile.Load(LevelBackup.PathFor(Level(0))).Bullets, 100);
+    Check("backups are found afterwards", LevelBackup.EnumerateBackups(tempDir).Count, 3);
+    Check("a .bak is not itself treated as a level file", LevelBackup.EnumerateLevelFiles(tempDir).Count, 3);
+    Check("an unrelated file is untouched", File.ReadAllText(bystander), "not a level");
+
+    // Backups are one-shot: a second run must not overwrite the pristine copies.
+    var again = LevelBatch.SetAmmoAll(tempDir, 1, 2, 3);
+    Check("a repeat run still writes", again.Succeeded, 3);
+    Check("a repeat run takes no new backups", again.BackedUp, 0);
+    Check("the backup still holds the original ammo",
+        LevelFile.Load(LevelBackup.PathFor(Level(0))).Bullets, 100);
+    Check("the repeat run's values landed", LevelFile.Load(Level(0)).Bullets, 1);
+
+    var restored = LevelBatch.RestoreAll(tempDir);
+    Check("restore total is every backup", restored.Total, 3);
+    Check("restore wrote every file", restored.Succeeded, 3);
+    Check("restore reported no errors", restored.HasErrors, false);
+    Check("restored bullets are the original", LevelFile.Load(Level(0)).Bullets, 100);
+    Check("restored projectiles are the original", LevelFile.Load(Level(0)).Projectiles, 1);
+    Check("restored missiles are the original", LevelFile.Load(Level(0)).Missiles, 1);
+    Check("every level file was restored", LevelFile.Load(Level(2)).Bullets, 100);
+    Check("restore keeps the backups for a repeat", LevelBackup.EnumerateBackups(tempDir).Count, 3);
+
+    // A directory with nothing to act on is a reported no-op, not a crash.
+    string missing = Path.Combine(tempDir, "no-such-folder");
+    Check("a missing directory yields no level files", LevelBackup.EnumerateLevelFiles(missing).Count, 0);
+    Check("max ammo on a missing directory is a no-op", LevelBatch.MaxAmmoAll(missing).Total, 0);
+    Check("restore on a missing directory is a no-op", LevelBatch.RestoreAll(missing).Total, 0);
+    string emptyDir = Path.Combine(tempDir, "empty");
+    Directory.CreateDirectory(emptyDir);
+    Check("restore with no backups is a no-op", LevelBatch.RestoreAll(emptyDir).Total, 0);
+    Check("max ammo with no level files is a no-op", LevelBatch.MaxAmmoAll(emptyDir).Total, 0);
+}
+finally
+{
+    try { Directory.Delete(tempDir, recursive: true); }
+    catch (IOException) { }
+    catch (UnauthorizedAccessException) { }
+}
 Console.WriteLine();
 
 Console.WriteLine("Game facts (Confirmed constants):");

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
 using BeachHead2000Trainer.Game;
@@ -130,8 +131,15 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     private int _levelArtillery;
     public int LevelArtillery { get => _levelArtillery; set => SetField(ref _levelArtillery, value); }
 
+    /// <summary>
+    /// The folder the bulk level operations act on — the game's <c>beachhead\</c> subdirectory.
+    /// Resolved on demand from the attached process or the Steam libraries, remembered once a file
+    /// or folder has been picked, and used as the open dialog's starting directory.
+    /// </summary>
+    private string _levelFolder = "";
+    public string LevelFolder { get => _levelFolder; set => SetField(ref _levelFolder, value); }
+
     private LevelFile? _levelFile;
-    private string? _lastLevelDir;
 
     // --- commands ------------------------------------------------------------
     public ICommand RefreshProcessesCommand { get; }
@@ -153,6 +161,9 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     public ICommand LoadLevelCommand { get; }
     public ICommand SaveLevelCommand { get; }
     public ICommand MaxAmmoCommand { get; }
+    public ICommand BrowseLevelFolderCommand { get; }
+    public ICommand BackupAndMaxAmmoAllCommand { get; }
+    public ICommand RestoreBackupsCommand { get; }
 
     public MainViewModel()
     {
@@ -175,6 +186,9 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         LoadLevelCommand = new RelayCommand(_ => LoadLevel(), _ => true);
         SaveLevelCommand = new RelayCommand(_ => SaveLevel(), _ => HasLevelFile);
         MaxAmmoCommand = new RelayCommand(_ => MaxAmmo(), _ => HasLevelFile);
+        BrowseLevelFolderCommand = new RelayCommand(_ => BrowseLevelFolder(), _ => true);
+        BackupAndMaxAmmoAllCommand = new RelayCommand(_ => BackupAndMaxAmmoAll(), _ => true);
+        RestoreBackupsCommand = new RelayCommand(_ => RestoreBackups(), _ => true);
 
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
         _poll.Tick += (_, _) => PollTick();
@@ -454,7 +468,7 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
             Title = "Open BeachHead 2000 Level File",
             Filter = "Level files (Level_*)|Level_*",
             DefaultExt = "",
-            InitialDirectory = LevelDirectory.Find(_targetPid, _lastLevelDir) ?? "",
+            InitialDirectory = ResolveLevelFolder() ?? "",
         };
 
         if (dialog.ShowDialog() != true) return;
@@ -463,16 +477,8 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         {
             _levelFile = LevelFile.Load(dialog.FileName);
             LevelFilePath = dialog.FileName;
-            _lastLevelDir = Path.GetDirectoryName(dialog.FileName);
-            LevelBullets = _levelFile.Bullets;
-            LevelProjectiles = _levelFile.Projectiles;
-            LevelMissiles = _levelFile.Missiles;
-            LevelTime = _levelFile.Time;
-            LevelAggrTank = _levelFile.AggressionTank;
-            LevelAggrJet = _levelFile.AggressionJet;
-            LevelAggrHeliGun = _levelFile.AggressionHeliGun;
-            LevelAggrHeliRocket = _levelFile.AggressionHeliRocket;
-            LevelArtillery = _levelFile.Artillery;
+            LevelFolder = Path.GetDirectoryName(dialog.FileName) ?? LevelFolder;
+            ShowLevelFields(_levelFile);
             HasLevelFile = true;
             RaiseCommands();
             Status = $"Loaded {Path.GetFileName(dialog.FileName)} — edit values and Save.";
@@ -481,6 +487,20 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
         {
             Status = "Failed to load level file: " + ex.Message;
         }
+    }
+
+    /// <summary>Copies a parsed level's fields into the editor boxes.</summary>
+    private void ShowLevelFields(LevelFile level)
+    {
+        LevelBullets = level.Bullets;
+        LevelProjectiles = level.Projectiles;
+        LevelMissiles = level.Missiles;
+        LevelTime = level.Time;
+        LevelAggrTank = level.AggressionTank;
+        LevelAggrJet = level.AggressionJet;
+        LevelAggrHeliGun = level.AggressionHeliGun;
+        LevelAggrHeliRocket = level.AggressionHeliRocket;
+        LevelArtillery = level.Artillery;
     }
 
     private void SaveLevel()
@@ -540,6 +560,167 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
 
     private static bool IsAggressionValid(int value) =>
         value >= GameFacts.AggressionMin && value <= GameFacts.AggressionMax;
+
+    // --- bulk level operations -----------------------------------------------
+
+    /// <summary>
+    /// The folder the bulk operations act on: the remembered one if it still exists, otherwise the
+    /// game's <c>beachhead\</c> directory found from the attached process or the Steam libraries.
+    /// Returns null when nothing was found, so the caller can ask the user to browse.
+    /// </summary>
+    private string? ResolveLevelFolder()
+    {
+        if (!string.IsNullOrWhiteSpace(LevelFolder) && Directory.Exists(LevelFolder)) return LevelFolder;
+
+        string? found = LevelDirectory.Find(_targetPid, null);
+        if (found != null) LevelFolder = found;
+        return found;
+    }
+
+    private void BrowseLevelFolder()
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Select the BeachHead 2000 level folder (containing Level_00 … Level_60)",
+            InitialDirectory = ResolveLevelFolder() ?? "",
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        LevelFolder = dialog.FolderName;
+        int levels = LevelBackup.EnumerateLevelFiles(LevelFolder).Count;
+        int backups = LevelBackup.EnumerateBackups(LevelFolder).Count;
+        Status = levels == 0
+            ? $"No {LevelBackup.FileNameFor(GameFacts.FirstLevel)}…{LevelBackup.FileNameFor(GameFacts.LastLevel)} " +
+              $"files in {LevelFolder}."
+            : $"Level folder: {LevelFolder} — {levels} level file{Plural(levels)}, {backups} backup{Plural(backups)}.";
+    }
+
+    /// <summary>
+    /// Backs up every shipped level file in the level folder (one-shot <c>.bak</c> copies) and then
+    /// sets each one's ammo to the game maximum. The backups are what
+    /// <see cref="RestoreBackups"/> puts back.
+    /// </summary>
+    private void BackupAndMaxAmmoAll()
+    {
+        string? folder = ResolveLevelFolder();
+        if (folder == null)
+        {
+            Status = "Level folder not found — click Browse Folder… and pick the game's beachhead folder.";
+            return;
+        }
+
+        var files = LevelBackup.EnumerateLevelFiles(folder);
+        if (files.Count == 0)
+        {
+            Status = $"No {LevelBackup.FileNameFor(GameFacts.FirstLevel)}…" +
+                     $"{LevelBackup.FileNameFor(GameFacts.LastLevel)} files in {folder}.";
+            return;
+        }
+
+        int newBackups = files.Count(f => !File.Exists(LevelBackup.PathFor(f)));
+        var confirm = MessageBox.Show(
+            $"Back up {files.Count} level file{Plural(files.Count)} in\n\n{folder}\n\n" +
+            $"and set every level's ammo to " +
+            $"{GameFacts.MaxBullets}/{GameFacts.MaxProjectiles}/{GameFacts.MaxMissiles}?\n\n" +
+            $"New {LevelBackup.BackupExtension} copies: {newBackups}\n" +
+            $"Already backed up (left alone, so the backup keeps the original level): {files.Count - newBackups}",
+            "Back Up + Max Ammo (All Levels)", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.OK)
+        {
+            Status = "Bulk max ammo cancelled — no files were changed.";
+            return;
+        }
+
+        var result = LevelBatch.MaxAmmoAll(folder);
+        ReloadOpenLevelFrom(folder);
+
+        Status = $"Max ammo ({GameFacts.MaxBullets}/{GameFacts.MaxProjectiles}/{GameFacts.MaxMissiles}) written to " +
+                 $"{result.Succeeded} of {result.Total} level file{Plural(result.Total)} in {folder}; " +
+                 $"{result.BackedUp} new backup{Plural(result.BackedUp)}. " +
+                 "Restart the level in-game for changes to take effect." + ErrorSuffix(result);
+    }
+
+    /// <summary>Copies every <c>.bak</c> in the level folder back over its level file.</summary>
+    private void RestoreBackups()
+    {
+        string? folder = ResolveLevelFolder();
+        if (folder == null)
+        {
+            Status = "Level folder not found — click Browse Folder… and pick the game's beachhead folder.";
+            return;
+        }
+
+        var files = LevelBackup.EnumerateBackups(folder);
+        if (files.Count == 0)
+        {
+            Status = $"No {LevelBackup.BackupExtension} backups in {folder} — nothing to restore.";
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            $"Restore {files.Count} level file{Plural(files.Count)} from their " +
+            $"{LevelBackup.BackupExtension} backups?\n\n{folder}\n\n" +
+            "This overwrites the trainer's edits with the backed-up originals. The backups are kept.",
+            "Restore Level Backups", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+        if (confirm != MessageBoxResult.OK)
+        {
+            Status = "Restore cancelled — no files were changed.";
+            return;
+        }
+
+        var result = LevelBatch.RestoreAll(folder);
+        ReloadOpenLevelFrom(folder);
+
+        Status = $"Restored {result.Succeeded} of {result.Total} level file{Plural(result.Total)} from " +
+                 $"{LevelBackup.BackupExtension} backups in {folder}. " +
+                 "Restart the level in-game for changes to take effect." + ErrorSuffix(result);
+    }
+
+    /// <summary>
+    /// Re-reads the file open in the editor when a bulk operation has just rewritten it on disk, so
+    /// the boxes don't show stale values.
+    /// </summary>
+    private void ReloadOpenLevelFrom(string folder)
+    {
+        string? open = _levelFile?.SourcePath;
+        if (open == null || !File.Exists(open)) return;
+        if (!SameDirectory(Path.GetDirectoryName(open), folder)) return;
+
+        try
+        {
+            _levelFile = LevelFile.Load(open);
+            ShowLevelFields(_levelFile);
+        }
+        catch (Exception)
+        {
+            // The bulk result is already reported; a failed refresh of the open file is not worth
+            // overwriting it with — the editor keeps showing the values it had.
+        }
+    }
+
+    /// <summary>Whether two paths name the same directory (case-insensitive, separator-tolerant).</summary>
+    private static bool SameDirectory(string? a, string? b)
+    {
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return false;
+        try
+        {
+            static string Normalize(string p) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(p));
+            return string.Equals(Normalize(a), Normalize(b), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return false;
+        }
+    }
+
+    private static string Plural(int count) => count == 1 ? "" : "s";
+
+    private static string ErrorSuffix(LevelBatchResult result) =>
+        result.HasErrors
+            ? $" {result.Errors.Count} failed — {string.Join("; ", result.Errors.Take(3))}" +
+              (result.Errors.Count > 3 ? " …" : "")
+            : "";
 
     // --- poll loop -----------------------------------------------------------
     private void PollTick()

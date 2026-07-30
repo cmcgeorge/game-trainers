@@ -58,8 +58,11 @@ unit waves — the only offline-editable surface the game exposes.
 - **Level Editor** — an offline editor for the shipped `Level_00`…`Level_60` files (plain-text
   scripts in the `beachhead\` subdirectory). Edit starting ammo (bullets/projectiles/missiles),
   time limit, enemy aggression (tank/jet/heli-gun/heli-rocket, 1–9), and the artillery flag.
-  A **Max Ammo** button sets ammo to 999/99/99. Changes take effect when the level is loaded
-  in-game (restart the level or advance to it). Always back up level files before editing.
+  A **Max Ammo** button sets the loaded file's ammo to 999/99/99. The *All levels* row does the
+  same across the whole set in one click: **Back Up + Max Ammo (All)** copies every level file to
+  `Level_nn.bak` and then maxes its ammo, and **Restore Backups** copies those `.bak` files back
+  over the level files to undo it. Changes take effect when the level is loaded in-game (restart
+  the level or advance to it).
 - **Reference** — read-only weapon, enemy, and control tables for BeachHead 2000.
 
 ---
@@ -91,10 +94,13 @@ dotnet run --project test/FormatCheck
 
 `FormatCheck` asserts the **Confirmed** game-facts constants (process name, image base, level
 count, aggression range, weapon/enemy counts), the level-file parser (parse, field extraction,
-round-trip with comments preserved, edge cases), the value-parsing helpers (decimal/hex,
-width-fit), and the frozen-value view-model logic (poke, freeze re-write, out-of-width
-rejection, write-failure report). No copyrighted game file is read — the level-file tests use
-a synthetic fixture built from the Confirmed format observed in the shipped `Level_00`. It
+round-trip with comments preserved, edge cases), the bulk backup / max-ammo / restore batch
+(one-shot `.bak` copies, every level edited, unrelated files left alone, a repeat run not
+clobbering the pristine backup, a full round-trip back to the originals, empty-directory
+no-ops), the value-parsing helpers (decimal/hex, width-fit), and the frozen-value view-model
+logic (poke, freeze re-write, out-of-width rejection, write-failure report). No copyrighted game
+file is read — the level-file tests use a synthetic fixture built from the Confirmed format
+observed in the shipped `Level_00`, written into a temp directory that is deleted afterwards. It
 exits 0 (pass) or 1 (fail).
 
 ---
@@ -107,8 +113,12 @@ src/BeachHead2000Trainer/
                                 aggression range, weapon/enemy/control tables, max ammo
                LevelFile.cs       Level-file parser/editor: Parse/Load/Save/ToText, preserves
                                 all lines for round-trip, extracts Ammo/Time/Aggression/Artillery
+               LevelDirectory.cs  Finds the game's beachhead\ folder (attached process, Steam)
+               LevelBackup.cs     One-shot Level_nn.bak copies + enumeration of the level set
+               LevelBatch.cs      Bulk max-ammo / restore across every level file in a folder
   ViewModels/  MainViewModel      attach/scan/detach, 200 ms poll loop, pin/freeze, six guides,
-                                level-file editor (load/edit/save/max ammo), reference data
+                                level-file editor (load/edit/save/max ammo, bulk backup+max ammo
+                                and restore), reference data
                ScanValue          decimal/hex parsing + width-fit helpers
                ScanResultViewModel one scan candidate (address + live value)
                FrozenValueViewModel a pinned address: label, live value, poked target, freeze
@@ -134,6 +144,12 @@ than being duplicated here.
   <seconds>`, `Aggression <tank> <jet> <heliGun> <heliRocket>` (1–9), `Artillery <0|1>`,
   then `Object`/`ObjectInc` blocks for enemy waves, terminated by `End`. The editor preserves
   all lines and only rewrites the header fields.
+- **Backups.** The bulk buttons copy each `Level_nn` to `Level_nn.bak` before its **first** edit
+  and never overwrite an existing `.bak`, so a backup always holds the level as it was before the
+  trainer touched it — not a rolling undo. **Restore Backups** copies them back and keeps them,
+  so it can be run again. The per-file **Save** button does *not* take a backup; use the bulk
+  button (or copy the folder yourself) if you want one. Deleting the `.bak` files loses the
+  originals — Steam's *Verify integrity of game files* can re-download them.
 - **Widths.** All guided scans default to Int32. If a scan finds nothing, try Int16 — some
   values may be stored as 16-bit words.
 - **Full-screen.** BeachHead 2000 runs full-screen by default, which makes alt-tabbing to the

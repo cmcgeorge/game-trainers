@@ -126,20 +126,34 @@
             <TabItem Header="Level Editor">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="Load Level..." Command="{Binding LoadLevelCommand}"
-                                    ToolTip="Open a BeachHead 2000 level file (Level_00 through Level_60)."/>
-                            <Button Content="Save" Command="{Binding SaveLevelCommand}"
-                                    ToolTip="Write the edited values back to the loaded file."/>
-                            <Button Content="Max Ammo" Command="{Binding MaxAmmoCommand}"
-                                    ToolTip="Set bullets to 999, projectiles to 99, missiles to 99."/>
-                            <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
-                                       Text="{Binding LevelFilePath}" TextTrimming="CharacterEllipsis"/>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="One level:" VerticalAlignment="Center" Margin="0,0,4,0" Width="70"/>
+                                <Button Content="Load Level..." Command="{Binding LoadLevelCommand}"
+                                        ToolTip="Open a BeachHead 2000 level file (Level_00 through Level_60)."/>
+                                <Button Content="Save" Command="{Binding SaveLevelCommand}"
+                                        ToolTip="Write the edited values back to the loaded file."/>
+                                <Button Content="Max Ammo" Command="{Binding MaxAmmoCommand}"
+                                        ToolTip="Set bullets to 999, projectiles to 99, missiles to 99."/>
+                                <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
+                                           Text="{Binding LevelFilePath}" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <TextBlock Text="All levels:" VerticalAlignment="Center" Margin="0,0,4,0" Width="70"/>
+                                <Button Content="Browse Folder..." Command="{Binding BrowseLevelFolderCommand}"
+                                        ToolTip="Pick the game's beachhead folder (the one holding Level_00 through Level_60). Found automatically from the attached process or your Steam libraries if you skip this."/>
+                                <Button Content="Back Up + Max Ammo (All)" Command="{Binding BackupAndMaxAmmoAllCommand}"
+                                        ToolTip="Copy every level file to Level_nn.bak (once — an existing backup is left alone) and set every level's ammo to 999/99/99."/>
+                                <Button Content="Restore Backups" Command="{Binding RestoreBackupsCommand}"
+                                        ToolTip="Copy every Level_nn.bak back over its level file, undoing the trainer's edits. The backups are kept."/>
+                                <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
+                                           Text="{Binding LevelFolder}" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
                         </StackPanel>
                     </Border>
                     <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
                         <TextBlock TextWrapping="Wrap" Foreground="#555"
-                                   Text="Edit the starting ammo, time limit, and enemy aggression for a level file. Changes take effect when the level is loaded in-game (restart the level or advance to it). Always back up level files before editing."/>
+                                   Text="Edit the starting ammo, time limit, and enemy aggression for one level file, or give every shipped level max ammo in one click. Changes take effect when the level is loaded in-game (restart the level or advance to it). The bulk button backs each file up to Level_nn.bak before its first edit, and Restore Backups puts the originals back."/>
                     </Border>
                     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
                         <StackPanel>
