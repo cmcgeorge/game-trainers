@@ -1,0 +1,544 @@
+<Window x:Class="AlternateRealityTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Alternate Reality: The City — Trainer" Height="760" Width="1080"
+        Icon="Assets/app.ico"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="4,0,4,0"/>
+            <Setter Property="MinWidth" Value="120"/>
+        </Style>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="2,10,2,4"/>
+        </Style>
+        <Style x:Key="Mono" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas, Courier New, monospace"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Background="#EEE" Padding="6">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Process:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <ComboBox Width="280" ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                          SelectedItem="{Binding SelectedProcess}"/>
+                <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                <Button Content="Locate character" Command="{Binding LocateCommand}"
+                        ToolTip="Finds the character record automatically — no value searching."/>
+                <Button Content="Scan anyway" Command="{Binding StructuralScanCommand}"
+                        ToolTip="Only for a build whose display text has moved. This searches for anything shaped like a character record, which in a process that is not the game can match unrelated data — check the name and numbers before editing."/>
+                <TextBlock Text="scanning…" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="#666"
+                           Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Quick actions. The Visibility binding must resolve against the window's DataContext,
+             not the Border's own (which is the character), so it goes on the outer element and the
+             character DataContext on the inner one. -->
+        <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6"
+                Visibility="{Binding HasCharacter, Converter={StaticResource BoolToVis}}">
+            <StackPanel Orientation="Horizontal" DataContext="{Binding Character}">
+                <CheckBox Content="Freeze hit points" IsChecked="{Binding FreezeHitPoints}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="Re-pins current hit points to their maximum on every poll tick."/>
+                <CheckBox Content="Freeze attributes" IsChecked="{Binding FreezeAttributes}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="Holds all seven attributes where they are — stops a Ghost draining Strength."/>
+                <CheckBox Content="Freeze food/water" IsChecked="{Binding FreezeSupplies}" VerticalAlignment="Center" Margin="4,0"/>
+                <CheckBox Content="Freeze money" IsChecked="{Binding FreezeMoney}" VerticalAlignment="Center" Margin="4,0"/>
+                <Separator Style="{x:Null}" Width="12"/>
+                <Button Content="Full Heal" Command="{Binding FullHealCommand}"/>
+                <Button Content="Max Attributes" Command="{Binding MaxAttributesCommand}"/>
+                <Button Content="Max Hit Points" Command="{Binding MaxHealthCommand}"/>
+                <Button Content="Max Money" Command="{Binding MaxMoneyCommand}"/>
+                <Button Content="Fill Supplies" Command="{Binding MaxSuppliesCommand}"/>
+                <Button Content="Level Up" Command="{Binding LevelUpCommand}"
+                        ToolTip="Sets experience to the threshold the game is waiting for; it levels you on its next check."/>
+                <Button Content="Max Everything" Command="{Binding MaxEverythingCommand}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+        </Border>
+
+        <TabControl Margin="6">
+            <!-- ============================ CHARACTER ============================ -->
+            <TabItem Header="Character">
+                <Grid>
+                    <TextBlock Margin="12" TextWrapping="Wrap" Foreground="#555">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasCharacter}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                        No character loaded yet.<LineBreak/><LineBreak/>
+                        1. Launch the game in DOSBox — <Run FontFamily="Consolas">CITY.EXE 1</Run> for EGA.<LineBreak/>
+                        2. Press <Run FontWeight="Bold">E</Run> and pick a character (or <Run FontWeight="Bold">N</Run> to make a new one).<LineBreak/>
+                        3. Pick the DOSBox process above and click <Run FontWeight="Bold">Attach</Run>.<LineBreak/><LineBreak/>
+                        The trainer finds the character on its own — there is nothing to search for.
+                    </TextBlock>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding HasCharacter, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Margin="8" DataContext="{Binding Character}">
+                            <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="14"/>
+                            <TextBlock Text="{Binding LocateMethod}" Foreground="#666" TextWrapping="Wrap" Margin="0,0,0,4"/>
+
+                            <!-- live mirror -->
+                            <Border Background="#F2F6FA" BorderBrush="#CBD8E4" BorderThickness="1" Padding="8" Margin="0,4,0,4">
+                                <StackPanel>
+                                    <TextBlock Text="Live — what the game currently holds" FontWeight="Bold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{Binding LiveSummary}" Style="{StaticResource Mono}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding LiveAttributes}" Style="{StaticResource Mono}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding LiveMoney}" Style="{StaticResource Mono}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding LiveSupplies}" Style="{StaticResource Mono}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding LiveClock}" Style="{StaticResource Mono}" TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <Button Content="Reload editor from game" Command="{Binding ReloadCommand}"/>
+                                        <TextBlock VerticalAlignment="Center" Foreground="#666" Margin="8,0,0,0"
+                                                   Text="The game repaints its status bar only when it has a reason to, so an edit can take a few seconds to show on screen."
+                                                   TextWrapping="Wrap" MaxWidth="520"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- left: identity, progression, attributes -->
+                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                    <TextBlock Text="Identity and progression" Style="{StaticResource SectionHeader}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="160"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/><RowDefinition/><RowDefinition/>
+                                            <RowDefinition/><RowDefinition/><RowDefinition/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Name" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Name}" MaxLength="20"/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Level" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Level}"/>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Experience" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Experience}"/>
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Next level at" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding NextLevelExperience}"
+                                                   ToolTip="The game recomputes this on every level-up, so editing it only shifts one level."/>
+
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Hit points" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding HitPoints}"/>
+
+                                        <TextBlock Grid.Row="5" Grid.Column="0" Text="Hit points (max)" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="5" Grid.Column="1" Text="{Binding HitPointsMax}"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Attributes" Style="{StaticResource SectionHeader}"/>
+                                    <ItemsControl ItemsSource="{Binding Attributes}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="80"/>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding Label}" Style="{StaticResource FieldLabel}" MinWidth="160"/>
+                                                    <TextBox   Grid.Column="1" Text="{Binding Value}"/>
+                                                    <TextBlock Grid.Column="2" VerticalAlignment="Center" Foreground="#888" Margin="6,0,0,0"
+                                                               Text="{Binding Fraction, StringFormat=+{0}/256}"
+                                                               ToolTip="Sub-point progress toward the next whole point."/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+
+                                <!-- right: money and supplies -->
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="Money and valuables" Style="{StaticResource SectionHeader}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="160"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Gold" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Gold}"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Silver" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Silver}"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Copper" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Copper}"/>
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Precious gems" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding Gems}"/>
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Jewelry" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding Jewelry}"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Supplies" Style="{StaticResource SectionHeader}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="160"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                                            <RowDefinition/><RowDefinition/>
+                                        </Grid.RowDefinitions>
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Food packets" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Food}"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Water flasks" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Water}"/>
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Crystals" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Crystals}"/>
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Keys" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding Keys}"/>
+                                        <CheckBox  Grid.Row="4" Grid.Column="1" Content="Compass" IsChecked="{Binding HasCompass}" Margin="2,4,0,0"/>
+                                        <CheckBox  Grid.Row="5" Grid.Column="1" Content="Watch" IsChecked="{Binding HasWatch}" Margin="2,2,0,0"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- ============================ CITY MAP ============================ -->
+            <TabItem Header="City map" DataContext="{Binding Reference}">
+                <DockPanel Margin="6">
+                    <!-- controls -->
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,2,6">
+                        <TextBlock Text="Show:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <ComboBox Width="120" ItemsSource="{Binding Kinds}" SelectedItem="{Binding SelectedKind}"
+                                  ToolTip="Highlights one kind of building and dims the rest."/>
+                        <TextBlock Text="Zoom" VerticalAlignment="Center" Margin="14,0,4,0"/>
+                        <Slider Width="130" Minimum="0.45" Maximum="2.0" Value="{Binding Zoom}"
+                                TickFrequency="0.2" IsSnapToTickEnabled="False" VerticalAlignment="Center"/>
+                        <Button Content="Load walls…" Command="{Binding LoadTerrainCommand}" Margin="14,2,2,2"
+                                ToolTip="Reads the streets and walls from your own copy of CITY.EXE. They are the game's data, so the trainer does not ship them. Attaching to the running game loads them automatically."/>
+                        <Button Content="Save map…" Command="{Binding SaveMapCommand}"
+                                ToolTip="Writes the same map out as a standalone SVG."/>
+                        <TextBlock Text="{Binding MapStatus}" VerticalAlignment="Center" Margin="10,0,0,0"
+                                   Foreground="#666" TextTrimming="CharacterEllipsis" MaxWidth="360"/>
+                    </StackPanel>
+
+                    <!-- legend -->
+                    <ItemsControl DockPanel.Dock="Bottom" ItemsSource="{Binding MapLegend}" Margin="2,6,2,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,14,4">
+                                    <Grid Width="16" Height="16">
+                                        <Ellipse Fill="{Binding Fill}"/>
+                                        <TextBlock Text="{Binding Symbol}" Foreground="White" FontSize="9"
+                                                   FontWeight="Bold" HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Grid>
+                                    <TextBlock Text="{Binding Label}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock DockPanel.Dock="Bottom" Margin="2,4,2,0" Foreground="#777" TextWrapping="Wrap"
+                               Text="{Binding TerrainSummary}"/>
+
+                    <!-- Terrain swatches come from CityMap via the view-model, so this legend cannot
+                         drift from the colours the map and the exported SVG actually use. -->
+                    <ItemsControl DockPanel.Dock="Bottom" ItemsSource="{Binding TerrainLegend}" Margin="2,6,2,0"
+                                  Visibility="{Binding HasTerrain, Converter={StaticResource BoolToVis}}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,14,4">
+                                    <Border Background="{Binding Fill}" BorderBrush="#B9AE9B"
+                                            BorderThickness="1" Width="16" Height="16"/>
+                                    <TextBlock Text="{Binding Label}" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock DockPanel.Dock="Bottom" Margin="2,4,2,0" Foreground="#777" TextWrapping="Wrap"
+                               Text="Square 1N 1E is the south-west corner; north is up, east is right. Hover a marker for its prices, hours and the direction you have to approach from."/>
+
+                    <!-- the map -->
+                    <Border BorderBrush="#D8D0C2" BorderThickness="1" Background="#FBF8F2">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                      Padding="4">
+                            <Grid Width="{Binding MapWidth}" Height="{Binding MapHeight}"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Grid.LayoutTransform>
+                                    <ScaleTransform ScaleX="{Binding Zoom}" ScaleY="{Binding Zoom}"/>
+                                </Grid.LayoutTransform>
+
+                                <!-- streets and walls, drawn as one image so 2,400-odd squares stay cheap -->
+                                <Image Source="{Binding TerrainDrawing}" Stretch="None"
+                                       HorizontalAlignment="Left" VerticalAlignment="Top"
+                                       Width="{Binding MapWidth}" Height="{Binding MapHeight}"/>
+
+                                <!-- fine grid, one line per square. The 15 and 120 below are CityMap.CellSize and
+                                     CityMap.CellSize * CityMap.MajorEvery; FormatCheck pins both so they cannot drift. -->
+                                <Rectangle Width="{Binding GridSize}" Height="{Binding GridSize}"
+                                           HorizontalAlignment="Left" VerticalAlignment="Top"
+                                           Margin="{Binding GridInset}">
+                                    <Rectangle.Fill>
+                                        <DrawingBrush TileMode="Tile" Stretch="None"
+                                                      Viewport="0,0,15,15" ViewportUnits="Absolute">
+                                            <DrawingBrush.Drawing>
+                                                <GeometryDrawing>
+                                                    <GeometryDrawing.Geometry>
+                                                        <RectangleGeometry Rect="0,0,15,15"/>
+                                                    </GeometryDrawing.Geometry>
+                                                    <GeometryDrawing.Pen>
+                                                        <Pen Brush="#E4DDD0" Thickness="1"/>
+                                                    </GeometryDrawing.Pen>
+                                                </GeometryDrawing>
+                                            </DrawingBrush.Drawing>
+                                        </DrawingBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+
+                                <!-- heavier line every eight squares -->
+                                <Rectangle Width="{Binding GridSize}" Height="{Binding GridSize}"
+                                           HorizontalAlignment="Left" VerticalAlignment="Top"
+                                           Margin="{Binding GridInset}">
+                                    <Rectangle.Fill>
+                                        <DrawingBrush TileMode="Tile" Stretch="None"
+                                                      Viewport="0,0,120,120" ViewportUnits="Absolute">
+                                            <DrawingBrush.Drawing>
+                                                <GeometryDrawing>
+                                                    <GeometryDrawing.Geometry>
+                                                        <RectangleGeometry Rect="0,0,120,120"/>
+                                                    </GeometryDrawing.Geometry>
+                                                    <GeometryDrawing.Pen>
+                                                        <Pen Brush="#BFB4A1" Thickness="1"/>
+                                                    </GeometryDrawing.Pen>
+                                                </GeometryDrawing>
+                                            </DrawingBrush.Drawing>
+                                        </DrawingBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+
+                                <!-- axis numbers -->
+                                <ItemsControl ItemsSource="{Binding Ticks}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><Canvas/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemContainerStyle>
+                                        <Style TargetType="ContentPresenter">
+                                            <Setter Property="Canvas.Left" Value="{Binding Left}"/>
+                                            <Setter Property="Canvas.Top" Value="{Binding Top}"/>
+                                        </Style>
+                                    </ItemsControl.ItemContainerStyle>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Label}" Width="{Binding Width}"
+                                                       TextAlignment="Center" FontSize="10" Foreground="#6B6154"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- locations -->
+                                <ItemsControl ItemsSource="{Binding Markers}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><Canvas/></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemContainerStyle>
+                                        <Style TargetType="ContentPresenter">
+                                            <Setter Property="Canvas.Left" Value="{Binding Left}"/>
+                                            <Setter Property="Canvas.Top" Value="{Binding Top}"/>
+                                        </Style>
+                                    </ItemsControl.ItemContainerStyle>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Width="{Binding Size}" Height="{Binding Size}"
+                                                  Opacity="{Binding Opacity}" ToolTip="{Binding Tooltip}">
+                                                <Ellipse Fill="{Binding Fill}" Stroke="#FBF8F2" StrokeThickness="1.2"/>
+                                                <TextBlock Text="{Binding Symbol}" Foreground="White"
+                                                           FontSize="{Binding GlyphSize}" FontWeight="Bold"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </ScrollViewer>
+                    </Border>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ============================ LOCATIONS ============================ -->
+            <TabItem Header="Locations" DataContext="{Binding Reference}">
+                <DockPanel Margin="6">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <TextBlock Text="Show:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <ComboBox Width="140" ItemsSource="{Binding Kinds}" SelectedItem="{Binding SelectedKind}"/>
+                        <TextBlock Text="{Binding PlaceCountText}" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#666"/>
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding Places}" AutoGenerateColumns="False" IsReadOnly="True"
+                              HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserSortColumns="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Type" Binding="{Binding Kind}" Width="80"/>
+                            <DataGridTextColumn Header="Coordinate" Binding="{Binding Coordinate}" Width="110"/>
+                            <DataGridTextColumn Header="N" Binding="{Binding North}" Width="45"/>
+                            <DataGridTextColumn Header="E" Binding="{Binding East}" Width="45"/>
+                            <DataGridTextColumn Header="Notes" Binding="{Binding Note}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ============================ POTIONS ============================ -->
+            <TabItem Header="Potions" DataContext="{Binding Reference}">
+                <DockPanel Margin="6">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="2,0,2,6" Foreground="#555">
+                        A guide, not a lookup — what a sealed potion turns out to be is decided the moment you unseal it.
+                        Test in order: Examine, Taste, Sip, Quaff. Hoard Fleetness, Protection +1/+2 and Treasure Finding.
+                    </TextBlock>
+                    <DataGrid ItemsSource="{Binding Potions}" AutoGenerateColumns="False" IsReadOnly="True"
+                              HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserSortColumns="True">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Colour" Binding="{Binding Colour}" Width="90"/>
+                            <DataGridTextColumn Header="Taste" Binding="{Binding Taste}" Width="90"/>
+                            <DataGridTextColumn Header="Sip" Binding="{Binding Sip}" Width="90"/>
+                            <DataGridTextColumn Header="Effect" Binding="{Binding Effect}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ============================ REFERENCE ============================ -->
+            <TabItem Header="Reference" DataContext="{Binding Reference}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid Margin="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                            <TextBlock Text="Controls" Style="{StaticResource SectionHeader}"/>
+                            <ItemsControl ItemsSource="{Binding Controls}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="60"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Key}" FontWeight="Bold"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Action}" TextWrapping="Wrap"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="Encounter menu" Style="{StaticResource SectionHeader}"/>
+                            <ItemsControl ItemsSource="{Binding EncounterOptions}"/>
+
+                            <TextBlock Text="Condition banners" Style="{StaticResource SectionHeader}"/>
+                            <ItemsControl ItemsSource="{Binding Conditions}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#EFEFEF" CornerRadius="3" Padding="5,1" Margin="0,2,4,2">
+                                            <TextBlock Text="{Binding}"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="Calendar" Style="{StaticResource SectionHeader}"/>
+                            <ItemsControl ItemsSource="{Binding Months}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#EFEFEF" CornerRadius="3" Padding="5,1" Margin="0,2,4,2">
+                                            <TextBlock Text="{Binding}"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Weapons (weakest first)" Style="{StaticResource SectionHeader}"/>
+                            <ItemsControl ItemsSource="{Binding Weapons}"/>
+
+                            <TextBlock Text="Armour materials (weakest first)" Style="{StaticResource SectionHeader}"/>
+                            <ItemsControl ItemsSource="{Binding ArmourMaterials}"/>
+
+                            <TextBlock Text="Shields (parry, not armour)" Style="{StaticResource SectionHeader}"/>
+                            <ItemsControl ItemsSource="{Binding Shields}"/>
+
+                            <TextBlock Text="Evil creatures — safe to attack, trick or charm" Style="{StaticResource SectionHeader}"/>
+                            <ItemsControl ItemsSource="{Binding EvilCreatures}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#F6E9E9" CornerRadius="3" Padding="5,1" Margin="0,2,4,2">
+                                            <TextBlock Text="{Binding}"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="Survival notes" Style="{StaticResource SectionHeader}"/>
+                            <ItemsControl ItemsSource="{Binding Tips}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,5"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

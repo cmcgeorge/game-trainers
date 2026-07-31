@@ -59,6 +59,18 @@
     .\Run.ps1 -Trainer Pirates
     Builds and launches the Sid Meier's Pirates! trainer. 'Pirates' is enough to
     be unique, so the partial match resolves without the menu.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer AlternateReality
+    Builds and launches the Alternate Reality: The City trainer. Start CITY.EXE in
+    DOSBox and resume a character first -- the trainer locates it automatically.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer Airborne
+    Builds and launches the Airborne Ranger trainer. Start AR.EXE in DOSBox and get
+    into a mission first -- the trainer locates the game's data segment automatically.
+    Note that 'A' alone is ambiguous now that both AirborneRangerTrainer and
+    AlternateRealityTrainer exist; 'Airborne' and 'Alternate' each resolve uniquely.
 #>
 [CmdletBinding()]
 param(

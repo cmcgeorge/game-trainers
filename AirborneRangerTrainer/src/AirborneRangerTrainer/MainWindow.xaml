@@ -1,0 +1,450 @@
+<Window x:Class="AirborneRangerTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Airborne Ranger — Trainer" Height="780" Width="1060"
+        Icon="Assets/app.ico"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="4,0,4,0"/>
+            <Setter Property="MinWidth" Value="150"/>
+        </Style>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="2,10,2,4"/>
+        </Style>
+        <Style x:Key="Mono" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas, Courier New, monospace"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style x:Key="Wrapped" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Background="#EEE" Padding="6">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Process:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <ComboBox Width="280" ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                          SelectedItem="{Binding SelectedProcess}"/>
+                <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                <Button Content="Locate game" Command="{Binding LocateCommand}"
+                        ToolTip="Finds the game's data segment automatically — no value searching."/>
+                <TextBlock Text="scanning…" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="#666"
+                           Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Quick actions. The Visibility binding must resolve against the window's DataContext,
+             not the Border's own (which is the mission), so it goes on the outer element and the
+             mission DataContext on the inner one. -->
+        <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6"
+                Visibility="{Binding HasMission, Converter={StaticResource BoolToVis}}">
+            <StackPanel Orientation="Horizontal" DataContext="{Binding Mission}">
+                <CheckBox Content="Freeze wounds" IsChecked="{Binding FreezeWounds}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="Holds the wound counter on every poll tick. Pinned at zero this is effectively invulnerability."/>
+                <CheckBox Content="Freeze ammo" IsChecked="{Binding FreezeAmmo}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="Holds magazines, rounds, grenades, rockets, bombs and first-aid kits."/>
+                <CheckBox Content="Freeze clock" IsChecked="{Binding FreezeClock}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="Stops the mission countdown moving."/>
+                <Separator Style="{x:Null}" Width="12"/>
+                <Button Content="Heal" Command="{Binding HealCommand}"/>
+                <Button Content="Resupply" Command="{Binding ResupplyCommand}"/>
+                <Button Content="Max Clock" Command="{Binding MaxClockCommand}"/>
+                <Button Content="Max Everything" Command="{Binding MaxEverythingCommand}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+        </Border>
+
+        <TabControl Margin="6">
+            <!-- ============================== MISSION ============================== -->
+            <TabItem Header="Mission">
+                <Grid>
+                    <TextBlock Margin="12" TextWrapping="Wrap" Foreground="#555">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasMission}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                        Not attached to a running game yet.<LineBreak/><LineBreak/>
+                        1. Start <Run FontFamily="Consolas">AR.EXE</Run> in DOSBox and answer the graphics-mode prompt.<LineBreak/>
+                        2. Pick a ranger and a mission, and get past the airdrop.<LineBreak/>
+                        3. Pick the DOSBox process above and click <Run FontWeight="Bold">Attach</Run>.<LineBreak/><LineBreak/>
+                        The trainer finds the game's data segment on its own — there is nothing to search for.
+                        It can attach at any point after the graphics-mode prompt; the mission fields only
+                        mean anything once a mission is under way.<LineBreak/><LineBreak/>
+                        The <Run FontWeight="Bold">Roster</Run> tab works with the game closed and needs no attach.
+                    </TextBlock>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding HasMission, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Margin="8" DataContext="{Binding Mission}">
+                            <TextBlock Text="{Binding LocateMethod}" Foreground="#666" TextWrapping="Wrap" Margin="0,0,0,4"/>
+
+                            <!-- live mirror -->
+                            <Border Background="#F2F6FA" BorderBrush="#CBD8E4" BorderThickness="1" Padding="8" Margin="0,4,0,4">
+                                <StackPanel>
+                                    <TextBlock Text="Live — what the game currently holds" FontWeight="Bold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{Binding LiveCondition}" Style="{StaticResource Mono}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding LiveAmmo}" Style="{StaticResource Mono}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding LiveProgress}" Style="{StaticResource Mono}" TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <Button Content="Reload editor from game" Command="{Binding ReloadCommand}"/>
+                                        <TextBlock VerticalAlignment="Center" Foreground="#666" Margin="8,0,0,0"
+                                                   Text="The game rewrites these counters continuously, so the editor is only re-read on demand."
+                                                   TextWrapping="Wrap" MaxWidth="520"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- left: condition and ammunition -->
+                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                    <TextBlock Text="Condition" Style="{StaticResource SectionHeader}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="140"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/><RowDefinition/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Wounds (3 = death)" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Wounds}"/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="First-aid kits" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding FirstAidKits}"/>
+                                    </Grid>
+
+                                    <TextBlock Text="Ammunition" Style="{StaticResource SectionHeader}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="140"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/><RowDefinition/><RowDefinition/>
+                                            <RowDefinition/><RowDefinition/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Rounds in magazine" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding RoundsInMagazine}"
+                                                   ToolTip="30 is a full magazine; a negative value means none is loaded."/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Spare magazines" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding SpareMagazines}"
+                                                   ToolTip="The game's panel shows this plus one for the loaded magazine."/>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Hand grenades" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Grenades}"/>
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="LAW rockets" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding LawRockets}"/>
+
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Time bombs" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding TimeBombs}"/>
+                                    </Grid>
+                                    <TextBlock Margin="4,6,0,0" Foreground="#666" TextWrapping="Wrap"
+                                               Text="{Binding DisplayedMagazines, StringFormat=The status panel will read CARBINE MAGS {0}.}"/>
+                                </StackPanel>
+
+                                <!-- right: clock, score and the game's own panel -->
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="Clock and score" Style="{StaticResource SectionHeader}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="140"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Mission clock (0–999)" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Clock}"
+                                                   ToolTip="Stored as three separate decimal-digit bytes, so 999 is the ceiling."/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Merit points" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding MeritPoints}"/>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Soldiers eliminated" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding SoldiersKilled}"/>
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Targets destroyed" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding TargetsDestroyed}"/>
+                                    </Grid>
+
+                                    <TextBlock Text="The game's own status panel" Style="{StaticResource SectionHeader}"/>
+                                    <Border Background="#111" Padding="8" CornerRadius="2">
+                                        <TextBlock Text="{Binding StatusPanel}" Foreground="#DDD"
+                                                   FontFamily="Consolas, Courier New, monospace" FontSize="12"/>
+                                    </Border>
+                                    <TextBlock Margin="2,4,0,0" Foreground="#666" TextWrapping="Wrap"
+                                               Text="Read from the panel's text template, so it shows what the game last drew — press F9 in the game to refresh it."/>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- =============================== ROSTER ============================== -->
+            <TabItem Header="Roster">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Padding="4">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Open ROSTER.DAT…" Click="OnOpenRoster"/>
+                            <Button Content="Save" Command="{Binding Roster.SaveCommand}"/>
+                            <Button Content="Revert" Command="{Binding Roster.RevertCommand}"/>
+                            <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#666"
+                                       Text="{Binding Roster.FilePath}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <TextBlock DockPanel.Dock="Top" Margin="6,0,6,6" Foreground="#555" TextWrapping="Wrap"
+                               Text="Edit the career file with the game closed — it rewrites ROSTER.DAT itself when a veteran ranger finishes a mission. The original is backed up to ROSTER.DAT.bak before the first save, and everything the trainer does not understand is written back byte for byte."/>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding Roster.Rangers}" Margin="6">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="#DDD" BorderThickness="1" Padding="8" Margin="0,0,0,8" CornerRadius="2">
+                                        <StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding SlotLabel}" FontWeight="Bold" MinWidth="60" VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding Summary}" Style="{StaticResource Mono}" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                            <Grid Margin="0,6,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="220"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="180"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="140"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="Name" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                                <TextBox   Grid.Column="1" Text="{Binding Name}" MaxLength="19"/>
+                                                <TextBlock Grid.Column="2" Text="Rank" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                                <ComboBox  Grid.Column="3" Margin="2" ItemsSource="{Binding Ranks}"
+                                                           DisplayMemberPath="Name" SelectedValuePath="Index"
+                                                           SelectedValue="{Binding RankIndex}"/>
+                                                <TextBlock Grid.Column="4" Text="Score" VerticalAlignment="Center" Margin="10,0,4,0"/>
+                                                <TextBox   Grid.Column="5" Text="{Binding Score}"/>
+                                            </Grid>
+                                            <WrapPanel Margin="0,6,0,0">
+                                                <ItemsControl ItemsSource="{Binding Decorations}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <CheckBox Content="{Binding Label}" IsChecked="{Binding IsSet}" Margin="0,0,14,2"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <CheckBox Content="(CMPN) — campaign ribbon" IsChecked="{Binding HasCampaignRibbon}" Margin="0,0,14,2"/>
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ============================== MISSIONS ============================= -->
+            <TabItem Header="Missions">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="8" DataContext="{Binding Reference}">
+                        <TextBlock Style="{StaticResource Wrapped}" Foreground="#555"
+                                   Text="Challenge Level is the game's own rating, stored as a thirteen-digit table in the executable — it is a property of the mission, not something you choose. The Mission Difficulty slider on the next screen is the one you control."/>
+                        <ItemsControl ItemsSource="{Binding Missions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border BorderBrush="#DDD" BorderThickness="0,0,0,1" Padding="0,6,0,6">
+                                        <StackPanel>
+                                            <TextBlock>
+                                                <Run Text="{Binding Number, Mode=OneWay}" FontWeight="Bold"/>
+                                                <Run Text=". "/>
+                                                <Run Text="{Binding Name, Mode=OneWay}" FontWeight="Bold"/>
+                                                <Run Text="  —  "/>
+                                                <Run Text="{Binding Terrain, Mode=OneWay}" Foreground="#06C"/>
+                                                <Run Text=", challenge "/>
+                                                <Run Text="{Binding ChallengeLevel, Mode=OneWay}"/>
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Briefing}" TextWrapping="Wrap" Margin="14,2,0,0" Foreground="#333"/>
+                                            <TextBlock Text="{Binding Tip}" TextWrapping="Wrap" Margin="14,2,0,0" Foreground="#080" FontStyle="Italic"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ============================== REFERENCE ============================ -->
+            <TabItem Header="Reference">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="8" DataContext="{Binding Reference}">
+                        <TextBlock Text="The mission area" Style="{StaticResource SectionHeader}"/>
+                        <Border Background="#FAFAFA" BorderBrush="#DDD" BorderThickness="1" Padding="8">
+                            <TextBlock Text="{Binding MapSchematic}" Style="{StaticResource Mono}"/>
+                        </Border>
+
+                        <TextBlock Text="Controls" Style="{StaticResource SectionHeader}"/>
+                        <ItemsControl ItemsSource="{Binding Controls}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="220"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Key}" Style="{StaticResource Mono}"/>
+                                        <!-- The caveat's Text must come from the style only. A local
+                                             Text="..." on the Run would outrank the style trigger in
+                                             WPF's property precedence, and the caveat would then show
+                                             on every control, including the confirmed ones. -->
+                                        <TextBlock Grid.Column="1" TextWrapping="Wrap">
+                                            <Run Text="{Binding Action, Mode=OneWay}"/>
+                                            <Run Foreground="#A60">
+                                                <Run.Style>
+                                                    <Style TargetType="Run">
+                                                        <Setter Property="Text" Value="  [key inferred, effect confirmed]"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Confirmed}" Value="True">
+                                                                <Setter Property="Text" Value=""/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Run.Style>
+                                            </Run>
+                                        </TextBlock>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="Weapons" Style="{StaticResource SectionHeader}"/>
+                        <ItemsControl ItemsSource="{Binding Weapons}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock TextWrapping="Wrap" Margin="0,1">
+                                        <Run Text="{Binding Name, Mode=OneWay}" FontWeight="Bold"/>
+                                        <Run Text=" — "/>
+                                        <Run Text="{Binding Note, Mode=OneWay}"/>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="Supply pod" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock Text="{Binding SupplyPodSummary}" Style="{StaticResource Wrapped}"/>
+                        <ItemsControl ItemsSource="{Binding Equipment}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,1">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="200"/>
+                                            <ColumnDefinition Width="90"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding Weight, StringFormat=weight {0}}"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding StandardLoad, StringFormat=STANDARD pod carries {0}}" Foreground="#666"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="Ranks" Style="{StaticResource SectionHeader}"/>
+                        <ItemsControl ItemsSource="{Binding Ranks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Style="{StaticResource Mono}">
+                                        <Run Text="{Binding Index, Mode=OneWay}"/>
+                                        <Run Text="  "/>
+                                        <Run Text="{Binding Mnemonic, Mode=OneWay}" FontWeight="Bold"/>
+                                        <Run Text="  "/>
+                                        <Run Text="{Binding Name, Mode=OneWay}"/>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="Decorations" Style="{StaticResource SectionHeader}"/>
+                        <ItemsControl ItemsSource="{Binding Decorations}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Style="{StaticResource Mono}">
+                                        <Run Text="{Binding Mnemonic, Mode=OneWay}" FontWeight="Bold"/>
+                                        <Run Text="  "/>
+                                        <Run Text="{Binding Name, Mode=OneWay}"/>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="Tips" Style="{StaticResource SectionHeader}"/>
+                        <ItemsControl ItemsSource="{Binding Tips}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" TextWrapping="Wrap" Margin="0,0,0,3"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="Copy protection — the ribbon question" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock Style="{StaticResource Wrapped}" Foreground="#555"
+                                   Text="The game may show a strip of campaign ribbons and ask which one is named. The answer is the artwork in the manual, so this is the list of questions rather than an answer key. It did not fire in any session used to build this trainer."/>
+                        <ItemsControl ItemsSource="{Binding ProtectionRibbons}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" Margin="0,0,16,2" Foreground="#333"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>
