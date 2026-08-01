@@ -71,6 +71,14 @@
     into a mission first -- the trainer locates the game's data segment automatically.
     Note that 'A' alone is ambiguous now that both AirborneRangerTrainer and
     AlternateRealityTrainer exist; 'Airborne' and 'Alternate' each resolve uniquely.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer Hillsfar
+    Builds and launches the Hillsfar trainer. Start MAIN.EXE in DOSBox, answer its
+    graphics-mode and disk-drive prompts, and load or generate a character at the
+    camp menu first -- the trainer then locates the data segment automatically and
+    needs no value searching. Its 'Character files' tab edits .HIL/.PRE files
+    offline and works with the game closed.
 #>
 [CmdletBinding()]
 param(
