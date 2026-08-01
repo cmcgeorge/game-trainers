@@ -1,0 +1,247 @@
+<Window x:Class="JumpmanLivesTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Jumpman Lives! — Trainer" Height="720" Width="980"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="4,0,4,0"/>
+            <Setter Property="MinWidth" Value="130"/>
+        </Style>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Margin" Value="2,10,2,4"/>
+        </Style>
+        <Style x:Key="Mono" TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Consolas, Courier New, monospace"/>
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+        <Style x:Key="Wrapped" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,0,0,4"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- Toolbar -->
+        <Border DockPanel.Dock="Top" Background="#EEE" Padding="6">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Process:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <ComboBox Width="280" ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                          SelectedItem="{Binding SelectedProcess}"/>
+                <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                <Button Content="Locate game" Command="{Binding LocateCommand}"
+                        ToolTip="Finds the game's data segment automatically — no value searching."/>
+                <TextBlock Text="scanning…" VerticalAlignment="Center" Margin="8,0,0,0" Foreground="#666"
+                           Visibility="{Binding IsScanning, Converter={StaticResource BoolToVis}}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Quick actions -->
+        <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6"
+                Visibility="{Binding HasPlayer, Converter={StaticResource BoolToVis}}">
+            <StackPanel Orientation="Horizontal" DataContext="{Binding Player}">
+                <CheckBox Content="Freeze lives" IsChecked="{Binding FreezeLives}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="Holds the lives counter on every poll tick."/>
+                <CheckBox Content="Freeze bonus" IsChecked="{Binding FreezeBonus}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="Stops the time bonus from counting down."/>
+                <Separator Style="{x:Null}" Width="12"/>
+                <Button Content="Max Lives" Command="{Binding MaxLivesCommand}"/>
+                <Button Content="Max Bonus" Command="{Binding MaxBonusCommand}"/>
+                <Button Content="Max Score" Command="{Binding MaxScoreCommand}"/>
+                <Button Content="Enable Trainer" Command="{Binding EnableTrainerCommand}"
+                        ToolTip="Enables the game's built-in 21-lives mode without pressing TAB."/>
+                <Button Content="Max Everything" Command="{Binding MaxEverythingCommand}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- Status bar -->
+        <Border DockPanel.Dock="Bottom" Background="#EEE" Padding="6">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+        </Border>
+
+        <TabControl Margin="6">
+            <!-- ============================== LIVE ============================== -->
+            <TabItem Header="Live">
+                <Grid>
+                    <TextBlock Margin="12" TextWrapping="Wrap" Foreground="#555">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasPlayer}" Value="True">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                        Not attached to a running game yet.<LineBreak/><LineBreak/>
+                        1. Start <Run FontFamily="Consolas">JMAN2.EXE</Run> in DOSBox and get past the main menu.<LineBreak/>
+                        2. Pick the DOSBox process above and click <Run FontWeight="Bold">Attach</Run>.<LineBreak/><LineBreak/>
+                        The trainer finds the game's data segment on its own — there is nothing to search for.
+                        It can attach at any point after the main menu; the game fields only mean something
+                        once a level is under way.
+                    </TextBlock>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding HasPlayer, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Margin="8" DataContext="{Binding Player}">
+                            <TextBlock Text="{Binding LocateMethod}" Foreground="#666" TextWrapping="Wrap" Margin="0,0,0,4"/>
+
+                            <!-- live mirror -->
+                            <Border Background="#F2F6FA" BorderBrush="#CBD8E4" BorderThickness="1" Padding="8" Margin="0,4,0,4">
+                                <StackPanel>
+                                    <TextBlock Text="Live — what the game currently holds" FontWeight="Bold" Margin="0,0,0,4"/>
+                                    <TextBlock Text="{Binding LiveSummary}" Style="{StaticResource Mono}" TextWrapping="Wrap"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <Button Content="Reload editor from game" Command="{Binding ReloadCommand}"/>
+                                        <TextBlock VerticalAlignment="Center" Foreground="#666" Margin="8,0,0,0"
+                                                   Text="The game rewrites these values continuously, so the editor is only re-read on demand."
+                                                   TextWrapping="Wrap" MaxWidth="520"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+
+                                <!-- left: player state -->
+                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                                    <TextBlock Text="Player" Style="{StaticResource SectionHeader}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="120"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/><RowDefinition/><RowDefinition/>
+                                            <RowDefinition/><RowDefinition/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Lives (0–99)" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding Lives}"/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Score" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Score}"/>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Speed (1–8)" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="2" Grid.Column="1" Text="{Binding Speed}"/>
+
+                                        <TextBlock Grid.Row="3" Grid.Column="0" Text="Player X" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="3" Grid.Column="1" Text="{Binding PlayerX}"/>
+
+                                        <TextBlock Grid.Row="4" Grid.Column="0" Text="Player Y" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="4" Grid.Column="1" Text="{Binding PlayerY}"/>
+                                    </Grid>
+                                </StackPanel>
+
+                                <!-- right: global state -->
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="Game state" Style="{StaticResource SectionHeader}"/>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="120"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition/><RowDefinition/><RowDefinition/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Level (1–45)" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="0" Grid.Column="1" Text="{Binding CurrentLevel}"/>
+
+                                        <TextBlock Grid.Row="1" Grid.Column="0" Text="Time bonus" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding Bonus}"/>
+
+                                        <TextBlock Grid.Row="2" Grid.Column="0" Text="Trainer mode" Style="{StaticResource FieldLabel}"/>
+                                        <CheckBox  Grid.Row="2" Grid.Column="1" IsChecked="{Binding TrainerMode}" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- ============================== REFERENCE ============================== -->
+            <TabItem Header="Reference">
+                <DockPanel Margin="6">
+                    <TextBlock DockPanel.Dock="Top" FontSize="16" FontWeight="Bold" Margin="0,0,0,4"
+                               Text="{Binding Reference.Title}"/>
+                    <TextBlock DockPanel.Dock="Top" Foreground="#666" Margin="0,0,0,8"
+                               Text="{Binding Reference.Publisher}"/>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- left: controls and tips -->
+                        <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                            <TextBlock Text="Controls" Style="{StaticResource SectionHeader}"/>
+                            <ItemsControl ItemsSource="{Binding Reference.Controls}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                                            <TextBlock Text="{Binding Key}" FontWeight="Bold" MinWidth="180"/>
+                                            <TextBlock Text="{Binding Action}" TextWrapping="Wrap" MaxWidth="400"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="Tips" Style="{StaticResource SectionHeader}"/>
+                            <ItemsControl ItemsSource="{Binding Reference.Tips}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <TextBlock TextWrapping="Wrap" Margin="0,2" Text="{Binding}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Margin" Value="0,2"/>
+                                                    <Setter Property="TextWrapping" Value="Wrap"/>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <!-- right: level list -->
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Levels (45)" Style="{StaticResource SectionHeader}"/>
+                            <DataGrid ItemsSource="{Binding Reference.Levels}" AutoGenerateColumns="False"
+                                      IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                                      CanUserSortColumns="True" CanUserAddRows="False" CanUserDeleteRows="False">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="#" Binding="{Binding Number}" Width="40"/>
+                                    <DataGridTextColumn Header="Title" Binding="{Binding Name}" Width="*"/>
+                                    <DataGridTextColumn Header="Bonus" Binding="{Binding Bonus}" Width="60"/>
+                                    <DataGridTextColumn Header="Set" Binding="{Binding Set}" Width="100"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </StackPanel>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>
