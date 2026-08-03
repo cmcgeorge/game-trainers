@@ -28,6 +28,7 @@ internal static class Program
         new("Autoduel",             "AutoduelTrainer",             DrawAutoduel),
         new("BattleTech",           "BattleTech1Trainer",          DrawBattleTech),
         new("Colonization",         "ColonizationTrainer",         DrawColonization),
+        new("Dark Designs I",       "DarkDesigns1Trainer",         DrawDarkDesigns1),
         new("Darklands",            "DarklandsTrainer",            DrawDarklands),
         new("Dragon Wars",          "DragonWarsTrainer",           DrawDragonWars),
         new("Imperialism II",       "ImperialismIITrainer",        DrawImperialismII),
@@ -266,6 +267,67 @@ internal static class Program
             P(128, 212), P(114, 140), P(44, 128), P(114, 116));
         dc.DrawGeometry(blue, new Pen(blueLt, 2), star);
         dc.DrawGeometry(blueLt, null, new EllipseGeometry(P(128, 128), 8, 8));
+    }
+
+    /// <summary>
+    /// Glowing staff in a clawed setting — Dark Designs I is the hunt for
+    /// Grelminar's Staff, the game's one quest item.
+    /// </summary>
+    private static void DrawDarkDesigns1(DrawingContext dc)
+    {
+        DrawTile(dc);
+
+        var wood = Brush(0x7A, 0x54, 0x2E);
+        var woodDk = Brush(0x46, 0x2E, 0x17);
+        var gold = Brush(0xC9, 0xA2, 0x4B);
+        var orbC = P(128, 80);
+
+        // Violet aura bleeding out of the orb.
+        var aura = new RadialGradientBrush
+        {
+            GradientStops =
+            {
+                new(Color.FromArgb(0x99, 0xB4, 0x7C, 0xF0), 0),
+                new(Color.FromArgb(0x33, 0x8A, 0x50, 0xD0), 0.55),
+                new(Color.FromArgb(0x00, 0x6A, 0x38, 0xB0), 1),
+            }
+        };
+        dc.DrawGeometry(aura, null, new EllipseGeometry(orbC, 74, 74));
+
+        // Tapered shaft, its top tucked behind the orb.
+        const double top = 100, bot = 214;
+        double Left(double y) => 120 + (y - top) * 6 / (bot - top);
+        double Right(double y) => 136 + (y - top) * 5 / (bot - top);
+        dc.DrawGeometry(wood, new Pen(woodDk, 2),
+            Poly(P(Left(top), top), P(Right(top), top), P(Right(bot), bot), P(Left(bot), bot)));
+        // Gold bindings wrapping the grip, following the taper.
+        for (int i = 0; i < 3; i++)
+        {
+            double y = 150 + i * 20;
+            dc.DrawLine(new Pen(gold, 5), P(Left(y) - 2, y), P(Right(y) + 2, y));
+        }
+
+        // Claw prongs cradling the orb, stopping at its midline.
+        var prong = new Pen(gold, 6) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+        dc.DrawGeometry(null, prong, Curves(P(116, 114), false, (P(90, 108), P(92, 72))));
+        dc.DrawGeometry(null, prong, Curves(P(140, 114), false, (P(166, 108), P(164, 72))));
+
+        // The orb itself.
+        var orb = new RadialGradientBrush
+        {
+            GradientOrigin = P(0.36, 0.30),
+            GradientStops =
+            {
+                new(Color.FromRgb(0xF2, 0xE6, 0xFF), 0),
+                new(Color.FromRgb(0xB4, 0x7C, 0xF0), 0.45),
+                new(Color.FromRgb(0x5E, 0x2E, 0xA0), 1),
+            }
+        };
+        dc.DrawGeometry(orb, new Pen(Brush(0x38, 0x1A, 0x64), 2), new EllipseGeometry(orbC, 34, 34));
+
+        // Highlight glint.
+        dc.DrawGeometry(new SolidColorBrush(Color.FromArgb(0x99, 0xFF, 0xFF, 0xFF)), null,
+            new EllipseGeometry(P(115, 68), 9, 6));
     }
 
     /// <summary>Shield with cross — Darklands is a medieval Germany RPG.</summary>

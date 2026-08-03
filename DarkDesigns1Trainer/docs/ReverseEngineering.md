@@ -34,7 +34,13 @@ SS (0x29DB paragraphs = 0x29DB0 bytes) is beyond the load image end (0x219D0), i
 
 ### 2.2 Memory model
 
-The program appears to be a **small-model** Borland C build (CS = DS = SS = DGROUP). All global variables have a constant offset within the single data segment. The load segment moves between DOSBox sessions, so no address is hard-coded — the trainer locates the data at runtime.
+The program is a **multi-code-segment** Borland C build — medium or large model, not small: the
+disassembly is full of `push cs` / `lcall seg:off` far calls between distinct code segments (the
+character-sheet printer lives at load-image offset `0x8410`, and calls out to `0x2043:…` for the
+runtime), while string literals are addressed as `CS:offset` far pointers. Data, by contrast, is a
+single DGROUP: every global is a constant offset off DS, which is what makes the roster locatable by
+a fixed intra-segment relationship. The load segment moves between DOSBox sessions, so no address is
+hard-coded — the trainer locates the data at runtime.
 
 ## 3. String analysis
 
@@ -58,7 +64,14 @@ Full string extraction from the unpacked EXE revealed all game text, including:
 
 ## 4. DDCHARS.DAT format
 
-The character data file is 1,224 bytes = 144-byte header + 20 × 54-byte character records.
+The character data file is 1,224 bytes = 144-byte header + **15 × 72-byte** character records.
+
+> **Correction.** An earlier pass read this as 20 × 54-byte records. Both decompositions give the
+> same 1,080-byte roster, and the sample file has only one character — in slot 0 either way — so
+> nothing in it distinguishes them. The disassembly does, decisively: the game multiplies a
+> character index by `0x48` (72) at **~300 sites** and by 54 at **none**, and its loader reads
+> `0x438` (1,080) bytes in one call into the record-1 slot of an array whose stride is 72. Every
+> field below is likewise taken from code that reads or writes it, not inferred from the sample.
 
 ### 4.1 Header (144 bytes = 0x90)
 
@@ -89,56 +102,245 @@ Offset  Bytes     Value (sample)    Inferred meaning
 0x4C    68        00…               Unknown / padding
 ```
 
-The header is only partially decoded. The repeated 999 (0x03E8) values may represent maximum body/magic points or next-level experience thresholds for character slots. The header is not edited by the trainer — only the character records are.
+The header is only partially decoded. The loader reads it as six separate reads — 8, 2, 2, 2, 2 and
+0x80 bytes — totalling exactly 144, then reads the 1,080-byte roster in one call. The header is not
+edited by the trainer — only the character records are.
 
-### 4.2 Character record (54 bytes = 0x36)
+### 4.2 Character record (72 bytes = 0x48)
 
-Decoded from a player-created character "CHRISTOPHER" (Fighter, Level 1):
+The record is laid out as follows. The **evidence** column names the code that pins each field; the
+sample column is the one player-created character in `DDCHARS.DAT` ("CHRISTOPHER", Fighter L1).
 
 ```
-Offset  Type      Size  Value (sample)  Meaning                    Status
-------  --------  ----  ---------------  -------------------------- -------
-0x00    byte      1     01               Exists flag (1=present)    [Confirmed]
-0x01    byte      1     0B (=11)         Name length                [Confirmed]
-0x02    char[12]  12    CHRISTOPHER\0    Name (null-padded)         [Confirmed]
-0x0E    byte      1     00               Unknown / padding          [Unknown]
-0x0F    byte      1     01               Class (1=Fighter           [Confirmed]
-                                        2=Priest, 3=Wizard)
-0x10    byte      1     01               Level                      [Confirmed]
-0x11    uint16LE  2     11 00 (=17)      Strength                   [Confirmed]
-0x13    uint16LE  2     10 00 (=16)      Dexterity                  [Confirmed]
-0x15    uint16LE  2     0E 00 (=14)      Constitution               [Confirmed]
-0x17    uint16LE  2     0E 00 (=14)      Intelligence               [Confirmed]
-0x19    uint16LE  2     0E 00 (=14)      Piety                      [Confirmed]
-0x1B    uint16LE  2     01 00 (=1)       Status (1=fine?)           [Inferred]
-0x1D    4         4     00…              Unknown                    [Unknown]
-0x21    uint16LE  2     E8 03 (=1000)    Gold                       [Confirmed]
-0x23    6         6     00…              Unknown                    [Unknown]
-0x29    uint16LE  2     23 00 (=35)      Body current (HP)          [Confirmed]
-0x2B    uint16LE  2     23 00 (=35)      Body max (HP max)          [Confirmed]
-0x2D    uint16LE  2     64 00 (=100)     Experience                 [Confirmed]
-0x2F    uint16LE  2     05 00 (=5)       Magic current (MP)         [Confirmed]
-0x31    5         5     00…              Unknown (magic max?        [Unknown]
-                                        spells? items?)
+Offset  Type      Size  Sample     Meaning                     Evidence
+------  --------  ----  ---------  --------------------------  -----------------------------
+0x00    byte      1     01         Exists flag (1 = present)   cmp byte [rec+0],1 (33 sites)
+0x01    byte      1     0B (=11)   Name length
+0x02    char[12]  12    CHRISTOPH… Name (null-padded)
+0x0E    byte      1     00         Unused — never read
+0x0F    byte      1     01         Status (1=fine … 5=DEAD)    cmp byte [rec+0x0F],5 → death
+0x10    byte      1     01         Class (1=FTR,2=PRI,3=WIZ)   cmp al,0/1 branch; FTR/PRI/WIZ
+0x11    uint16LE  2     17         Strength                    printed after "STR:"
+0x13    uint16LE  2     16         Dexterity                   printed after "DEX:"
+0x15    uint16LE  2     14         Constitution                printed after "CON:"
+0x17    uint16LE  2     14         Intelligence                printed after "INT:"
+0x19    uint16LE  2     14         Piety                       printed after "PIE:"
+0x1B    uint16LE  2     1          Level                       printed after "LEVEL:"
+0x1D    uint32LE  4     0          Experience                  printed after "XP:" (as a long)
+0x21    uint32LE  4     1000       Experience for next level   printed after "NEXT:" (as a long)
+0x25    uint16LE  2     0          Magic current (spell pts)   rest copies 0x27 → 0x25
+0x27    uint16LE  2     0          Magic max                   rest copies 0x27 → 0x25
+0x29    uint16LE  2     35         Body current (HP)           heal copies 0x2B → 0x29
+0x2B    uint16LE  2     35         Body max                    heal copies 0x2B → 0x29
+0x2D    uint16LE  2     100        Gold                        printed after "GOLD:"
+0x2F    byte      1     0          Unknown (read, not decoded)
+0x30    byte      1     0          Readied: right hand         written after the "Right hand:" prompt
+0x31    byte      1     0          Readied: left hand          written after the "Left hand:" prompt
+0x32    byte      1     0          Unused — never read
+0x33    byte      1     0          Readied: armor              written after the "Armor:" prompt
+0x34    byte      1     0          Readied: ring               written after the "Ring:" prompt
+0x35    9         9     00…        Unused — never read
+0x3E    byte[10]  10    00…        Carried pack, slots A–J     mov al,[rec+0x3D+slot], slot 1–10
 ```
 
-**Verification**: 20 × 54 + 144 = 1224 = file size. ✓
+**Verification**: 15 × 72 + 144 = 1224 = file size. ✓
 
-**Field details**:
-- **Name**: ASCII, null-padded to 12 bytes. Name length byte at offset 0x01 gives the actual character count.
-- **Class**: 1 = Fighter, 2 = Priest, 3 = Wizard (from the class selection string and character display).
-- **Attributes**: Stored as uint16LE (not bytes), giving a range of 0–65535. The game rolls 3–18 during character creation. Values confirmed by matching against the character creation screen (STR=17, DEX=16, CON=14, INT=14, PIE=14 for the sample character).
-- **Gold**: uint16LE, max 65535. The sample character has 1000 gold.
-- **Body (HP)**: Current and max as separate uint16LE fields. The sample character has 35/35.
-- **Experience**: uint16LE. The sample character has 100 XP.
-- **Magic (MP)**: Current as uint16LE. The sample character (a Fighter) has 5 MP. Magic is restored when returning to town (resting).
-- **Status**: Inferred at offset 0x1B. The game displays "fine", "KO", "STUNED", "STONE", "DEAD". The value 1 likely maps to "fine". Without a character in a non-fine state, the exact encoding is unconfirmed.
+**How the display fields were pinned.** The character-sheet printer emits its labels in screen
+order — `STR:`/`LEVEL:`, `DEX:`/`XP:`, `CON:`/`NEXT:`, `INT:`/`GOLD:`, `PIE:` — and pushes fields in
+exactly that order: `0x11, 0x1B, 0x13, [0x1F,0x1D], 0x15, [0x23,0x21], 0x17, 0x2D, 0x19`. The two
+bracketed pairs are high-word-then-low-word pushes of a 32-bit value, which is why XP and NEXT are
+`uint32` while gold, pushed alone, is a `uint16`. The game's manual describes the same four
+right-hand quantities ("Level", "Exp", "Next", "Gold"), in that order.
 
-**Unknown fields**: The 4 bytes at 0x1D, 6 bytes at 0x23, and 5 bytes at 0x31 are zero in the single sample. They may contain magic max, spell knowledge bitfields, item references, or other state. They are round-tripped by the save editor without interpretation.
+**The game's own max-character routine** (a debug/cheat path in the EXE) writes 99 to each of
+`0x11`–`0x19`, 30 to `0x1B`, 99 to `0x27` and `0x2B`, `0x000F423F` (999,999) across `0x21`, and
+10,000 to `0x2D`. That independently confirms level at `0x1B`, the two *max* vitals at `0x27`/`0x2B`,
+NEXT as a 32-bit field at `0x21`, and gold as a 16-bit field at `0x2D`. The trainer's "max" targets
+are taken from this routine.
 
-### 4.3 Empty slots
+**Superseded readings.** The sample character is a level-1 Fighter with status "fine", so `0x0F`,
+`0x10` and `0x1B` all read 1 and could not be told apart from it. An earlier pass therefore had
+class at `0x0F`, level at `0x10` and status at `0x1B`, and — reading gold and XP one field
+too early — reported gold 1000 and XP 100. Under the corrected layout the same bytes read XP 0,
+NEXT 1000 and gold 100 for a freshly created character, and Magic 0/0 for a Fighter, all of which
+are what a new character should have.
 
-Slots 1–19 in the sample `DDCHARS.DAT` are all zeros (54 bytes of 0x00). An empty slot has exists flag = 0x00 and name length = 0x00.
+### 4.3 Items
+
+Item bytes are indices into a 40-byte-per-entry table in the data segment whose entry 0 is the
+game's own `NO ITEM` placeholder — so **0 means "empty"** and valid ids run 1–63. The pack picker
+enforces exactly that: it rejects anything above `0x3F` and beeps at 0.
+
+The 40-byte entry, with offsets **relative to the start of the entry** (the same convention
+`ItemBook`'s `EntryOff*` constants use):
+
+```
+Offset  Type      Meaning
+------  --------  ------------------------------------------------------------------
+0x00    byte      Type code — what the ready-equipment screen tests (table below)
+0x01    byte      Unidentified
+0x02    char[]    Name, ASCII. The padding after a short name holds build garbage, so
+                  the name cannot be read by scanning to a NUL — the trainer's names
+                  are curated and assert-checked as prefixes of these bytes.
+0x12    uint16    Damage, or effect id for a usable item
+0x14    uint16    Potency — chance out of 256 of the good outcome (§4.4)
+0x18    uint16    Shield protection; 0 for everything else
+0x1A    uint16    Price in gold; 0 when not sold
+0x1C    uint16    Class bitmask — bit 0 Fighter, 1 Priest, 2 Wizard
+```
+
+The prices climb sensibly with the names — Dagger 5, Staff 10, Mace 15, Short Sword 20 — and the
+class masks match the manual: the dagger is `101` (no priests: "their beliefs prevent them from
+using pointed weapons"), the mace `011`, the wands `100`.
+
+The type code at +0x00 is what the ready-equipment screen tests:
+
+| Type | Meaning | Slots that accept it |
+|---|---|---|
+| 0 | light / off-hand (daggers, short swords, shields) | right hand, **left hand** |
+| 1 | medium one-handed weapon | right hand |
+| 2 | two-handed weapon | right hand |
+| 3 | usable (wands, potions, scrolls, keys, the quest staff) | — |
+| 4 | ring | ring |
+| 5 | armor | armor |
+
+The picker's four branches are literally `type <= 2` for the right hand, `type == 0` for the left,
+`type == 5` for armor and `type == 4` for the ring; anything else prints `"Wrong type!"`. That
+matches the manual ("you can have a large and small weapon, or a weapon and a shield").
+
+Ids 41–59 (bar 54) are monster natural gear — `Hide`, `Scales`, `Claw`, `Bite` and friends — with
+price 0 and class mask 0. They are perfectly valid ids to write, but the shop never sells them.
+Ids 27, 28 and 36 are blank table slots. Id 63 is `THE  S T A F F`, the quest item.
+
+One entry needs care: **`Gaze` (id 32)** is a monster attack, but unlike the rest of the monster
+gear it carries a full class mask of `111`. A class mask alone therefore does not separate player
+gear from monster entries — the shop **price** does, with the priceless quest staff as the single
+exception. That is the rule `ItemBook.Item.IsPlayerItem` implements, giving 41 obtainable items.
+
+### 4.4 Item charges: there aren't any
+
+Dark Designs has **no charge counters**. Three independent lines of evidence:
+
+- A pack slot is a single byte holding an item id (§4.2). There is no per-slot counter anywhere in
+  the 72-byte record, and the bytes the record does not use (`0x0E`, `0x32`, `0x35`–`0x3D`) are
+  never read by any code.
+- The item screen's strings are `Use,Trd,Drop,Rdy:`, `Cannot act!`, `Use item (A-J):`,
+  `No usable power!`, `Wrong class!`, `Trade item (A-J):`, `You are using it!`, `Give to (1-4):`,
+  `No free spots!`, `Drop item (A-J):`. Nothing about charges, uses left, or being spent.
+- The `(U)se` path settles it. After checking the item is type 3 and legal for the class, it does:
+
+```
+    push [entry+0x12]          ; the effect id
+    push charIndex
+    call apply_effect
+    push 256
+    lcall random               ; roll = random(256)
+    ax = [entry+0x14]          ; potency
+    cdq                        ; compared as a signed long
+    if (potency > roll) goto keep
+    mov byte [rec+0x3D+slot], 0    ; destroy the item
+keep:
+```
+
+So an item is **destroyed on use unless a random roll goes its way**. Consumption is
+probabilistic, not metered.
+
+The word at entry `+0x14` — call it **potency** — is that chance out of 256. The same test appears
+in two combat routines, where passing it fires a magic weapon's special effect instead of sparing
+the item; that matches the manual's "some magic weapons will occasionally produce special effects".
+
+| Item | Potency | Survives a use |
+|---|---|---|
+| Cureall Potion | 255 | 99.6% |
+| Recall Scroll | 250 | 97.7% |
+| Extra Healing | 245 | 95.7% |
+| Healing Potion | 128 | 50.0% |
+| Medusa Skull | 50 | 19.5% |
+| Wand of Evil | 29 | 11.3% |
+| Paralyze Wand | 10 | 3.9% |
+| Keys 1–3, The Staff | 0 | never |
+
+Magic weapons carry it as a trigger chance: Gaze 250, Trident of Pain and Active Axe 200, Old Dark
+Sword 80, Holy Sword 77, Gravedigger Axe 66, Vampiric Sword / Electroblade / Medusa Skull 50,
+Mangling Mace 45, Boom Blade 25. Ordinary gear is 0 and never rolls.
+
+Because potency lives in the **item table**, not in a character, there is nothing per-item to
+recharge. Setting it to 256 makes the test unconditional — usable items survive every use and magic
+weapons trigger every hit — which is what `Memory/ItemTableLocator.cs` patches. That is game-wide
+data, so it affects every character and is never written to `DDCHARS.DAT`. The trainer restores the
+original values on detach unless "Keep on detach" is ticked, in which case the patch lasts until the
+game exits.
+
+Either way the cached table address is dropped on detach: it belongs to the process being released,
+and DOSBox reuses similar addresses between runs, so keeping it would let a later re-attach write
+two bytes to a stale address in a different process. The remembered *original values* are kept when
+the patch is left in place — they are static game data, identical every session, so re-attaching and
+unticking a toggle restores the true values rather than re-saving the patched ones.
+
+### 4.5 Roster, party working copies, and save
+
+The loader and saver make the memory layout explicit:
+
+```
+DS:0x0424   roster[0..15], 72 bytes each   (slot 0 scratch; the file holds slots 1–15)
+DS:0x1316   partySlot[1..4], uint16 each   (which roster slot each party position holds, 0 = none)
+DS:0x1360   party[1..4], 72 bytes each     (the working copies the game actually plays out of)
+```
+
+On load, for each of the four party positions the game `movmem`s 72 bytes from
+`roster[partySlot[i]]` into `party[i]` (or from a blank template at `DS:0x12D0` when the position is
+empty). On `(Q)uit and save` it does the reverse — `party[i]` → `roster[partySlot[i]]` — and only
+then writes the file.
+
+The consequence for a live trainer is direct: **editing only the roster is undone by the game's own
+save** for any character currently in the party. `RosterLocator` therefore sweeps the surrounding
+data segment for working copies of each located character, matching on the name bytes and class
+(not on the `0xF3C` delta, and not on vitals, which diverge as soon as the character takes a hit),
+and `CharacterViewModel` writes every copy it found alongside the roster record.
+
+### 4.6 Empty slots
+
+Unoccupied roster slots in the sample `DDCHARS.DAT` are all zeros. An empty slot has exists
+flag = 0x00 and name length = 0x00.
+
+### 4.7 Live confirmation
+
+Everything above was then checked against the running game (DOSBox-X, character "CHRISTOPHER" on
+the item screen), which settled the layout by observation rather than inference:
+
+**Reading.** The locator found the roster record and decoded it as L1 Fighter, STR 17 / DEX 16 /
+CON 14 / INT 14 / PIE 14, Body 35/35, Magic 0/0, XP 0/1000, Gold 100 — matching the save-file
+decode field for field.
+
+**The two-array model.** The content-matched sweep found the party working copy at exactly
+`roster + 0xF3C`. That is precisely the DGROUP delta the disassembly predicts (`0x1360 - 0x424`),
+reached independently by matching name and class. The party array is real, and the mirroring is
+load-bearing rather than defensive.
+
+**Writing.** Item ids 5, 8, 10 and 20 were written into pack slots A–D of both copies and read
+back. Re-opening the item screen, the game printed:
+
+```
+A  LONG SWORD
+B  SHIELD
+C  LEATHER ARMOR
+D  HEALING POTION
+```
+
+— the game's own renderer resolving those ids to the names this table claims, which confirms the
+item table's base, stride and 1-based origin at once. The pack offset (`+0x3E`, slot A) is
+confirmed by the same write.
+
+**The party status line.** The same screen's roster bar reads
+`CHRISTOPHER   35/35   fine   0/0   FTR`, independently confirming four more fields: body
+current/max (`+0x29`/`+0x2B`), status (`+0x0F`, printing "fine" for 1), class (`+0x10`, "FTR"), and
+**magic as a current/max pair** (`+0x25`/`+0x27`). That last one is decisive against the superseded
+layout, which had no magic-max field and read a lone magic value of 5 at `+0x2F` — the game shows
+`0/0`, as a Fighter should.
+
+One display caveat, the same one the creation pool has (§5.4): the item list is painted when the
+screen opens and is **not** repainted when the bytes change underneath it. A write only becomes
+visible after leaving and re-entering the item screen.
 
 ## 5. Character creation: the rolled stat pool
 
@@ -274,24 +476,33 @@ The trainer uses a **dual-strategy locator** to find the character roster in DOS
 
 The 34-byte title string `"Dark Designs I : Grelminar's Staff"` lives in the game's code/data segment as plain ASCII. It is unique in the emulated 16 MB of DOSBox guest RAM. Finding it pins a known offset within the program's data segment.
 
-The character buffer (loaded from `DDCHARS.DAT`) is in BSS, which is allocated contiguously after the loaded image. The trainer searches a 256 KB window forward from the anchor string for the 20-record character pattern. This is fast (~50 ms) and reliable.
+The character buffer (loaded from `DDCHARS.DAT`) is in BSS, which is allocated contiguously after the loaded image. The trainer searches a 256 KB window forward from the anchor string for the 15-record character pattern. This is fast (~50 ms) and reliable.
 
 ### 7.2 Fallback: structural scan
 
-If the anchor is not found (e.g., a different build or the string is at an unexpected offset), the trainer falls back to scanning all readable memory for a contiguous block of 54-byte records matching the character pattern:
+If the anchor is not found (e.g., a different build or the string is at an unexpected offset), the trainer falls back to scanning all readable memory for a contiguous block of 72-byte records matching the character pattern:
 
-- Each record is either a **valid character** (exists flag = 1, name length 1–12, ASCII name, class 1–3, level ≥ 1, five attributes in 3–18+) or an **empty slot** (all zeros).
+- Each record is either a **valid character** (exists flag = 1, name length 1–12, ASCII name, status 1–5, class 1–3, five attributes in 1–999, level 1–99, body max > 0) or an **empty slot** (all zeros).
 - Occupied slots pack from slot 0.
 - At least one slot must be occupied.
 
 This is slower (~2 s for 16 MB) but build-independent.
 
+### 7.3 Party working copies
+
+Whichever strategy found the roster, the locator then sweeps ~10 KB forward for 72-byte blocks that
+carry the same name bytes and class as a located character but sit outside the roster array. Those
+are the game's party working copies (§4.5). Matching on content rather than on the `0x1360 - 0x424`
+delta keeps the trainer's "never hard-code an address" rule intact, and a build that laid the data
+segment out differently would simply find no mirrors and fall back to roster-only edits.
+
 ## 8. Limitations and unfinished work
 
-- **Header**: The 144-byte DDCHARS.DAT header is only partially decoded. The party composition, dungeon level, and position fields could not be confirmed from a single sample.
+- **Header**: The 144-byte DDCHARS.DAT header is only partially decoded. The loader's six reads give its field boundaries (8/2/2/2/2/128) but not their meanings.
 - **Map format**: The DDMAP files' tile encoding and dimensions are not fully decoded.
-- **Status field**: The exact byte values for KO/STUNED/STONE/DEAD are inferred from the game's display strings but not confirmed against a character in those states.
-- **Spell knowledge**: The bytes at record offset 0x32–0x35 may contain spell bitfields but are zero in the only sample (a Fighter with no spells).
-- **Magic max**: No magic max field was identified; magic appears to be restored to a calculated maximum on rest rather than stored.
-- **Live testing**: The *record* field offsets (section 4) are still derived from static analysis of the unpacked EXE and a sample `DDCHARS.DAT`; they have not been write-tested against a running game. The *creation pool* (section 5) is the exception — it was located, sampled and write-tested live, and the write was confirmed to reach the created character.
+- **Status field**: The value 5 = DEAD is pinned by the game's own `status == 5` check, and the five status strings (" fine", "  KO", "STUNED", "STONE", " DEAD") give the ordering, but 2–4 have not been observed on a live character.
+- **Spell knowledge**: No spell-knowledge field was found. The 9 unused bytes at 0x35–0x3D are the only plausible home, and no code reads them via the record base — so if spells are stored per character, it is somewhere this sweep did not reach.
+- **Record offset 0x2F**: read by the game in 18 places but not identified; left alone.
+- **Item name padding**: names in the item table are not reliably NUL-terminated — the bytes after a short name hold build garbage (`DAGGER` is followed by `LOADMONLIS`). The trainer's names were curated and then verified by assertion to be genuine prefixes of the table bytes rather than parsed at runtime.
+- **Live testing**: done — see §4.7. What remains untested live is the *writing* of individual non-item fields (attributes, gold, level and so on); those are pinned by the disassembly and by the party display line, but only the pack bytes have been round-tripped through the game's own renderer.
 - **Creation pool neighbours**: The uint16 that brackets the pool at `-0x02` and `+0x0A` (`0x31FE` in both places) is unidentified, and the cursor semantics at `+0x0E` are only partly worked out — Return advances it once and thereafter appears to swap the offered value with the attribute under the cursor. Neither is needed by the trainer, which only reads and writes the five rolled values.

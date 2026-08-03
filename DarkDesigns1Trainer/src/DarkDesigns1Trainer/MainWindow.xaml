@@ -2,6 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Dark Designs I Trainer" Height="720" Width="960"
+        Icon="Assets/app.ico"
         WindowStartupLocation="CenterScreen" WindowState="Maximized">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
@@ -55,6 +56,13 @@
                 <Button Content="Max Attributes" Command="{Binding MaxPartyCommand}"/>
                 <Button Content="Max Money" Command="{Binding MaxMoneyPartyCommand}"/>
                 <Button Content="Max Everything" Command="{Binding MaxEverythingPartyCommand}"/>
+                <Separator Style="{x:Null}" Width="12"/>
+                <CheckBox Content="Items never break" IsChecked="{Binding ItemsNeverBreak}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="Dark Designs has no charges — it destroys a used item unless a random roll goes its way. This pins that roll so potions, wands, scrolls and keys survive every use. Patches the game's item table, so it applies to everyone and is undone when you detach."/>
+                <CheckBox Content="Magic weapons always trigger" IsChecked="{Binding WeaponsAlwaysTrigger}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="The same roll decides whether a magic weapon's special effect fires on a hit. This pins it so it always does."/>
+                <CheckBox Content="Keep on detach" IsChecked="{Binding KeepPatchesOnDetach}" VerticalAlignment="Center" Margin="4,0"
+                          ToolTip="By default the two item patches above are undone when you detach, so the game is never left altered with nothing attached to undo it. Tick this to leave them in place instead — they then last until the game exits. Re-attach and untick a toggle to restore the original values."/>
             </StackPanel>
         </Border>
 
@@ -118,6 +126,8 @@
 
                                     <TextBlock Grid.Row="3" Grid.Column="0" Text="Slot" Style="{StaticResource FieldLabel}"/>
                                     <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Slot}" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="2" Text="XP to next" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox   Grid.Row="3" Grid.Column="3" Text="{Binding NextLevel}"/>
                                 </Grid>
 
                                 <GroupBox Header="Vitals" Margin="0,8,0,0">
@@ -140,6 +150,8 @@
 
                                         <TextBlock Grid.Row="1" Grid.Column="0" Text="Magic" Style="{StaticResource FieldLabel}"/>
                                         <TextBox   Grid.Row="1" Grid.Column="1" Text="{Binding MagicCurrent}"/>
+                                        <TextBlock Grid.Row="1" Grid.Column="2" Text="/ Max" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox   Grid.Row="1" Grid.Column="3" Text="{Binding MagicMax}"/>
                                     </Grid>
                                 </GroupBox>
 
@@ -161,11 +173,81 @@
                                     </ItemsControl>
                                 </GroupBox>
 
+                                <GroupBox Header="Readied equipment" Margin="0,8,0,0">
+                                    <ItemsControl ItemsSource="{Binding Equipment}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="2">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="90"/>
+                                                        <ColumnDefinition Width="180"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"/>
+                                                    <ComboBox Grid.Column="1" Margin="2"
+                                                              ItemsSource="{Binding Options}"
+                                                              SelectedItem="{Binding Selected}"
+                                                              DisplayMemberPath="Name"/>
+                                                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding Detail}" Foreground="#666"/>
+                                                        <TextBlock Text="  ⚠ the game would reject this here" Foreground="#B00">
+                                                            <TextBlock.Style>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding IsLegal}" Value="False">
+                                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </GroupBox>
+
+                                <GroupBox Header="Carried pack (item screen keys A–J)" Margin="0,8,0,0">
+                                    <StackPanel>
+                                        <ItemsControl ItemsSource="{Binding Inventory}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid Margin="2">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="90"/>
+                                                            <ColumnDefinition Width="180"/>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"/>
+                                                        <ComboBox Grid.Column="1" Margin="2"
+                                                                  ItemsSource="{Binding Options}"
+                                                                  SelectedItem="{Binding Selected}"
+                                                                  DisplayMemberPath="Name"/>
+                                                        <Button Grid.Column="2" Content="Duplicate" Margin="2,2,8,2"
+                                                                Padding="6,1" Command="{Binding DuplicateCommand}"
+                                                                ToolTip="Copy this item into the first free pack slot"/>
+                                                        <TextBlock Grid.Column="3" Text="{Binding Detail}"
+                                                                   Foreground="#666" VerticalAlignment="Center"/>
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <TextBlock Text="{Binding SyncNote}" Foreground="#555"
+                                                   TextWrapping="Wrap" Margin="4,6,4,0"/>
+                                        <TextBlock Foreground="#555" TextWrapping="Wrap" Margin="4,4,4,0"
+                                                   Text="Buying is not simulated — a new item just appears in the slot. Ready it in the game ((I)tems → (R)eady) before it counts in combat."/>
+                                    </StackPanel>
+                                </GroupBox>
+
                                 <WrapPanel Margin="0,8,0,0">
                                     <Button Content="Full Heal" Click="FullHeal_Click"/>
                                     <Button Content="Max Attributes" Click="MaxAttributes_Click"/>
                                     <Button Content="Max Money" Click="MaxMoney_Click"/>
                                     <Button Content="Max Everything" Click="MaxEverything_Click"/>
+                                    <Button Content="Empty Pack" Click="ClearPack_Click"/>
                                 </WrapPanel>
                             </StackPanel>
                         </ScrollViewer>
@@ -486,8 +568,62 @@
                                             </WrapPanel>
                                         </GroupBox>
 
+                                        <GroupBox Header="Readied equipment" Margin="0,8,0,0">
+                                            <ItemsControl ItemsSource="{Binding DataContext.SaveEquipment, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="90"/>
+                                                                <ColumnDefinition Width="180"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"/>
+                                                            <ComboBox Grid.Column="1" Margin="2"
+                                                                      ItemsSource="{Binding Options}"
+                                                                      SelectedItem="{Binding Selected}"
+                                                                      DisplayMemberPath="Name"/>
+                                                            <TextBlock Grid.Column="2" Text="{Binding Detail}"
+                                                                       Foreground="#666" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </GroupBox>
+
+                                        <GroupBox Header="Carried pack (item screen keys A–J)" Margin="0,8,0,0">
+                                            <ItemsControl ItemsSource="{Binding DataContext.SaveInventory, RelativeSource={RelativeSource AncestorType=Window}}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Grid Margin="2">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="90"/>
+                                                                <ColumnDefinition Width="180"/>
+                                                                <ColumnDefinition Width="Auto"/>
+                                                                <ColumnDefinition Width="*"/>
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"/>
+                                                            <ComboBox Grid.Column="1" Margin="2"
+                                                                      ItemsSource="{Binding Options}"
+                                                                      SelectedItem="{Binding Selected}"
+                                                                      DisplayMemberPath="Name"/>
+                                                            <!-- No Click handler: SaveField_LostFocus rebuilds SaveInventory,
+                                                                 which would tear this button out of the tree before WPF got
+                                                                 round to running its Command. SavePack.TryAddItem already
+                                                                 marks the file modified and refreshes the slots. -->
+                                                            <Button Grid.Column="2" Content="Duplicate" Margin="2,2,8,2"
+                                                                    Padding="6,1" Command="{Binding DuplicateCommand}"
+                                                                    ToolTip="Copy this item into the first free pack slot"/>
+                                                            <TextBlock Grid.Column="3" Text="{Binding Detail}"
+                                                                       Foreground="#666" VerticalAlignment="Center"/>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </GroupBox>
+
                                         <TextBlock Margin="0,8,0,0" Foreground="#555" TextWrapping="Wrap"
-                                                   Text="Changes are saved when you click Save. A .bak backup is taken before the first write."/>
+                                                   Text="Changes are saved when you click Save. A .bak backup is taken before the first write. Edit the save with the game closed — Dark Designs rewrites DDCHARS.DAT from memory when you (Q)uit and save."/>
                                     </StackPanel>
                                 </ScrollViewer>
                             </GroupBox>

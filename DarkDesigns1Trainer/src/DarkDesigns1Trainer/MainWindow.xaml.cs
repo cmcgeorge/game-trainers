@@ -27,6 +27,7 @@ public partial class MainWindow : Window
     private void MaxAttributes_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxAttributes();
     private void MaxMoney_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxMoney();
     private void MaxEverything_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxEverything();
+    private void ClearPack_Click(object sender, RoutedEventArgs e) => Vm(sender)?.ClearPack();
 
     // Save editor: mark the save file modified when a field loses focus
     private void SaveField_LostFocus(object sender, RoutedEventArgs e)

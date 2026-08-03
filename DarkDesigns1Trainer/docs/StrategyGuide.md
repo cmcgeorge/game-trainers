@@ -159,60 +159,146 @@ The manual suggests **two Fighters, one Priest, and one Wizard**. This is a soli
 
 ## Items
 
+Every figure below is read straight from the item table in the game's own executable: **Dam**age or
+effect power, shield **Prot**ection, shop **Price**, and which classes may use it (**F**ighter,
+**P**riest, **W**izard). **ID** is the byte the game stores in an inventory slot, which is what the
+trainer's dropdowns are indexed by.
+
+You carry **ten items** (item screen keys `A`–`J`) and ready **four** of them at a time: right hand,
+left hand, armor, ring. Buying does not equip — `(I)tems → (R)eady` does.
+
+### What can go where
+
+The game sorts every item into a type, and each readied slot accepts only certain types:
+
+| Slot | Accepts |
+|---|---|
+| Right hand | any weapon or shield (light, medium, or two-handed) |
+| Left hand | **light** items only — daggers, short swords, shields |
+| Armor | armor |
+| Ring | rings |
+
+So you can pair a two-handed weapon with nothing, or a one-handed weapon with a shield or dagger.
+Anything else gets *"Wrong type!"*. Wands, potions, scrolls and keys are never readied — they are
+carried and used from the item screen.
+
 ### Weapons
 
-| Item | Notes |
+| ID | Weapon | Hands | Dam | Price | Classes |
+|---|---|---|---|---|---|
+| 1 | Dagger | light | 3 | 5 | F · W |
+| 2 | Staff | two-handed | 5 | 10 | F P W |
+| 3 | Mace | medium | 6 | 15 | F P · |
+| 4 | Short Sword | light | 7 | 20 | F · · |
+| 5 | Long Sword | medium | 9 | 30 | F · · |
+| 6 | Battle Axe | two-handed | 10 | 40 | F · · |
+| 7 | Two Hand Sword | two-handed | 11 | 50 | F · · |
+| 34 | Trident of Pain | two-handed | 15 | 2,010 | F · · |
+| 38 | Striking Staff | two-handed | 10 | 2,500 | F P W |
+| 30 | Vampiric Sword | medium | 10 | 2,500 | F · · |
+| 29 | Mangling Mace | medium | 10 | 3,000 | F P · |
+| 40 | Active Axe | two-handed | 10 | 3,500 | F · · |
+| 16 | Hell Dagger | light | 15 | 4,000 | F P W |
+| 17 | Gravedigger Axe | two-handed | 13 | 5,000 | F · · |
+| 35 | Electroblade | medium | 12 | 5,000 | F · · |
+| 37 | Boom Blade | medium | 14 | 5,000 | F · · |
+| 39 | Bone Basher | two-handed | 13 | 5,000 | F P · |
+| 31 | Holy Sword | medium | 12 | 7,000 | F · · |
+| 33 | Old Dark Sword | medium | 15 | 32,768 | F · · |
+
+The two best weapons in the game are the **Hell Dagger** (15 damage, and the only top-tier weapon
+every class can hold — it is *light*, so it also fits the left hand) and the **Old Dark Sword**
+(15 damage). The Old Dark Sword's price is exactly 0x8000, which reads as −32,768 signed; treat it
+as "not realistically purchasable" rather than a real number.
+
+Best value early: the **Staff** at 10 gold does 5 damage and every class can use it. The
+**Two Hand Sword** at 50 gold is the strongest thing a starting fighter can afford.
+
+### Shields
+
+Shields count as *light*, so they go in the left hand — or the right, if you would rather hit with
+one.
+
+| ID | Shield | Prot | Dam | Price | Classes |
+|---|---|---|---|---|---|
+| 9 | Spiked Shield | 15 | 3 | 35 | F · · |
+| 8 | Shield | 30 | 0 | 25 | F P · |
+| 54 | Bad Buckler | 30 | 6 | 4,500 | F · · |
+| 11 | Magic Shield | 55 | 0 | 2,000 | F · · |
+
+The plain **Shield** is the bargain — more protection than the Spiked Shield for less money. The
+**Bad Buckler** matches it for protection and adds 6 damage, which is a real weapon's worth.
+
+### Armor
+
+| ID | Armor | Rating | Price | Classes |
+|---|---|---|---|---|
+| 10 | Leather Armor | 2 | 20 | F P W |
+| 12 | Chain Mail | 4 | 50 | F P · |
+| 14 | Plate Mail | 6 | 100 | F P · |
+| 15 | Full Plate | 7 | 250 | F · · |
+| 13 | Magic Armor | 8 | 3,000 | F P · |
+
+Leather is the only armor a wizard may wear, which is exactly what the manual says about needing
+mobility to cast.
+
+### Using an item may destroy it
+
+There are no charges in Dark Designs. When you `(U)se` something, the game applies its effect and
+then rolls to see whether the item survives — and the odds are per item type, fixed in the
+executable:
+
+| Item | Survives a use |
 |---|---|
-| Dagger | Basic dagger |
-| Staff | Staff weapon |
-| Mace | Blunt weapon (priest-usable) |
-| Short Sword | Basic sword |
-| Long Sword | Standard one-handed sword |
-| Battle Axe | Two-handed axe |
-| Two Hand Sword | Large two-handed sword |
-| Hell Dagger | Magical dagger |
-| Gravedigger Axe | Magical axe |
-| Mangling Mace | Magical mace |
-| Vampiric Sword | Drains life |
-| Holy Sword | Holy weapon |
-| Old Dark Sword | Dark weapon |
-| Trident of Pain | Magical trident |
-| Electroblade | Electrical weapon |
-| Boom Blade | Explosive weapon |
-| Striking Staff | Magical staff |
-| Bone Basher | Magical mace |
-| Active Axe | Magical axe |
+| Cureall Potion | 99.6% |
+| Recall Scroll | 97.7% |
+| Extra Healing | 95.7% |
+| Healing Potion | **50%** |
+| Medusa Skull | 19.5% |
+| Wand of Evil | 11.3% |
+| Paralyze Wand | 3.9% |
+| Keys 1–3 | never — always consumed |
 
-### Armor & Shields
+This is worth planning around. A Healing Potion is a coin-flip every time you drink it, so carry
+several. The expensive consumables are the *durable* ones: a Cureall Potion at 1,500 gold survives
+199 uses out of 200 on average, which makes it far better value than its price suggests, and an
+Extra Healing at 500 gold will usually outlast a stack of ordinary potions. The Paralyze Wand, by
+contrast, is effectively single-use at 2,000 gold.
 
-| Item | Notes |
-|---|---|
-| Shield | Basic shield |
-| Spiked Shield | Shield with spikes |
-| Leather Armor | Light armor |
-| Magic Shield | Magical shield |
-| Chain Mail | Medium armor |
-| Magic Armor | Magical armor |
-| Plate Mail | Heavy armor |
-| Full Plate | Heaviest armor |
+Keys are always destroyed, so buy spares — at 10 gold each there is no reason not to.
 
-### Magical Items
+The same roll governs **magic weapons**: it decides whether their special effect fires on a hit.
+Gaze 97.7%, Trident of Pain and Active Axe 78.1%, Old Dark Sword 31.2%, Holy Sword 30.1%,
+Gravedigger Axe 25.8%, Vampiric Sword and Electroblade 19.5%, Mangling Mace 17.6%, Boom Blade 9.8%.
+That is a real argument for the Trident of Pain at 2,010 gold: same 15 damage as the Old Dark
+Sword, and its effect fires two and a half times as often.
 
-| Item | Notes |
-|---|---|
-| Paralyze Wand | Paralyzes target |
-| Wand of Evil | Evil wand |
-| Healing Potion | Restores Body points |
-| Extra Healing | Restores more Body points |
-| Cureall Potion | Restores to max Body |
-| Medusa Skull | Stone gaze effect |
-| Speed Ring | Raises Dexterity |
-| Strength Ring | Raises Strength |
-| Recall Scroll | Word of Recall effect |
-| Key 1 | Unlocks door type 1 |
-| Key 2 | Unlocks door type 2 |
-| Key 3 | Unlocks door type 3 |
-| The Staff | Grelminar's Staff (quest item) |
+### Wands, potions, rings and keys
+
+| ID | Item | Power | Price | Classes | Notes |
+|---|---|---|---|---|---|
+| 20 | Healing Potion | 11 | 150 | F P W | Restores Body points |
+| 21 | Extra Healing | 14 | 500 | F P W | Restores more Body points |
+| 22 | Cureall Potion | 18 | 1,500 | F P W | The strongest heal |
+| 26 | Recall Scroll | 17 | 1,500 | · P · | Word of Recall effect; priests only |
+| 18 | Paralyze Wand | 4 | 2,000 | · · W | Paralyses the target; wizards only |
+| 19 | Wand of Evil | 8 | 3,500 | · · W | Wizards only |
+| 23 | Medusa Skull | 22 | 7,000 | F P W | Stone gaze effect |
+| 24 | Speed Ring | — | 1,000 | F P W | Raises Dexterity (ring slot) |
+| 25 | Strength Ring | — | 2,000 | F P W | Raises Strength (ring slot) |
+| 60 | Key 1 | — | 10 | F P W | Unlocks door type 1 |
+| 61 | Key 2 | — | 10 | F P W | Unlocks door type 2 |
+| 62 | Key 3 | — | 10 | F P W | Unlocks door type 3 |
+| 63 | The Staff | — | — | F P W | Grelminar's Staff — the quest item |
+
+All three keys cost 10 gold each. Buy them.
+
+### Ids you will not see in a shop
+
+Ids 41–59 (bar 54) are the monsters' own gear — `Hide`, `Thick Hide`, `Scales`, `Plated Hide`,
+`Shell`, `Shell & Scales`, `Nip`, `Claw`, `Big Claw`, `Huge Claw`, `Bite`, `Big Bite`, `Huge Bite`,
+`Bash`, `Hard Bash`, `Tail`, `Horn`, `Spikes` — plus `Gaze` at 32. They are valid ids a character
+*can* hold, but none of them is sold. Ids 27, 28 and 36 are blank table entries.
 
 ## Monsters
 

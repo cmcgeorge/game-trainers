@@ -9,6 +9,13 @@ public sealed class LocatedCharacter
     public int Slot { get; }
     public CharacterRecord Record { get; }
 
+    /// <summary>
+    /// Addresses of the game's party working copies of this same character, if it is currently
+    /// in the party. The game plays out of these and copies them back over the roster when it
+    /// saves, so a write that misses them is undone on the next save.
+    /// </summary>
+    public List<nuint> Mirrors { get; } = new();
+
     public LocatedCharacter(nuint address, int slot, CharacterRecord record)
     {
         Address = address;
@@ -28,13 +35,14 @@ public sealed class LocatedCharacter
 ///    lives in the game's code/data segment as plain ASCII and is unique in DOSBox guest RAM.
 ///    The character buffer (loaded from <c>DDCHARS.DAT</c>) sits in BSS, allocated contiguously
 ///    after the loaded image. The locator finds the anchor, then searches a 256 KB window
-///    forward for the 20-record character pattern.
+///    forward for the 15-record character pattern.
 ///
 /// 2. <b>Structural</b> — a fallback that scans all readable memory for a contiguous block of
-///    54-byte records matching the character pattern (occupied slots validated, empty slots
+///    72-byte records matching the character pattern (occupied slots validated, empty slots
 ///    all-zero, occupied slots pack from slot 0).
 ///
-/// Either way, only occupied slots are returned; empty slots are skipped.
+/// Either way, only occupied slots are returned; empty slots are skipped. Each hit is then
+/// checked for the game's separate party working copies (see <see cref="LocatedCharacter.Mirrors"/>).
 /// </summary>
 public static class RosterLocator
 {
@@ -50,9 +58,109 @@ public static class RosterLocator
     /// </summary>
     public static List<LocatedCharacter> FindAll(ProcessMemory mem, CancellationToken ct = default)
     {
-        var byAnchor = FindByAnchor(mem, ct);
-        if (byAnchor.Count > 0) return byAnchor;
-        return FindByStructure(mem, ct);
+        var found = FindByAnchor(mem, ct);
+        if (found.Count == 0) found = FindByStructure(mem, ct);
+        if (found.Count > 0) AttachPartyMirrors(mem, found);
+        return found;
+    }
+
+    // --- party working copies -------------------------------------------------
+    /// <summary>
+    /// Bytes of data segment to sweep past the roster when hunting for party working copies.
+    /// In the build we disassembled the roster sits at DGROUP <c>0x424</c> and the party array
+    /// at <c>0x1360</c> — 0xF3C apart — but nothing here depends on that: the sweep matches on
+    /// record content, so a differently laid out build still resolves (or finds nothing and
+    /// simply skips mirroring).
+    /// </summary>
+    private const int PartySearchWindow = 0x2800;   // 10 KB
+
+    /// <summary>
+    /// The game keeps a 72-byte working copy of each party member separate from the roster, plays
+    /// out of those copies, and writes them back over the roster when it saves. This finds any
+    /// such copy of each located character — matched on the name bytes and class, never on a
+    /// hard-coded offset — so writes can be applied to both and survive the game's own save.
+    /// </summary>
+    private static void AttachPartyMirrors(ProcessMemory mem, List<LocatedCharacter> found)
+    {
+        var first = found[0];
+        nuint rosterBase = first.Address - (nuint)(first.Slot * CharacterFormat.RecordSize);
+
+        byte[] window = new byte[PartySearchWindow];
+        int read = ReadAsMuchAsPossible(mem, rosterBase, window);
+        if (read < CharacterFormat.RecordSize) return;
+
+        // The in-memory roster array carries a scratch slot the file does not, and the scan may
+        // have anchored on either. Exclude a whole extra record so no roster slot is mistaken for
+        // a working copy.
+        nuint rosterEnd = rosterBase + (nuint)((CharacterFormat.MaxSlots + 1) * CharacterFormat.RecordSize);
+
+        var candidates = new Dictionary<LocatedCharacter, List<nuint>>();
+        var claimants = new Dictionary<nuint, int>();
+
+        foreach (var lc in found)
+        {
+            var mine = new List<nuint>();
+            for (int i = 0; i + CharacterFormat.RecordSize <= read; i++)
+            {
+                nuint addr = rosterBase + (nuint)i;
+                if (addr < rosterEnd) continue;                          // that's the roster itself
+                if (!CharacterFormat.LooksLikeRecord(window, i)) continue;
+                if (!SameCharacter(window, i, lc.Record)) continue;
+                mine.Add(addr);
+                claimants[addr] = claimants.GetValueOrDefault(addr) + 1;
+            }
+            candidates[lc] = mine;
+        }
+
+        // A character has at most one working copy, and names are not unique in Dark Designs, so
+        // anything ambiguous is dropped rather than guessed at: writing to the wrong copy would
+        // corrupt a different character. Losing the mirror only costs the write-through.
+        foreach (var (lc, mine) in candidates)
+        {
+            if (mine.Count != 1) continue;
+            if (claimants[mine[0]] != 1) continue;
+            lc.Mirrors.Add(mine[0]);
+        }
+    }
+
+    /// <summary>
+    /// Reads what it can of <paramref name="buffer"/>, falling back to page-sized reads when the
+    /// whole span fails — <c>ProcessMemory.Read</c> reports a partial copy as 0, so one unreadable
+    /// page at the end of the window would otherwise lose the entire sweep.
+    /// </summary>
+    private static int ReadAsMuchAsPossible(ProcessMemory mem, nuint start, byte[] buffer)
+    {
+        int read = mem.Read(start, buffer, buffer.Length);
+        if (read > 0) return read;
+
+        int total = 0;
+        byte[] page = new byte[PageSize];
+        for (int off = 0; off + PageSize <= buffer.Length; off += PageSize)
+        {
+            if (mem.Read(start + (nuint)off, page, PageSize) != PageSize) break;
+            Array.Copy(page, 0, buffer, off, PageSize);
+            total = off + PageSize;
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// True when the record at <paramref name="offset"/> is the same character as
+    /// <paramref name="record"/>: same name bytes and same class. Vitals are deliberately
+    /// not compared — a party copy diverges from the roster as soon as the character takes a hit.
+    /// Callers gate on <see cref="CharacterFormat.LooksLikeRecord"/> first, so a display buffer
+    /// that merely happens to contain the name is not mistaken for a copy of the character.
+    /// </summary>
+    private static bool SameCharacter(byte[] buf, int offset, CharacterRecord record)
+    {
+        if (buf[offset + CharacterFormat.OffClass] != record.Bytes[CharacterFormat.OffClass]) return false;
+        if (buf[offset + CharacterFormat.OffNameLen] != record.Bytes[CharacterFormat.OffNameLen]) return false;
+        if (buf[offset + CharacterFormat.OffNameLen] == 0) return false;
+
+        for (int k = 0; k < CharacterFormat.NameLength; k++)
+            if (buf[offset + CharacterFormat.OffName + k] != record.Bytes[CharacterFormat.OffName + k])
+                return false;
+        return true;
     }
 
     // --- strategy 1: string anchor + nearby structural search ----------------

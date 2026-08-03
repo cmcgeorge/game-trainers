@@ -19,8 +19,10 @@ public sealed class ReferenceViewModel : ObservableObject
             WizardSpells.Add(SpellBook.SpellLabel(s));
         foreach (var s in SpellBook.PriestSpells)
             PriestSpells.Add(SpellBook.SpellLabel(s));
-        foreach (var item in ItemBook.All)
-            Items.Add($"{item.Name,-20} [{ItemBook.CategoryName(item.Category)}]  {item.Notes}");
+        foreach (var item in ItemBook.All.Where(i => i.IsPlayerItem))
+            Items.Add($"{item.Id,3}  {item.Name,-18} {item.Type,-10} {item.ClassLabel,-6} " +
+                      (item.Protection > 0 ? $"prot {item.Protection,-4} " : $"pow {item.Power,-5} ") +
+                      (item.Price > 0 ? $"{item.Price} gp" : ""));
         foreach (var m in MonsterBook.All)
             Monsters.Add($"{m.Name,-20} {m.Notes}");
     }

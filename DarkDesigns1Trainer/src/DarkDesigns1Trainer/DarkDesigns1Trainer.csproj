@@ -10,6 +10,7 @@
     <AssemblyName>DD1Trainer</AssemblyName>
     <RootNamespace>DarkDesigns1Trainer</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
@@ -22,5 +23,8 @@
     <Using Include="GameTrainers.Common.Mvvm" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
 
 </Project>

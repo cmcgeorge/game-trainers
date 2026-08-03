@@ -18,8 +18,11 @@ public static class GameFacts
     public static readonly string[] LevelNames =
         { "Top Castle Level", "Mid Castle Level", "Ground Level", "Dungeon Level 1", "Dungeon Level 2" };
 
-    public const int MaxPartySize = 4;
-    public const int MaxRosterSize = 20;
+    /// <summary>Party positions the game loops over when loading and saving.</summary>
+    public const int MaxPartySize = CharacterFormat.PartySize;
+
+    /// <summary>Roster slots stored in <c>DDCHARS.DAT</c>.</summary>
+    public const int MaxRosterSize = CharacterFormat.MaxSlots;
 
     /// <summary>The title string used as the locator anchor (plain ASCII, 34 bytes).</summary>
     public const string AnchorString = "Dark Designs I : Grelminar's Staff";

@@ -4,9 +4,12 @@ namespace DarkDesigns1Trainer.Game;
 
 /// <summary>
 /// Reads and writes the <c>DDCHARS.DAT</c> character file (1,224 bytes = 144-byte header +
-/// 20 × 54-byte records). The header is round-tripped without interpretation; only the
+/// 15 × 72-byte records). The header is round-tripped without interpretation; only the
 /// character records are exposed for editing. A one-shot <c>.bak</c> backup is taken before
 /// the first write.
+///
+/// Edit with the game closed: Dark Designs rewrites this file from its in-memory party on
+/// <c>(Q)uit and save</c>, so offline edits made while it is running are discarded.
 /// </summary>
 public sealed class SaveFile : IDisposable
 {

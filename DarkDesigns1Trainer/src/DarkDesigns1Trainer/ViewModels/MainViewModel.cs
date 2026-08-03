@@ -81,6 +81,157 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         set { if (SetField(ref _freezeStatus, value)) { foreach (var c in Party) c.FreezeStatus = value; Status = value ? "Status frozen for the party." : "Status freeze OFF."; } }
     }
 
+    // --- item potency patches ------------------------------------------------
+    // Dark Designs has no charges. On (U)se it applies the effect, rolls random(256) and destroys
+    // the item unless potency > roll; a magic weapon's special effect fires on the same test.
+    // Pinning potency to 256 makes both outcomes certain. This edits the game's *item table*, not
+    // a character, so it is global, never saved to DDCHARS.DAT, and undone on detach.
+    private nuint? _itemTableBase;
+    private readonly Dictionary<int, int> _originalPotency = new();
+
+    /// <summary>Which group of items a potency patch applies to.</summary>
+    private enum PotencySet { Consumables, MagicWeapons }
+
+    // Locating the table is a full address-space scan, so two toggles flipped in quick succession
+    // would otherwise overlap and could land in the wrong order.
+    private readonly SemaphoreSlim _potencyGate = new(1, 1);
+
+    private bool _itemsNeverBreak;
+    public bool ItemsNeverBreak
+    {
+        get => _itemsNeverBreak;
+        set { if (SetField(ref _itemsNeverBreak, value)) _ = ApplyPotencyAsync(PotencySet.Consumables, value); }
+    }
+
+    private bool _weaponsAlwaysTrigger;
+    public bool WeaponsAlwaysTrigger
+    {
+        get => _weaponsAlwaysTrigger;
+        set { if (SetField(ref _weaponsAlwaysTrigger, value)) _ = ApplyPotencyAsync(PotencySet.MagicWeapons, value); }
+    }
+
+    private bool DesiredState(PotencySet set) =>
+        set == PotencySet.Consumables ? _itemsNeverBreak : _weaponsAlwaysTrigger;
+
+    private static IEnumerable<ItemBook.Item> ItemsIn(PotencySet set) =>
+        set == PotencySet.Consumables ? ItemBook.Consumables : ItemBook.MagicWeapons;
+
+    private static string LabelFor(PotencySet set) =>
+        set == PotencySet.Consumables ? "Usable items" : "Magic weapons";
+
+    /// <summary>
+    /// When set, detaching leaves the item-table patches in place instead of undoing them, so they
+    /// last until the game itself exits. Off by default: a patch nothing is attached to is a patch
+    /// nothing can undo.
+    /// </summary>
+    private bool _keepPatchesOnDetach;
+    public bool KeepPatchesOnDetach { get => _keepPatchesOnDetach; set => SetField(ref _keepPatchesOnDetach, value); }
+
+    /// <summary>
+    /// Pins (or restores) the potency word for a set of items. The table is located by content on
+    /// first use and cached; original values are kept so the toggle is reversible.
+    /// </summary>
+    private async Task ApplyPotencyAsync(PotencySet set, bool on)
+    {
+        var mem = _mem;
+        if (mem == null)
+        {
+            // Not an error: the toggle is remembered and applied when we next attach.
+            Status = on ? "Attach to the game, and this will be applied." : "Not attached.";
+            return;
+        }
+
+        await _potencyGate.WaitAsync();
+        try
+        {
+            if (mem != _mem) return;
+            // The toggle may have been flipped again while we queued; the last intent wins.
+            if (DesiredState(set) != on) return;
+
+            if (_itemTableBase is null)
+            {
+                Status = "Locating the game's item table…";
+                var found = await Task.Run(() => ItemTableLocator.Find(mem));
+                if (mem != _mem || DesiredState(set) != on) return;
+                if (found is null)
+                {
+                    Status = "Could not find the item table — is the game past the title screen?";
+                    return;
+                }
+                _itemTableBase = found;
+            }
+
+            ApplyPotency(mem, _itemTableBase.Value, ItemsIn(set), on, LabelFor(set));
+        }
+        finally { _potencyGate.Release(); }
+    }
+
+    private void ApplyPotency(ProcessMemory mem, nuint table, IEnumerable<ItemBook.Item> items,
+                              bool on, string label)
+    {
+        int changed = 0;
+        foreach (var item in items)
+        {
+            if (on)
+            {
+                if (!_originalPotency.ContainsKey(item.Id))
+                {
+                    int live = ItemTableLocator.ReadPotency(mem, table, item.Id);
+                    if (live < 0) continue;
+                    _originalPotency[item.Id] = live;
+                }
+                if (ItemTableLocator.WritePotency(mem, table, item.Id, ItemBook.PotencyAlways)) changed++;
+            }
+            else
+            {
+                if (!_originalPotency.TryGetValue(item.Id, out int original)) continue;
+                if (ItemTableLocator.WritePotency(mem, table, item.Id, original)) changed++;
+                _originalPotency.Remove(item.Id);
+            }
+        }
+
+        Status = on
+            ? $"{label}: {changed} item(s) pinned — they no longer fail their chance roll."
+            : $"{label}: {changed} item(s) restored to their original odds.";
+    }
+
+    /// <summary>
+    /// Drops the cached patch state, optionally putting the original potency values back first.
+    ///
+    /// The cached table address is cleared either way — it belongs to the process being let go of,
+    /// and reusing it after re-attaching would write two bytes to a stale address in a different
+    /// process. When the patches are deliberately left in place the remembered originals and the
+    /// toggle states are kept instead of cleared: the originals are static game data, identical in
+    /// every session, so re-attaching and unticking a toggle still restores the true values rather
+    /// than re-saving the patched ones.
+    /// </summary>
+    private void ResetPotency(bool restore)
+    {
+        bool restored = false;
+        if (restore && _mem is { IsOpen: true } mem && _itemTableBase is { } table)
+        {
+            foreach (var (id, original) in _originalPotency)
+                ItemTableLocator.WritePotency(mem, table, id, original);
+            restored = true;
+        }
+
+        _itemTableBase = null;
+
+        // Only forget the originals once they have actually been put back. Wanting to restore is
+        // not the same as having restored: on the keep-on-detach path the cached table address is
+        // already gone, so a later restore attempt writes nothing — and clearing here would throw
+        // away the only record of the true values while leaving the game patched.
+        if (!restored) return;
+
+        _originalPotency.Clear();
+        _itemsNeverBreak = false; OnPropertyChanged(nameof(ItemsNeverBreak));
+        _weaponsAlwaysTrigger = false; OnPropertyChanged(nameof(WeaponsAlwaysTrigger));
+    }
+
+    /// <summary>True when a toggle is on and the patches will outlive the detach.</summary>
+    private bool LeavingPatchesBehind =>
+        KeepPatchesOnDetach && (ItemsNeverBreak || WeaponsAlwaysTrigger);
+
     // --- save editor ---------------------------------------------------------
     private string? _saveFilePath;
     public string? SaveFilePath { get => _saveFilePath; set => SetField(ref _saveFilePath, value); }
@@ -91,7 +242,64 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public ObservableCollection<CharacterRecord> SaveCharacters { get; } = new();
 
     private CharacterRecord? _selectedSaveCharacter;
-    public CharacterRecord? SelectedSaveCharacter { get => _selectedSaveCharacter; set => SetField(ref _selectedSaveCharacter, value); }
+    public CharacterRecord? SelectedSaveCharacter
+    {
+        get => _selectedSaveCharacter;
+        set { if (SetField(ref _selectedSaveCharacter, value)) RebuildSaveItemSlots(); }
+    }
+
+    /// <summary>The selected save character's ten carried pack slots.</summary>
+    public ObservableCollection<ItemSlotViewModel> SaveInventory { get; } = new();
+
+    /// <summary>The selected save character's four readied-equipment slots.</summary>
+    public ObservableCollection<ItemSlotViewModel> SaveEquipment { get; } = new();
+
+    /// <summary>Adapts a loaded save record to <see cref="IItemPack"/> for the duplicate button.</summary>
+    private sealed class SavePack : IItemPack
+    {
+        private readonly CharacterRecord _rec;
+        private readonly MainViewModel _owner;
+
+        public SavePack(CharacterRecord rec, MainViewModel owner) { _rec = rec; _owner = owner; }
+
+        public bool HasFreeSlot => _rec.ItemCount < CharacterFormat.ItemSlotCount;
+
+        public bool TryAddItem(int itemId)
+        {
+            if (itemId == 0 || _rec.AddItem(itemId) < 0) return false;
+            _owner.SaveFile?.MarkModified();
+            foreach (var s in _owner.SaveInventory) s.Refresh();
+            return true;
+        }
+    }
+
+    private void RebuildSaveItemSlots()
+    {
+        SaveInventory.Clear();
+        SaveEquipment.Clear();
+        if (_selectedSaveCharacter is not { } rec) return;
+
+        var pack = new SavePack(rec, this);
+        for (int i = 0; i < CharacterFormat.ItemSlotCount; i++)
+        {
+            int slot = i;
+            SaveInventory.Add(new ItemSlotViewModel(
+                ((char)('A' + slot)).ToString(),
+                () => rec.GetItem(slot),
+                id => { rec.SetItem(slot, id); SaveFile?.MarkModified(); },
+                pack: pack));
+        }
+
+        foreach (ItemBook.ReadySlot rs in Enum.GetValues<ItemBook.ReadySlot>())
+        {
+            var slot = rs;
+            SaveEquipment.Add(new ItemSlotViewModel(
+                ItemBook.ReadyLabel(slot),
+                () => rec.GetReadied(slot),
+                id => { rec.SetReadied(slot, id); SaveFile?.MarkModified(); },
+                slot));
+        }
+    }
 
     // --- commands ------------------------------------------------------------
     public ICommand RefreshProcessesCommand { get; }
@@ -166,6 +374,11 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             _poll.Start();
             Status = $"Attached to {SelectedProcess.Name} (pid {SelectedProcess.Id}). Scanning for characters…";
             Scan();
+
+            // A toggle left ticked — set while detached, or carried over by "Keep on detach" — has
+            // to be re-applied, or the checkbox would claim a patch this process never received.
+            if (_itemsNeverBreak) _ = ApplyPotencyAsync(PotencySet.Consumables, true);
+            if (_weaponsAlwaysTrigger) _ = ApplyPotencyAsync(PotencySet.MagicWeapons, true);
         }
         catch (Exception ex)
         {
@@ -177,6 +390,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     {
         _poll.Stop();
         _scanCts?.Cancel();
+        bool leftBehind = LeavingPatchesBehind;
+        ResetPotency(restore: !KeepPatchesOnDetach);
         Roller.Reset();       // its locked address belongs to the process we're letting go of
         _mem?.Dispose();
         _mem = null;
@@ -189,7 +404,9 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         OnPropertyChanged(nameof(IsAttached));
         RaiseCommands();
         Roller.RefreshCommands();
-        Status = "Detached.";
+        Status = leftBehind
+            ? "Detached — item patches left in place; they last until the game exits. Re-attach and untick to undo."
+            : "Detached.";
     }
 
     // --- scanning ------------------------------------------------------------
@@ -236,16 +453,18 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     }
 
     // --- poll loop -----------------------------------------------------------
-    private readonly byte[] _pollBuf = new byte[CharacterFormat.RecordSize];
+    private bool _warnedStale;
 
     private void PollTick()
     {
         if (_mem == null) return;
-        foreach (var c in Party)
-        {
-            if (RosterLocator.Reread(_mem, c.Address, _pollBuf)) c.RefreshLiveSummary(_pollBuf);
-            c.ApplyFreeze();
-        }
+        foreach (var c in Party) c.Poll();
+
+        // Say so once rather than every tick.
+        bool anyStale = Party.Any(c => c.IsStale);
+        if (anyStale && !_warnedStale)
+            Status = "The roster changed in the game — some characters no longer sit where they were found. Click Re-scan.";
+        _warnedStale = anyStale;
     }
 
     // --- save editor ---------------------------------------------------------
@@ -301,12 +520,13 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             if (!c.IsOccupied) continue;
             for (int i = 0; i < CharacterFormat.AttributeCount; i++)
                 c.SetAttribute(i, CharacterFormat.MaxAttribute);
-            c.BodyMax = CharacterFormat.MaxVital;
-            c.BodyCurrent = CharacterFormat.MaxVital;
-            c.MagicCurrent = CharacterFormat.MaxVital;
-            c.Level = CharacterFormat.MaxLevel;
-            c.Experience = CharacterFormat.MaxExperience;
-            c.Gold = CharacterFormat.MaxGold;
+            c.BodyMax = Math.Max(c.BodyMax, CharacterFormat.MaxVital);
+            c.BodyCurrent = c.BodyMax;
+            c.MagicMax = Math.Max(c.MagicMax, CharacterFormat.MaxVital);
+            c.MagicCurrent = c.MagicMax;
+            c.Level = Math.Max(c.Level, CharacterFormat.MaxLevel);
+            c.NextLevel = CharacterFormat.MaxNextLevel;
+            c.Gold = Math.Max(c.Gold, CharacterFormat.MaxGold);
             c.Status = CharacterFormat.StatusFine;
         }
         SaveFile.MarkModified();
@@ -321,6 +541,9 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     // --- ICharacterHost ------------------------------------------------------
     bool ICharacterHost.WriteBytes(nuint recordAddress, byte[] source, int offset, int length)
         => _mem?.WriteRange(recordAddress, source, offset, length) ?? false;
+
+    bool ICharacterHost.ReadBytes(nuint address, byte[] destination, int length)
+        => (_mem?.Read(address, destination, length) ?? 0) == length;
 
     private void RaiseCommands()
     {
@@ -338,6 +561,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public void Dispose()
     {
         _poll.Stop();
+        ResetPotency(restore: !KeepPatchesOnDetach);
         // Cancels the roll loop; it can still be mid-keystroke, so one last R may reach the game
         // before it notices. Memory access stays safe either way (ProcessMemory holds a
         // SafeProcessHandle), so this isn't worth blocking shutdown on.
@@ -345,6 +569,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         _scanCts?.Cancel();
         _scanCts?.Dispose();
         _mem?.Dispose();
+        _mem = null;              // keeps the `mem != _mem` staleness guard honest
+        _potencyGate.Dispose();
         SaveFile?.Dispose();
     }
 }
