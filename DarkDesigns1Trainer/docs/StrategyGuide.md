@@ -69,6 +69,26 @@ The warlord's reinforcements must be cut off. The gate the monsters use must be 
 
 ## Character Creation
 
+### How the roll works
+
+The create screen rolls **five values at once** and lets you place them on the attributes in any
+order with the arrow keys and Return; **R** throws the whole set away and rolls a new one. Because
+you choose the placement, what matters is the *shape* of the set, not which slot a number came out
+in — a roll with an 18 in it is an 18 for whichever attribute you want.
+
+Each value is `10 + random(5) + random(5)` — measured over 2,000 values read out of the running game
+(see [Reverse Engineering](ReverseEngineering.md#5-character-creation-the-rolled-stat-pool)). That
+gives a symmetric spread over **10–18** with a mean of 14, and the five values total 50–90 (mean 70):
+
+| Value | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 |
+|---|---|---|---|---|---|---|---|---|---|
+| Chance | 4% | 8% | 12% | 16% | 20% | 16% | 12% | 8% | 4% |
+
+Practical consequences: the game is generous (it never rolls below 10), and roughly **one roll in
+five** contains at least one 18 — so re-rolling for a single strong prime attribute is quick. A set
+where *every* value is 15 or better is a different matter: about **1 in 98** rolls. That is why the
+trainer's Create tab automates the re-rolling.
+
 ### Attributes
 
 Five attributes are rolled randomly and assigned by the player:
@@ -100,7 +120,8 @@ The manual suggests **two Fighters, one Priest, and one Wizard**. This is a soli
 
 ### Creation Tips
 
-- Press **R** to re-roll attributes until at least one is 17+ (put it in the class's prime attribute)
+- Press **R** to re-roll attributes until at least one is 17+ (put it in the class's prime
+  attribute) — nearly half of all rolls contain one, so it rarely takes long
 - Fighters: prioritize STR > CON > DEX > PIE > INT
 - Priests: prioritize PIE > CON > STR > DEX > INT
 - Wizards: prioritize INT > DEX > CON > PIE > STR

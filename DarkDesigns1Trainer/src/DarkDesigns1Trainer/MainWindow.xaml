@@ -173,6 +173,221 @@
                 </Grid>
             </TabItem>
 
+            <!-- ======================= CREATE (auto re-roll on the town (C)reate screen) ======================= -->
+            <TabItem Header="🎲 Create" DataContext="{Binding Roller}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+                    <StackPanel Margin="6" MaxWidth="660" HorizontalAlignment="Left">
+                        <TextBlock Text="Roll a character" Style="{StaticResource RefHeader}"/>
+                        <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,8"
+                                   Text="Automates the town (C)reate screen's re-roll: it taps R for you and reads each fresh roll straight from the game's memory, stopping when the five values can be arranged to meet your minimums. The rolled stats aren't a character yet, so the trainer has to find them first — type the five numbers showing on the create screen, click Lock onto roll, then set a target and Roll. Attach to the game and open the create screen first."/>
+
+                        <!-- 1 · capture the on-screen roll to locate it in memory -->
+                        <GroupBox Header="1 · Capture the current roll" Margin="0,4,0,0">
+                            <StackPanel Margin="4">
+                                <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,6"
+                                           Text="Enter the five rolled numbers from the create screen. Order doesn't matter — the trainer matches the set. 'Live' fills in once locked, and updates on every roll."/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Value" Foreground="#777"/>
+                                    <TextBlock Grid.Column="1" Text="On screen" Foreground="#777"/>
+                                    <TextBlock Grid.Column="2" Text="Live" Foreground="#777"/>
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Slots}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="90"/>
+                                                    <ColumnDefinition Width="90"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                                           ToolTip="{Binding Description}"/>
+                                                <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                         Text="{Binding CapturedText, UpdateSourceTrigger=LostFocus}"/>
+                                                <TextBlock Grid.Column="2" Text="{Binding LiveText}" VerticalAlignment="Center"
+                                                           FontFamily="Consolas" Foreground="#1565C0"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Margin="0,2"/>
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"
+                                               ToolTip="Sum of the five rolled values. A fair roll averages 70."/>
+                                    <TextBlock Grid.Column="1" Text="{Binding CapturedTotalText}" VerticalAlignment="Center" Foreground="#555"/>
+                                    <TextBlock Grid.Column="2" Text="{Binding LiveTotalText}" VerticalAlignment="Center"
+                                               FontFamily="Consolas" FontWeight="SemiBold" Foreground="#1565C0"/>
+                                </Grid>
+
+                                <WrapPanel Margin="0,8,0,0">
+                                    <Button Content="🎯 Lock onto roll" Command="{Binding LockCommand}"/>
+                                    <Button Content="↻ Read current roll" Command="{Binding ReadOnceCommand}"/>
+                                    <Button Content="✕ Reset lock" Command="{Binding ResetLockCommand}"/>
+                                </WrapPanel>
+                                <TextBlock Text="{Binding LockInfo}" Foreground="#555" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- 2 · target -->
+                        <GroupBox Header="2 · Set your target" Margin="0,8,0,0">
+                            <StackPanel Margin="4">
+                                <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,6"
+                                           Text="Set a minimum for each attribute you care about, and leave the rest blank. Because you arrange the five values yourself, the roller stops as soon as SOME arrangement meets every minimum — the 'Arranged' column then shows which value to put where. The game never rolls below 10 or above 18."/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110"/>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Attribute" Foreground="#777"/>
+                                    <TextBlock Grid.Column="1" Text="Minimum (≥)" Foreground="#777"/>
+                                    <TextBlock Grid.Column="2" Text="Arranged" Foreground="#777"/>
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Targets}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="110"/>
+                                                    <ColumnDefinition Width="90"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"
+                                                           ToolTip="{Binding Description}"/>
+                                                <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                                         Text="{Binding MinimumText, UpdateSourceTrigger=PropertyChanged}"
+                                                         IsEnabled="{Binding DataContext.CanEditTargets, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
+                                                <TextBlock Grid.Column="2" Text="{Binding AssignedText}" VerticalAlignment="Center"
+                                                           FontFamily="Consolas" Foreground="#1565C0"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Margin="0,2"/>
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="110"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"
+                                               ToolTip="Minimum for the sum of the five rolled values. The possible range is 50–90 and a fair roll averages 70."/>
+                                    <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
+                                             Text="{Binding TotalMinimumText, UpdateSourceTrigger=PropertyChanged}"
+                                             IsEnabled="{Binding CanEditTargets}"/>
+                                </Grid>
+                                <Button Content="🗑 Clear all targets" Command="{Binding ClearMinimumsCommand}"
+                                        HorizontalAlignment="Left" Margin="0,6,0,0"
+                                        ToolTip="Reset every minimum back to blank (no requirement)."/>
+                                <TextBlock Text="{Binding CriteriaText}" Foreground="#1565C0" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                <TextBlock Text="{Binding OddsText}" Foreground="#555" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- 3 · roll -->
+                        <GroupBox Header="3 · Roll" Margin="0,8,0,0">
+                            <StackPanel Margin="4">
+                                <WrapPanel>
+                                    <Button Content="🎲 Roll until target met" Command="{Binding StartCommand}"/>
+                                    <Button Content="⏹ Stop" Command="{Binding StopCommand}"/>
+                                </WrapPanel>
+                                <TextBlock Text="{Binding AttemptsText}" Foreground="#555" Margin="0,6,0,0"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                    <TextBlock Text="Best so far: " Foreground="#555"/>
+                                    <TextBlock Text="{Binding BestText}"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding ArrangementText}" TextWrapping="Wrap" Foreground="#2E7D32" Margin="0,6,0,0"/>
+                                <TextBlock Text="{Binding ResultText}" TextWrapping="Wrap" Foreground="#1565C0" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- 4 · write the roll outright -->
+                        <GroupBox Header="4 · Or just set the roll" Margin="0,8,0,0">
+                            <StackPanel Margin="4">
+                                <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,6"
+                                           Text="Writes the five values straight into the game instead of waiting for the dice. The create screen won't repaint the row of numbers it already drew, but these ARE the values it hands out as you arrange the character. Enter five numbers, or one number to use for all five; each is clamped to 3–18, the game's attribute range — wider than the 10–18 its dice actually roll, which is rather the point. (Max Attributes on the Party tab goes further once the character exists.)"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBox Width="160" Text="{Binding SetValuesText, UpdateSourceTrigger=PropertyChanged}"
+                                             VerticalAlignment="Center"/>
+                                    <Button Content="✍ Write these values" Command="{Binding SetRollCommand}"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <!-- 5 · statistics -->
+                        <GroupBox Header="5 · Statistics" Margin="0,8,0,0">
+                            <StackPanel Margin="4">
+                                <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,4"
+                                           Text="Tallies every fresh roll read this session. The five values are interchangeable, so they're grouped by rank rather than by position — this is what tells you whether a minimum is realistic."/>
+                                <TextBlock Text="{Binding SamplesText}" Margin="0,0,0,4"/>
+                                <Grid Margin="0,0,0,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Rank" Foreground="#777"/>
+                                    <TextBlock Grid.Column="1" Text="Average (min–max)" Foreground="#777"/>
+                                </Grid>
+                                <ItemsControl ItemsSource="{Binding Ranks}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,1">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="90"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
+                                                <TextBlock Grid.Column="1" Text="{Binding AvgText}" VerticalAlignment="Center"
+                                                           FontFamily="Consolas" Foreground="#1565C0"/>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Border BorderBrush="#DDD" BorderThickness="0,1,0,0" Margin="0,2"/>
+                                <Grid Margin="0,1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="90"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="Total" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Column="1" Text="{Binding TotalAvgText}" VerticalAlignment="Center"
+                                               FontFamily="Consolas" FontWeight="SemiBold" Foreground="#1565C0"/>
+                                </Grid>
+                                <Button Content="🗑 Clear statistics" Command="{Binding ClearStatsCommand}"
+                                        HorizontalAlignment="Left" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </GroupBox>
+
+                        <Expander Header="Advanced timing" Margin="0,8,0,0" Foreground="#555">
+                            <WrapPanel Margin="0,6,0,0">
+                                <StackPanel Margin="0,0,16,6">
+                                    <Label Content="Max rolls"/>
+                                    <TextBox Width="90" Text="{Binding MaxAttempts, UpdateSourceTrigger=LostFocus}"/>
+                                </StackPanel>
+                                <StackPanel Margin="0,0,16,6">
+                                    <Label Content="Settle after R (ms)"/>
+                                    <TextBox Width="90" Text="{Binding SettleDelayMs, UpdateSourceTrigger=LostFocus}"
+                                             ToolTip="Pause after each re-roll so the game updates memory before the trainer reads it. Raise this if rolls read stale."/>
+                                </StackPanel>
+                                <StackPanel Margin="0,0,16,6">
+                                    <Label Content="Focus pause (ms)"/>
+                                    <TextBox Width="90" Text="{Binding FocusDelayMs, UpdateSourceTrigger=LostFocus}"/>
+                                </StackPanel>
+                            </WrapPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- ======================= SAVE EDITOR ======================= -->
             <TabItem Header="Save Editor">
                 <Grid Margin="6">

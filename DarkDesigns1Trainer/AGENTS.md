@@ -15,18 +15,27 @@ library.
   - `Game/` — pure data layer, no UI or process dependencies. `CharacterFormat.cs` holds the
     validated 54-byte character-record offset table, class/status constants, and lookup tables.
     `CharacterRecord.cs` is a typed mutable view over a 54-byte buffer with LE accessors and ASCII
-    name handling. `SpellBook.cs` / `ItemBook.cs` / `MonsterBook.cs` hold the reference tables
+    name handling. `CreationFormat.cs` holds the create screen's five-value rolled pool — layout,
+    the measured dice, and the arrangement rule; `RollOdds.cs` turns that into exact target odds
+    and `RollTally.cs` keeps per-rank session statistics. `AttributeBook.cs` describes the five
+    attributes. `SpellBook.cs` / `ItemBook.cs` / `MonsterBook.cs` hold the reference tables
     (16 spells, 40 items, 43 monsters) transcribed from the unpacked EXE. `GameFacts.cs` holds
     game metadata and the locator anchor
     string. `SaveFile.cs` reads/writes `DDCHARS.DAT` with a one-shot `.bak`.
   - `Memory/` — `RosterLocator.cs` finds the party by **dual strategy**: (1) string-anchored scan
     for the 34-byte title string, then a 256 KB window forward for the 20-record pattern; (2)
     fallback structural scan of all readable memory for contiguous 54-byte records matching the
-    character shape. The generic process-memory wrapper (`ProcessMemory`/`MemoryRegion`) comes from
-    `GameTrainers.Common.Memory` (imported via csproj `<Using>` items), not a local copy.
+    character shape. `CreationScanner.cs` separately finds the create screen's rolled stat pool,
+    which is not a roster record and so is invisible to `RosterLocator`: it signature-scans for the
+    five captured numbers as a **multiset** (five contiguous uint16 LE that sort equal to the
+    captured values sorted), and can read or write the pool. The generic process-memory wrapper
+    (`ProcessMemory`/`MemoryRegion`) and `KeyboardSender` come from `GameTrainers.Common.Memory`
+    (imported via csproj `<Using>` items), not a local copy.
   - `ViewModels/` — hand-rolled MVVM. `MainViewModel` (attach/scan/detach, poll loop, party-wide
-    actions, save editor), `CharacterViewModel` (per-character editable fields, freeze, max
-    actions), `NamedValueViewModel` (attribute rows), `ReferenceViewModel` (read-only spell/item/
+    actions, save editor, and the attached pid the roller sends keys to), `CharacterViewModel`
+    (per-character editable fields, freeze, max actions), `CharacterRollerViewModel` (the Create
+    tab: lock onto the roll, auto re-roll by tapping `R`, suggest the arrangement, write the pool),
+    `NamedValueViewModel` (attribute rows), `ReferenceViewModel` (read-only spell/item/
     monster lists), `ICharacterHost` (the write channel). Views (`*.xaml`) bind to these.
     `ObservableObject`/`RelayCommand` are used from `GameTrainers.Common.Mvvm` — note
     `ObservableObject` exposes `SetField(ref field, value)`.
@@ -58,8 +67,12 @@ sample (one character, "CHRISTOPHER", Fighter L1), asserts every decoded field, 
 round-trip/truncation, empty slot detection, `LooksLikeRecord` validation, save-file round-trip
 with `.bak` verification, multi-character saves, and reference table counts, and returns exit code
 0 (pass) or 1 (fail). When the sample `DDCHARS.DAT` is present it also asserts the
-empirically-confirmed values (STR=17, DEX=16, gold=1000, etc.). Add new checks there and keep it
-exiting 0. Any parser/format change must keep the assertions green.
+empirically-confirmed values (STR=17, DEX=16, gold=1000, etc.). It further covers the creation
+roller: pool encode/decode, the plausibility gate, `Arrange`/`MeetsTarget`/`Shortfall`, the roll
+distribution, `CreationScanner`'s signature scan, and `CreationFormat.TryParseValues` — plus a
+cross-check of `RollOdds.PMeetsTarget` against brute force over all 59,049 possible rolls, and the
+specific probabilities quoted in `docs/StrategyGuide.md` so prose and model can't drift. Add new
+checks there and keep it exiting 0. Any parser/format change must keep the assertions green.
 
 ## Commit & Pull Request Guidelines
 
@@ -78,3 +91,13 @@ interpretation. The status field encoding is inferred from game strings (fine=1,
 STONE=4, DEAD=5) but not confirmed against a character in those states. `DARKDES.EXE` is
 LZEXE 0.91 compressed; the unpacked image is a small-model Borland C build with BSS-allocated
 character buffer.
+
+The create screen keeps a separate five-value **rolled pool** (5 × uint16 LE, contiguous), not a
+roster record — located, sampled and write-tested against the running game. Each value is
+`10 + random(5) + random(5)`: a symmetric 10–18 triangle with mean 14, measured over 2,000 values
+(chi-square *p* ≈ 0.66). Because the player arranges the five values freely, a per-attribute target
+is a question about the pool as a multiset — a roll qualifies exactly when its values sorted
+descending dominate the minimums sorted descending, which is what `CreationFormat.Arrange`
+implements and `RollOdds` prices. Writing the pool works and the created character keeps the written
+values, but the row of numbers already drawn on screen is not repainted; say so rather than implying
+the display is in sync. See `docs/ReverseEngineering.md` §5.

@@ -140,7 +140,119 @@ Offset  Type      Size  Value (sample)  Meaning                    Status
 
 Slots 1–19 in the sample `DDCHARS.DAT` are all zeros (54 bytes of 0x00). An empty slot has exists flag = 0x00 and name length = 0x00.
 
-## 5. Map files (DDMAP1–5.DAT)
+## 5. Character creation: the rolled stat pool
+
+Everything in this section was recovered from a **running game** (DOSBox-X), not from static
+analysis, and each claim below was confirmed by observation.
+
+### 5.1 The create screen
+
+Town menu → `(C)reate a character`. The game rolls five values, prints them in a row, and prompts:
+
+```
+Strength    :??   14        14 18 14 12 16
+Dexterity   :??
+Constitution:??
+Intelligence:??
+Piety       :??
+
+Arrange stats using the arrow keys and return, or hit (R) to get new rolls.
+```
+
+The five numbers on the right are the rolled pool; the number in the middle column is the value
+currently being offered to the attribute the cursor is on. `R` discards the set and rolls again.
+Because the player places the values freely, a rolled set is best treated as a **multiset**: any
+value can end up on any attribute.
+
+### 5.2 Locating the pool
+
+Found by differential scan rather than by disassembly. The title-string anchor sits at guest offset
+`0x11267` inside DOSBox-X's 16 MB guest-RAM allocation, so the game is in ordinary conventional
+memory. Snapshotting that whole region, tapping `R`, and re-snapshotting — five times — leaves
+exactly **one** location in the entire 16 MB that holds five contiguous uint16 LE values in the
+attribute range *and* changes on every re-roll:
+
+| | |
+|---|---|
+| Pool address (this session) | anchor + `0x2335D` |
+| Layout | 5 × uint16 LE, contiguous |
+| Confirmed against the screen | first snapshot read `14 18 14 12 16` — exactly the displayed row |
+
+Neighbouring fields, from a hex dump around the pool:
+
+```
+Offset  Type      Value (sample)   Meaning                                     Status
+------  --------  ---------------  ------------------------------------------  ---------
+-0x02   uint16    FE 31            Unidentified (same value as +0x0A)          [Unknown]
++0x00   uint16    rolled[0]        First rolled value                          [Confirmed]
++0x02   uint16    rolled[1]                                                    [Confirmed]
++0x04   uint16    rolled[2]                                                    [Confirmed]
++0x06   uint16    rolled[3]                                                    [Confirmed]
++0x08   uint16    rolled[4]        Fifth rolled value                          [Confirmed]
++0x0A   uint16    FE 31            Unidentified (same value as -0x02)          [Unknown]
++0x0C   uint16    14               The value currently offered to the cursor's [Confirmed]
+                                   attribute; re-read from the pool live
++0x0E   uint16    1 → 2            Cursor index, advanced by Return            [Inferred]
++0x16   —         —                Start of the scratch character record being [Inferred]
+                                   built: its Strength lands at +0x27, i.e.
+                                   record offset 0x11 — the same attribute
+                                   offsets a roster record uses
+```
+
+The pool is *not* a roster record, so `RosterLocator` cannot see it; `Memory/CreationScanner.cs`
+locates it separately. The offsets above are **not** hard-coded — the trainer signature-scans for
+the captured values, as everywhere else in this project.
+
+### 5.3 The dice
+
+Measured, not guessed: 400 automated re-rolls were driven through the running game and the pool read
+back after each, giving 2,000 values.
+
+| Value | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 |
+|---|---|---|---|---|---|---|---|---|---|
+| Observed | 76 | 158 | 245 | 330 | 399 | 308 | 250 | 171 | 63 |
+| Observed % | 3.80 | 7.90 | 12.25 | 16.50 | 19.95 | 15.40 | 12.50 | 8.55 | 3.15 |
+| **2d5+8 %** | **4** | **8** | **12** | **16** | **20** | **16** | **12** | **8** | **4** |
+
+Observed mean 13.988; range exactly 10–18 with nothing outside it. Against the hypothesis "sum of
+two uniform 0–4 draws plus 10" the fit is chi-square 5.88 on 8 d.f. (*p* ≈ 0.66) — i.e. an
+essentially perfect match. In Borland C terms the roll is:
+
+```c
+stat = 10 + random(5) + random(5);
+```
+
+The five positions are independent and identically distributed (per-position means 13.84–14.07 over
+400 rolls), and the five-value total averaged 69.94 against a predicted 70.
+
+`Game/RollOdds.cs` builds on this to answer "what are the odds of hitting this target on one roll?"
+exactly, by enumerating the 1,287 sorted five-value combinations with multinomial weights. The
+`FormatCheck` harness cross-checks that against brute force over all 59,049 ordered outcomes.
+
+### 5.4 Writing the pool
+
+The pool is **writable, and the game honours it**. Confirmed by writing `18 18 18 18 18` over the
+array mid-screen and then arranging the character: Dexterity was assigned 18, a value that was not
+in the roll the game had produced.
+
+One display caveat, also confirmed: the row of five numbers is painted once, when the roll happens,
+and is **not** repainted when the array changes underneath it — so after a write the screen keeps
+showing the old numbers. The *offered* value in the middle column is re-read from the array live, so
+it does reflect a write. The trainer says so in the UI rather than pretending the screen is in sync.
+
+### 5.5 Locator strategy
+
+`CreationScanner` matches the five captured numbers as a **multiset** — five contiguous uint16 LE
+values which, once sorted, equal the captured values sorted. Matching the set rather than the
+sequence means the player can type the numbers in any order. That trade is not free — the signature
+now accepts every permutation of the captured values, as many as 5! = 120 byte patterns where an
+exact-sequence signature accepts one, so it collides by chance correspondingly more often. It is
+nonetheless far too specific to matter here: scanning the whole emulator process for a captured roll
+returned **exactly one** address on every attempt tested. The view model still narrows any ambiguity
+by re-rolling and keeping the candidate that actually changes, mirroring the Wasteland trainer's
+roller.
+
+## 6. Map files (DDMAP1–5.DAT)
 
 Each map file is 12,648 bytes. The game has five levels:
 
@@ -154,17 +266,17 @@ The first ~1024 bytes of each file are zeros, followed by small values (0–6) r
 
 The map files are not edited by the trainer.
 
-## 6. Locator strategy
+## 7. Locator strategy
 
 The trainer uses a **dual-strategy locator** to find the character roster in DOSBox's emulated memory:
 
-### 6.1 Primary: string-anchored scan
+### 7.1 Primary: string-anchored scan
 
 The 34-byte title string `"Dark Designs I : Grelminar's Staff"` lives in the game's code/data segment as plain ASCII. It is unique in the emulated 16 MB of DOSBox guest RAM. Finding it pins a known offset within the program's data segment.
 
 The character buffer (loaded from `DDCHARS.DAT`) is in BSS, which is allocated contiguously after the loaded image. The trainer searches a 256 KB window forward from the anchor string for the 20-record character pattern. This is fast (~50 ms) and reliable.
 
-### 6.2 Fallback: structural scan
+### 7.2 Fallback: structural scan
 
 If the anchor is not found (e.g., a different build or the string is at an unexpected offset), the trainer falls back to scanning all readable memory for a contiguous block of 54-byte records matching the character pattern:
 
@@ -174,11 +286,12 @@ If the anchor is not found (e.g., a different build or the string is at an unexp
 
 This is slower (~2 s for 16 MB) but build-independent.
 
-## 7. Limitations and unfinished work
+## 8. Limitations and unfinished work
 
 - **Header**: The 144-byte DDCHARS.DAT header is only partially decoded. The party composition, dungeon level, and position fields could not be confirmed from a single sample.
 - **Map format**: The DDMAP files' tile encoding and dimensions are not fully decoded.
 - **Status field**: The exact byte values for KO/STUNED/STONE/DEAD are inferred from the game's display strings but not confirmed against a character in those states.
 - **Spell knowledge**: The bytes at record offset 0x32–0x35 may contain spell bitfields but are zero in the only sample (a Fighter with no spells).
 - **Magic max**: No magic max field was identified; magic appears to be restored to a calculated maximum on rest rather than stored.
-- **Live testing**: All field offsets were derived from static analysis of the unpacked EXE and a sample `DDCHARS.DAT`. No live DOSBox write-tests were performed.
+- **Live testing**: The *record* field offsets (section 4) are still derived from static analysis of the unpacked EXE and a sample `DDCHARS.DAT`; they have not been write-tested against a running game. The *creation pool* (section 5) is the exception — it was located, sampled and write-tested live, and the write was confirmed to reach the created character.
+- **Creation pool neighbours**: The uint16 that brackets the pool at `-0x02` and `+0x0A` (`0x31FE` in both places) is unidentified, and the cursor semantics at `+0x0E` are only partly worked out — Return advances it once and thereafter appears to swap the offered value with the attribute under the cursor. Neither is needed by the trainer, which only reads and writes the five rolled values.

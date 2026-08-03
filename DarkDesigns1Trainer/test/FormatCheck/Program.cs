@@ -275,6 +275,183 @@ Check("demon lord exists", MonsterBook.All.Any(m => m.Name == "Demon Lord"), tru
 Check("medusa exists", MonsterBook.All.Any(m => m.Name == "Medusa"), true);
 Console.WriteLine();
 
+// --- creation roll: format constants -----------------------------------------
+Console.WriteLine("Creation roll format:");
+Check("rolled count", CreationFormat.RolledCount, 5);
+Check("value size", CreationFormat.ValueSize, 2);
+Check("pool bytes", CreationFormat.PoolBytes, 10);
+Check("min roll", CreationFormat.MinRoll, 10);
+Check("max roll", CreationFormat.MaxRoll, 18);
+Check("min total", CreationFormat.MinTotal, 50);
+Check("max total", CreationFormat.MaxTotal, 90);
+Check("slot name count", CreationFormat.SlotNames.Length, 5);
+Check("rank name count", CreationFormat.RankNames.Length, 5);
+Check("attribute description count", AttributeBook.Descriptions.Length, 5);
+// The target boxes must accept numbers the dice can't reach, or an over-ambitious minimum is
+// silently rewritten into an achievable one instead of being reported as out of reach.
+Check("target cap exceeds the highest roll", CreationFormat.MaxTargetValue > CreationFormat.MaxRoll, true);
+Check("target total cap exceeds the highest total", CreationFormat.MaxTargetTotal > CreationFormat.MaxTotal, true);
+Console.WriteLine();
+
+// --- creation roll: encode / decode ------------------------------------------
+Console.WriteLine("Creation roll encode / decode:");
+var poolValues = new[] { 14, 18, 12, 16, 11 };
+byte[] poolBytes = CreationFormat.Encode(poolValues);
+Check("encoded length", poolBytes.Length, CreationFormat.PoolBytes);
+Check("encoded first value LE low", poolBytes[0], (byte)14);
+Check("encoded first value LE high", poolBytes[1], (byte)0);
+var poolBack = new int[CreationFormat.RolledCount];
+Check("decode succeeds", CreationFormat.Decode(poolBytes, 0, poolBack), true);
+Check("decode round-trip", string.Join(",", poolBack), "14,18,12,16,11");
+Check("decode rejects short buffer", CreationFormat.Decode(new byte[4], 0, poolBack), false);
+Check("total", CreationFormat.Total(poolValues), 71);
+Console.WriteLine();
+
+// --- creation roll: plausibility gate ----------------------------------------
+Console.WriteLine("Creation roll plausibility:");
+Check("real roll accepted", CreationFormat.LooksLikeRoll(new[] { 10, 18, 14, 13, 15 }), true);
+Check("game's attribute floor accepted", CreationFormat.LooksLikeRoll(new[] { 3, 3, 3, 3, 3 }), true);
+Check("zero rejected", CreationFormat.LooksLikeRoll(new[] { 0, 14, 14, 14, 14 }), false);
+Check("above 18 rejected", CreationFormat.LooksLikeRoll(new[] { 19, 14, 14, 14, 14 }), false);
+Check("short list rejected", CreationFormat.LooksLikeRoll(new[] { 14, 14 }), false);
+Console.WriteLine();
+
+// --- creation roll: arranging the pool onto the attributes -------------------
+Console.WriteLine("Creation roll arrangement:");
+var roll = new[] { 14, 18, 12, 16, 11 };            // slots #1..#5
+// STR wants 17: only the 18 in slot #2 can serve it.
+var arranged = CreationFormat.Arrange(roll, new[] { 17, 0, 0, 0, 0 });
+Check("feasible target arranges", arranged != null, true);
+Check("STR takes the 18 (slot index 1)", arranged![0], 1);
+Check("arrangement uses every slot once", string.Join(",", arranged.OrderBy(x => x)), "0,1,2,3,4");
+// Two attributes both wanting 16+ can be served by the 18 and the 16.
+Check("two high minimums feasible",
+      CreationFormat.Arrange(roll, new[] { 16, 0, 16, 0, 0 }) != null, true);
+// Three can't: only 18, 16 and 14 are left and 14 < 16.
+Check("three high minimums infeasible",
+      CreationFormat.Arrange(roll, new[] { 16, 0, 16, 16, 0 }) is null, true);
+Check("minimum above every value infeasible",
+      CreationFormat.Arrange(roll, new[] { 0, 0, 0, 0, 19 }) is null, true);
+Check("no minimums always feasible", CreationFormat.Arrange(roll, new[] { 0, 0, 0, 0, 0 }) != null, true);
+Check("null minimums always feasible", CreationFormat.Arrange(roll, null) != null, true);
+// Feasibility depends on the pool as a set, not the order the values came out in.
+Check("arrangement is order-insensitive",
+      CreationFormat.Arrange(new[] { 11, 16, 12, 18, 14 }, new[] { 16, 0, 16, 0, 0 }) != null, true);
+Check("meets target with total", CreationFormat.MeetsTarget(roll, new[] { 17, 0, 0, 0, 0 }, 71), true);
+Check("total minimum can fail an otherwise-good roll",
+      CreationFormat.MeetsTarget(roll, new[] { 17, 0, 0, 0, 0 }, 72), false);
+Console.WriteLine();
+
+// --- creation roll: shortfall ranking ----------------------------------------
+Console.WriteLine("Creation roll shortfall:");
+Check("met target has no shortfall", CreationFormat.Shortfall(roll, new[] { 17, 0, 0, 0, 0 }, 0), 0);
+Check("single gap", CreationFormat.Shortfall(roll, new[] { 0, 0, 0, 0, 19 }, 0), 1);
+Check("total-only gap", CreationFormat.Shortfall(roll, new[] { 0, 0, 0, 0, 0 }, 75), 4);
+Check("gaps add up", CreationFormat.Shortfall(roll, new[] { 19, 0, 0, 0, 0 }, 75), 5);
+Console.WriteLine();
+
+// --- creation roll: the measured distribution --------------------------------
+Console.WriteLine("Roll distribution (10 + random(5) + random(5)):");
+double pmfSum = 0;
+for (int v = CreationFormat.MinRoll; v <= CreationFormat.MaxRoll; v++) pmfSum += RollOdds.P(v);
+CheckClose("pmf sums to 1", pmfSum, 1.0);
+CheckClose("P(10) = 1/25", RollOdds.P(10), 1 / 25.0);
+CheckClose("P(14) = 5/25", RollOdds.P(14), 5 / 25.0);
+CheckClose("P(18) = 1/25", RollOdds.P(18), 1 / 25.0);
+CheckClose("distribution is symmetric", RollOdds.P(11), RollOdds.P(17));
+CheckClose("P(value >= 10) = 1", RollOdds.PAtLeast(10), 1.0);
+CheckClose("P(value >= 18) = 1/25", RollOdds.PAtLeast(18), 1 / 25.0);
+CheckClose("P(value >= 19) = 0", RollOdds.PAtLeast(19), 0.0);
+double mean = 0;
+for (int v = CreationFormat.MinRoll; v <= CreationFormat.MaxRoll; v++) mean += v * RollOdds.P(v);
+CheckClose("mean value is 14", mean, 14.0);
+Console.WriteLine();
+
+// --- creation roll: odds cross-checked against brute force -------------------
+// PMeetsTarget enumerates the 1,287 sorted combinations with multinomial weights; this replays all
+// 59,049 ordered outcomes through the same predicate the roller actually stops on, so a mistake in
+// either the combinatorics or Arrange's feasibility rule shows up as a mismatch.
+Console.WriteLine("Roll odds vs brute force over all 59,049 outcomes:");
+(string Label, int[] Mins, int TotalMin)[] targets =
+{
+    ("no target",             new[] { 0, 0, 0, 0, 0 },      0),
+    ("STR >= 17",             new[] { 17, 0, 0, 0, 0 },     0),
+    ("STR >= 17, CON >= 16",  new[] { 17, 0, 16, 0, 0 },    0),
+    ("every attribute >= 13", new[] { 13, 13, 13, 13, 13 }, 0),
+    ("every attribute >= 15", new[] { 15, 15, 15, 15, 15 }, 0),
+    ("every attribute >= 18", new[] { 18, 18, 18, 18, 18 }, 0),
+    ("total >= 80",           new[] { 0, 0, 0, 0, 0 },     80),
+    ("STR >= 18, total >= 78",new[] { 18, 0, 0, 0, 0 },    78),
+};
+foreach (var (label, mins, totalMin) in targets)
+    CheckClose($"P({label})", RollOdds.PMeetsTarget(mins, totalMin), BruteForce(mins, totalMin));
+
+CheckClose("P(no target) = 1", RollOdds.PMeetsTarget(new[] { 0, 0, 0, 0, 0 }, 0), 1.0);
+CheckClose("P(all 18s) = (1/25)^5", RollOdds.PMeetsTarget(new[] { 18, 18, 18, 18, 18 }, 0),
+           Math.Pow(1 / 25.0, 5));
+CheckClose("P(total >= 90) = (1/25)^5", RollOdds.PMeetsTarget(new[] { 0, 0, 0, 0, 0 }, 90),
+           Math.Pow(1 / 25.0, 5));
+Check("out-of-reach minimum is impossible", RollOdds.PMeetsTarget(new[] { 19, 0, 0, 0, 0 }, 0), 0.0);
+Check("out-of-reach total is impossible", RollOdds.PMeetsTarget(new[] { 0, 0, 0, 0, 0 }, 91), 0.0);
+
+// The figures quoted in docs/StrategyGuide.md, pinned to the model so the two can't drift apart.
+CheckClose("guide: a roll contains an 18 about 1 in 5.4",
+           RollOdds.PMeetsTarget(new[] { 18, 0, 0, 0, 0 }, 0), 1 - Math.Pow(24 / 25.0, 5));
+CheckClose("guide: a roll contains a 17+ nearly half the time",
+           RollOdds.PMeetsTarget(new[] { 17, 0, 0, 0, 0 }, 0), 1 - Math.Pow(22 / 25.0, 5));
+CheckClose("guide: every value 15+ is about 1 in 98",
+           RollOdds.PMeetsTarget(new[] { 15, 15, 15, 15, 15 }, 0), Math.Pow(0.4, 5));
+Console.WriteLine();
+
+// --- creation roll: signature scan -------------------------------------------
+Console.WriteLine("Creation pool signature scan:");
+// 0xFF filler can never match: every plausible value has a zero high byte.
+byte[] haystack = Enumerable.Repeat((byte)0xFF, 256).ToArray();
+const int plantedAt = 100;
+Array.Copy(CreationFormat.Encode(roll), 0, haystack, plantedAt, CreationFormat.PoolBytes);
+
+int[] sortedWanted = (int[])roll.Clone();
+Array.Sort(sortedWanted);
+var scanHits = CreationScanner.FindInBuffer(haystack, sortedWanted).ToList();
+Check("finds the planted pool", scanHits.Count, 1);
+Check("at the planted offset", scanHits.Count == 1 ? scanHits[0] : -1, plantedAt);
+
+// Typing the numbers in a different order still locks on: the scan matches the set.
+int[] shuffledWanted = { 18, 11, 16, 12, 14 };
+Array.Sort(shuffledWanted);
+Check("order-insensitive match",
+      CreationScanner.FindInBuffer(haystack, shuffledWanted).Count(), 1);
+
+int[] wrongWanted = { 10, 11, 12, 13, 14 };
+Check("a different roll doesn't match", CreationScanner.FindInBuffer(haystack, wrongWanted).Count(), 0);
+Check("empty buffer yields nothing", CreationScanner.FindInBuffer(Array.Empty<byte>(), sortedWanted).Count(), 0);
+// Find must reject a short capture list rather than throwing from inside the caller's Task.Run.
+Check("Find rejects a short capture list", CreationScanner.Find(null!, new[] { 14, 18 }).Count, 0);
+Check("Find rejects a null capture list", CreationScanner.Find(null!, null!).Count, 0);
+Check("scan gate accepts a real roll", CreationScanner.InRange(roll), true);
+Check("scan gate rejects garbage", CreationScanner.InRange(new[] { 300, 14, 14, 14, 14 }), false);
+Console.WriteLine();
+
+// --- creation roll: "set the roll" parsing ------------------------------------
+Console.WriteLine("Set-roll parsing:");
+Check("five values parse",
+      CreationFormat.TryParseValues("14 18 12 16 11", out var setFive, out _), true);
+Check("five values kept in order", string.Join(",", setFive), "14,18,12,16,11");
+Check("commas accepted",
+      CreationFormat.TryParseValues("14,18,12,16,11", out _, out _), true);
+Check("one value fills all five",
+      CreationFormat.TryParseValues("18", out var setOne, out _), true);
+Check("filled with the single value", string.Join(",", setOne), "18,18,18,18,18");
+Check("values clamp to the game's range",
+      CreationFormat.TryParseValues("99 0 18 3 12", out var setClamped, out _), true);
+Check("clamped result", string.Join(",", setClamped), "18,3,18,3,12");
+Check("wrong count rejected",
+      CreationFormat.TryParseValues("14 18 12", out _, out _), false);
+Check("non-numeric rejected",
+      CreationFormat.TryParseValues("14 18 x 16 11", out _, out _), false);
+Check("empty rejected", CreationFormat.TryParseValues("", out _, out _), false);
+Console.WriteLine();
+
 // --- sample DDCHARS.DAT (if present) ----------------------------------------
 string? gameDir = FindGameDir();
 if (gameDir != null)
@@ -342,6 +519,36 @@ void Check<T>(string label, T actual, T expected)
     string status = ok ? "OK" : "FAIL";
     Console.WriteLine($"  [{status}] {label}: got {actual}, expected {expected}");
     if (!ok) failures++;
+}
+
+// Probabilities are built by different summations on each side of a comparison, so they are
+// compared to within floating-point noise rather than for exact equality.
+void CheckClose(string label, double actual, double expected, double tolerance = 1e-12)
+{
+    bool ok = Math.Abs(actual - expected) <= tolerance;
+    string status = ok ? "OK" : "FAIL";
+    Console.WriteLine($"  [{status}] {label}: got {actual:G10}, expected {expected:G10}");
+    if (!ok) failures++;
+}
+
+// The odds, the slow and obvious way: every ordered outcome of five rolled values, weighted by its
+// probability and judged by the same CreationFormat.MeetsTarget the roller stops on.
+static double BruteForce(int[] mins, int totalMin)
+{
+    var v = new int[CreationFormat.RolledCount];
+    double p = 0;
+    for (v[0] = CreationFormat.MinRoll; v[0] <= CreationFormat.MaxRoll; v[0]++)
+    for (v[1] = CreationFormat.MinRoll; v[1] <= CreationFormat.MaxRoll; v[1]++)
+    for (v[2] = CreationFormat.MinRoll; v[2] <= CreationFormat.MaxRoll; v[2]++)
+    for (v[3] = CreationFormat.MinRoll; v[3] <= CreationFormat.MaxRoll; v[3]++)
+    for (v[4] = CreationFormat.MinRoll; v[4] <= CreationFormat.MaxRoll; v[4]++)
+    {
+        if (!CreationFormat.MeetsTarget(v, mins, totalMin)) continue;
+        double w = 1;
+        foreach (var x in v) w *= RollOdds.P(x);
+        p += w;
+    }
+    return p;
 }
 
 static string? FindGameDir()

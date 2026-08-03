@@ -34,9 +34,16 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     private readonly DispatcherTimer _poll;
     private CancellationTokenSource? _scanCts;
 
+    // The pid we actually attached to. SelectedProcess can be changed in the dropdown afterwards,
+    // and the roller has to send keystrokes to the process it is reading memory from.
+    private int? _attachedPid;
+
     public ObservableCollection<ProcessEntry> Processes { get; } = new();
     public ObservableCollection<CharacterViewModel> Party { get; } = new();
     public ReferenceViewModel Reference { get; } = new();
+
+    /// <summary>The create-screen roller: locates the rolled stat pool, re-rolls, and can write it.</summary>
+    public CharacterRollerViewModel Roller { get; }
 
     private ProcessEntry? _selectedProcess;
     public ProcessEntry? SelectedProcess { get => _selectedProcess; set { SetField(ref _selectedProcess, value); RaiseCommands(); } }
@@ -113,6 +120,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         SaveSaveCommand = new RelayCommand(_ => SaveSave(), _ => SaveFile != null);
         SaveMaxAllCommand = new RelayCommand(_ => SaveMaxAll(), _ => SaveFile != null);
 
+        Roller = new CharacterRollerViewModel(() => _mem, () => _attachedPid, msg => Status = msg);
+
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _poll.Tick += (_, _) => PollTick();
 
@@ -150,8 +159,10 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         try
         {
             _mem = ProcessMemory.Open(SelectedProcess.Id);
+            _attachedPid = SelectedProcess.Id;
             OnPropertyChanged(nameof(IsAttached));
             RaiseCommands();
+            Roller.RefreshCommands();
             _poll.Start();
             Status = $"Attached to {SelectedProcess.Name} (pid {SelectedProcess.Id}). Scanning for characters…";
             Scan();
@@ -166,8 +177,10 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     {
         _poll.Stop();
         _scanCts?.Cancel();
+        Roller.Reset();       // its locked address belongs to the process we're letting go of
         _mem?.Dispose();
         _mem = null;
+        _attachedPid = null;
         Party.Clear();
         SelectedCharacter = null;
         _freezeBody = false; OnPropertyChanged(nameof(FreezeBody));
@@ -175,6 +188,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         _freezeStatus = false; OnPropertyChanged(nameof(FreezeStatus));
         OnPropertyChanged(nameof(IsAttached));
         RaiseCommands();
+        Roller.RefreshCommands();
         Status = "Detached.";
     }
 
@@ -324,6 +338,10 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public void Dispose()
     {
         _poll.Stop();
+        // Cancels the roll loop; it can still be mid-keystroke, so one last R may reach the game
+        // before it notices. Memory access stays safe either way (ProcessMemory holds a
+        // SafeProcessHandle), so this isn't worth blocking shutdown on.
+        Roller.Reset();
         _scanCts?.Cancel();
         _scanCts?.Dispose();
         _mem?.Dispose();
