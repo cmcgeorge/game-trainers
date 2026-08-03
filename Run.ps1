@@ -79,6 +79,13 @@
     camp menu first -- the trainer then locates the data segment automatically and
     needs no value searching. Its 'Character files' tab edits .HIL/.PRE files
     offline and works with the game closed.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer DarkDesigns
+    Builds and launches the Dark Designs I trainer. Start DARKDES.EXE in DOSBox
+    and play past the title screen -- the trainer locates the character roster
+    automatically and needs no value searching. Its 'Save Editor' tab edits
+    DDCHARS.DAT offline and works with the game closed.
 #>
 [CmdletBinding()]
 param(
