@@ -154,7 +154,7 @@ Fields the trainer uses (offsets from the leader base):
 | `+0x44` / `+0x48` | `Gold_Decrement` / `Gold_Encoded` | **Confirmed** |
 | `+0xA0` | `GovernmentType` | Inferred |
 | `+0xF4` | `Era` | Confirmed |
-| `+0xF8` | `Research_Bulbs` | Confirmed |
+| `+0xF8` | `Research_Bulbs` | Confirmed writable; see §8.2 on why banking points shortens research without finishing it |
 | `+0x18C` / `+0x194` | `Unit_Count` / `Cities_Count` | Confirmed (unit count agreed with the container) |
 | `+0x1A4` / `+0x1A8` / `+0x1AC` | luxury / science / gold sliders | Confirmed |
 | `+0x181C` | embedded `Culture` (`'CULT'` at `+0x1824`, level `+0x1838`, total `+0x183C`, income `+0x1840`, `CivID` `+0x1844`) | Confirmed |
@@ -232,6 +232,11 @@ independent checks that agree:
   written values.
 
 `cultural_level` remains Inferred — plausible (1–2 early game) but not cross-checked against anything.
+It is the border-expansion ladder rather than a culture total, and the level indexes the loaded
+ruleset's own culture-level table, so the *Max culture* button writes a deliberately small level
+(`GameFacts.MaxCityCulturePreset` = 6) rather than the 100 that `ValidateCity` would still accept:
+past the end of that table, a bigger number is not a bigger bonus, just a longer reach into whatever
+follows it.
 
 Opening up the *rest* of the record still needs a decompile of `City_recompute_happiness` @ `0x4C4660`
 / `City_recompute_commerce` @ `0x4B7770`, which name their own field accesses.
@@ -359,7 +364,8 @@ scan normally.
 through the game's own display:
 
 - `Leader` `CapitalID`, `Golden_Age_End`, `GovernmentType`, `Tiles_Discovered`, research id/turns
-- `City_Body.cultural_level`, and every City field past the anchored prefix (not surfaced at all)
+- `City_Body.cultural_level` — surfaced, and written by the Cities tab's *Max culture* button, but
+  still Inferred; and every City field past the anchored prefix (not surfaced at all)
 - all four tile visibility masks
 - `Race.AggressionLevel`
 
@@ -421,11 +427,21 @@ uncompressed save, but that path is untested here).
 1. **`City_Body` past `+0x54`** — still the largest gap; the anchored prefix is now confirmed but
    population, corruption, the incomes and the build queue are not. Needs the two `City_recompute_*`
    decompiles.
-2. **What an advance actually costs.** "Finish research" banks a flat 30,000 points into
-   `Research_Bulbs` rather than reading the threshold, because the cost is derived from the rules
-   database, the difficulty and how many civs already know the tech — none of which is decoded here.
-   The field is confirmed writable; the completion rule (points compared at the turn boundary) is
-   inferred from the game's behaviour, not from its code.
+2. **What an advance actually costs, and why banking points does not finish it now.** "Finish
+   research" banks a flat 1,000,000 points into `Research_Bulbs` rather than reading the threshold,
+   because the cost is derived from the rules database, the difficulty and how many civs already know
+   the tech — none of which is decoded here. The field is confirmed writable; the completion rule
+   (points compared at a turn boundary) is inferred from the game's behaviour, not from its code.
+
+   Observed live: banking 30,000 **shortened** the research but the advance still took a few more
+   turns, and raising the amount is not expected to change that — 30,000 already cleared any epic-game
+   cost, so the remaining turns are not a shortfall of points. The likely explanation is a floor on how
+   few turns an advance may take, which points cannot buy past. Two things would settle it, and both
+   are unattempted: decompiling the interturn research step (`perform_interturn` @ `0x4FF290` reaches
+   it) to see what the completion test actually compares; and probing `Research_Turns` (`Leader+0x100`,
+   Inferred, not surfaced) — if that counts turns *spent* on the current advance, writing it is the
+   lever that finish-research is missing. Neither has been tried, and neither should be surfaced in the
+   UI before it is.
 3. **Tile visibility** — four candidate masks, none confirmed on screen. Decompiling
    `Leader_reveal_tile` @ `0x567100` would say which must be set together.
 4. **Tech storage** — see §6.

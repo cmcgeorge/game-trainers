@@ -89,18 +89,43 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     private string _status = "Start Civilization III: Conquests, load or begin a game, then Attach and Auto-locate.";
     public string Status { get => _status; set => SetField(ref _status, value); }
 
+    private long _maxTreasuryAmount = GameFacts.MaxTreasuryPreset;
+
+    /// <summary>
+    /// How much gold "Max treasury" writes. The preset is only the starting offer: a player who wants a
+    /// plausible-looking 5,000 rather than a hundred million should be able to say so once and keep
+    /// clicking the button. An amount Civ3 cannot hold is refused rather than clamped, so the box never
+    /// shows a number the button would not actually write.
+    /// </summary>
+    public long MaxTreasuryAmount
+    {
+        get => _maxTreasuryAmount;
+        set
+        {
+            if (!Civ3Layout.IsPlausibleTreasury(value))
+            {
+                Status = $"{value:N0} is outside the range Civ3 can hold — keeping {_maxTreasuryAmount:N0}.";
+                OnPropertyChanged();                    // put the accepted amount back in the box
+                return;
+            }
+            SetField(ref _maxTreasuryAmount, value);
+        }
+    }
+
     public ICommand RefreshProcessesCommand { get; }
     public ICommand AttachCommand { get; }
     public ICommand DetachCommand { get; }
     public ICommand AutoLocateCommand { get; }
     public ICommand RescanCommand { get; }
     public ICommand MaxTreasuryCommand { get; }
-    public ICommand FreezeTreasuryCommand { get; }
     public ICommand HealAllUnitsCommand { get; }
     public ICommand RefreshAllMovesCommand { get; }
     public ICommand EliteAllUnitsCommand { get; }
-    public ICommand MaxCityStoresCommand { get; }
+    public ICommand MaxCityFoodCommand { get; }
+    public ICommand MaxCityShieldsCommand { get; }
+    public ICommand MaxCityCultureCommand { get; }
     public ICommand FinishResearchCommand { get; }
+    public ICommand MaxAllCommand { get; }
 
     public MainViewModel()
     {
@@ -111,13 +136,15 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         DetachCommand = new RelayCommand(_ => Detach(), _ => IsAttached);
         AutoLocateCommand = new RelayCommand(_ => Locate(), _ => IsAttached);
         RescanCommand = new RelayCommand(_ => Rescan(), _ => IsLocated);
-        MaxTreasuryCommand = new RelayCommand(_ => ForHuman(p => p.MaxTreasury()), _ => IsLocated);
-        FreezeTreasuryCommand = new RelayCommand(_ => ForHuman(p => p.FreezeTreasury = true), _ => IsLocated);
+        MaxTreasuryCommand = new RelayCommand(_ => ForHuman(p => p.MaxTreasury(MaxTreasuryAmount)), _ => IsLocated);
         HealAllUnitsCommand = new RelayCommand(_ => ForMyUnits(u => u.FullHeal()), _ => IsLocated);
         RefreshAllMovesCommand = new RelayCommand(_ => ForMyUnits(u => u.RefreshMoves()), _ => IsLocated);
         EliteAllUnitsCommand = new RelayCommand(_ => ForMyUnits(u => u.MakeElite()), _ => IsLocated);
-        MaxCityStoresCommand = new RelayCommand(_ => MaxCityStores(), _ => IsLocated);
+        MaxCityFoodCommand = new RelayCommand(_ => MaxCityFood(), _ => IsLocated);
+        MaxCityShieldsCommand = new RelayCommand(_ => MaxCityShields(), _ => IsLocated);
+        MaxCityCultureCommand = new RelayCommand(_ => MaxCityCulture(), _ => IsLocated);
         FinishResearchCommand = new RelayCommand(_ => ForHuman(p => p.FinishResearch()), _ => IsLocated);
+        MaxAllCommand = new RelayCommand(_ => MaxAll(), _ => IsLocated);
 
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(GameFacts.PollIntervalMs) };
         _poll.Tick += (_, _) => PollTick();
@@ -423,21 +450,74 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         Status = n == 0 ? "You have no units in the list — click Re-scan." : $"Applied to {n} of your unit(s).";
     }
 
-    private void MaxCityStores()
+    /// <summary>Applies an action to every city that is still yours; returns how many it reached.</summary>
+    private int ForMyCities(Action<CityRowViewModel> action)
+    {
+        int n = 0;
+        foreach (var c in Cities) { if (!c.IsMine) continue; action(c); n++; }
+        return n;
+    }
+
+    private static void FillFood(CityRowViewModel city) => city.StoredFood = GameFacts.MaxCityStorePreset;
+
+    private static void FillShields(CityRowViewModel city) => city.StoredProduction = GameFacts.MaxCityStorePreset;
+
+    // Food and shields are separate actions, and only shields are part of the combined one: a full
+    // granary makes a city grow every single turn, and growth outruns happiness — the new citizens
+    // arrive discontented and the city can tip into disorder, which produces nothing at all. So food
+    // is something you ask for when you want it, city by city or all at once, rather than something a
+    // "max everything" button does to you.
+    private void MaxCityFood()
     {
         if (!CanApplyBulk()) return;
-        int n = 0;
-        foreach (var c in Cities)
-        {
-            if (!c.IsMine) continue;
-            c.StoredFood = GameFacts.MaxCityStorePreset;
-            c.StoredProduction = GameFacts.MaxCityStorePreset;
-            n++;
-        }
+        int n = ForMyCities(FillFood);
         Status = n == 0
             ? "You have no cities yet — found one first."
-            : $"Maxed the food and shield stores of {n} of your cities. They will grow and finish " +
-              "whatever they are building on their next turn.";
+            : $"Filled the food store of {n} of your cities. They will grow on their next turn — watch " +
+              "happiness, because a city that grows several sizes in a row can riot.";
+    }
+
+    private void MaxCityShields()
+    {
+        if (!CanApplyBulk()) return;
+        int n = ForMyCities(FillShields);
+        Status = n == 0
+            ? "You have no cities yet — found one first."
+            : $"Filled the shield store of {n} of your cities. They will finish whatever they are " +
+              "building on their next turn.";
+    }
+
+    private void MaxCityCulture()
+    {
+        if (!CanApplyBulk()) return;
+        int n = ForMyCities(c => c.CulturalLevel = GameFacts.MaxCityCulturePreset);
+        Status = n == 0
+            ? "You have no cities yet — found one first."
+            : $"Raised {n} of your cities to cultural level {GameFacts.MaxCityCulturePreset}, which is " +
+              "what expands their borders. That is the per-city level, not accumulated culture — for a " +
+              "cultural victory edit the Culture column on the Players tab. The offset is inferred " +
+              "rather than confirmed, so check the effect in game.";
+    }
+
+    /// <summary>
+    /// Three "max" actions in one click: treasury, research and every city's shield store — the ones
+    /// that are almost always wanted together at the start of a session. Food is deliberately left out
+    /// (see <see cref="MaxCityFood"/>). Doing the three here rather than chaining the commands keeps a
+    /// single, honest status line instead of three that overwrite each other.
+    /// </summary>
+    private void MaxAll()
+    {
+        if (!CanApplyBulk()) return;
+        var me = Players.FirstOrDefault(p => p.IsHuman);
+        if (me == null) { Status = "No human player row — re-locate."; return; }
+
+        me.MaxTreasury(MaxTreasuryAmount);
+        me.FinishResearch();
+        int n = ForMyCities(FillShields);
+
+        Status = $"{me.CivName}: treasury set to {MaxTreasuryAmount:N0}, research banked (the advance " +
+                 $"arrives at a turn boundary, not instantly), shields maxed in {n} " +
+                 (n == 1 ? "city" : "cities") + ". Food is left alone — use Max food if you want it.";
     }
 
     // --- poll loop ------------------------------------------------------------------------------
@@ -554,8 +634,9 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         foreach (var c in new[]
                  {
                      AttachCommand, DetachCommand, AutoLocateCommand, RescanCommand, MaxTreasuryCommand,
-                     FreezeTreasuryCommand, HealAllUnitsCommand, RefreshAllMovesCommand, EliteAllUnitsCommand,
-                     MaxCityStoresCommand, FinishResearchCommand,
+                     HealAllUnitsCommand, RefreshAllMovesCommand, EliteAllUnitsCommand,
+                     MaxCityFoodCommand, MaxCityShieldsCommand, MaxCityCultureCommand,
+                     FinishResearchCommand, MaxAllCommand,
                  })
             (c as RelayCommand)?.RaiseCanExecuteChanged();
     }

@@ -200,8 +200,12 @@ public sealed class PlayerRowViewModel : ObservableObject
         if (_freezeTreasury) PokeTreasury(_freezeTarget);
     }
 
-    /// <summary>Sets the treasury to the "max" preset.</summary>
-    public void MaxTreasury() => Treasury = GameFacts.MaxTreasuryPreset;
+    /// <summary>
+    /// Sets the treasury to <paramref name="amount"/> — the toolbar's amount box rather than a fixed
+    /// preset, so a player who wants a plausible-looking 5,000 does not have to undo a hundred million.
+    /// The <see cref="Treasury"/> setter still range-checks it, so an absurd amount writes nothing.
+    /// </summary>
+    public void MaxTreasury(long amount) => Treasury = amount;
 
     /// <summary>
     /// Banks enough research points to complete the current advance. Civ3 compares the accumulated

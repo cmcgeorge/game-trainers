@@ -639,10 +639,12 @@ Check("and actually writes it",
     unitHost.Writes.Any(w => w.Address == body + (nuint)Civ3Layout.UnitExperience && w.Value == 3));
 
 // "Finish research" banks points rather than granting a tech: Civ3 compares the accumulated points
-// against the advance's cost at the turn boundary. The value has to clear any real tech cost while
-// staying far from int overflow, since the game does carry-over arithmetic on it.
+// against the advance's cost at the turn boundary. The value has to clear any real tech cost — modded
+// or late-game trees included, which is why it is a million rather than the 30,000 it started as —
+// while staying far from int overflow, since the game does carry-over arithmetic on it. Banking more
+// still does not make an advance arrive instantly; the game appears to floor how few turns one takes.
 Check("the finish-research preset clears any plausible tech cost",
-    GameFacts.FinishResearchBulbs >= 10_000);
+    GameFacts.FinishResearchBulbs >= 100_000);
 Check("and leaves room for the game's own arithmetic",
     GameFacts.FinishResearchBulbs < int.MaxValue / 1000);
 Check("the city-store preset is generous but bounded",
@@ -663,6 +665,33 @@ researchHost.WritesAllowed = false;
 researchHost.Writes.Clear();
 researcher.FinishResearch();
 Equal("finish research is refused when writes are blocked", researchHost.Writes.Count, 0);
+
+// "Max treasury" writes the amount from the toolbar box rather than the preset, so the row helper has
+// to honour whatever it is handed — including a small, plausible-looking amount — and still refuse one
+// the game could not hold. The preset survives only as the box's starting value.
+var amountHost = new FakeGameHost();
+nuint amountRecord = 0xC0000;
+amountHost.Seed(amountRecord + (nuint)Civ3Layout.LeaderGoldDecrement, 4242);
+var richer = new PlayerRowViewModel(amountHost, amountRecord, 1, isHuman: true);
+richer.MaxTreasury(5_000);
+Equal("max treasury takes the amount it is given", richer.Treasury, 5_000L);
+Check("and still goes through the codec, writing the encoded half only",
+    amountHost.ReadInt32(amountRecord + (nuint)Civ3Layout.LeaderGoldEncoded, out int encAmount)
+    && Civ3Layout.DecodeGold(4242, encAmount) == 5_000
+    && amountHost.Writes.All(w => w.Address != amountRecord + (nuint)Civ3Layout.LeaderGoldDecrement));
+amountHost.Writes.Clear();
+richer.MaxTreasury(9_000_000_000);
+Equal("an amount outside Civ3's range writes nothing", amountHost.Writes.Count, 0);
+Equal("and the row keeps the amount that took", richer.Treasury, 5_000L);
+Check("the default amount is one Civ3 can hold", Civ3Layout.IsPlausibleTreasury(GameFacts.MaxTreasuryPreset));
+
+// "Max culture" writes a cultural *level*, not a culture total: the level indexes the ruleset's own
+// table, so the preset stays a small number that a city record still validates with.
+Check("the city-culture preset clears the epic game's ladder but stays a small level",
+    GameFacts.MaxCityCulturePreset > 2 && GameFacts.MaxCityCulturePreset <= 20);
+BitConverter.TryWriteBytes(city.AsSpan(Civ3Layout.CityCulturalLevel, 4), GameFacts.MaxCityCulturePreset);
+Check("a city holding the culture preset still validates", Civ3Layout.ValidateCity(city, 0, 130, 130));
+BitConverter.TryWriteBytes(city.AsSpan(Civ3Layout.CityCulturalLevel, 4), 1);
 
 unitHost.Writes.Clear();
 unitRow.Damage = -5;
@@ -689,6 +718,13 @@ cityHost.Writes.Clear();
 cityRow.StoredFood = -1;
 cityRow.CulturalLevel = 500;
 Equal("out-of-range city edits are refused", cityHost.Writes.Count, 0);
+cityHost.Writes.Clear();
+cityRow.CulturalLevel = GameFacts.MaxCityCulturePreset;
+Check("max culture writes the preset level into the city record",
+    cityHost.Writes.Any(w => w.Address == cityBody + (nuint)Civ3Layout.CityCulturalLevel
+                             && w.Value == GameFacts.MaxCityCulturePreset));
+Check("and touches nothing else in the record",
+    cityHost.Writes.All(w => w.Address == cityBody + (nuint)Civ3Layout.CityCulturalLevel));
 cityRow.StoredFood = 300;
 cityRow.StoredProduction = 400;
 var failHost = new FakeGameHost { FailReads = true };

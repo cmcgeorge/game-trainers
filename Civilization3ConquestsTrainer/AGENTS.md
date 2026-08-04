@@ -40,7 +40,7 @@ Three projects in `Civilization3ConquestsTrainer.sln`: the WPF app, its harness,
     (`IScanHost`, `ScanValue`, `ScanResultViewModel`, `FrozenValueViewModel`) matches the repo's other
     value-scanner trainers.
 - `test/FormatCheck/` — headless harness (console `Exe`, `net8.0-windows` + `UseWPF` because it
-  references the WPF app for the view-model types). **299 checks**, no game and no copyrighted files
+  references the WPF app for the view-model types). **308 checks**, no game and no copyrighted files
   needed.
 
 It **has a `GameLocator`** and **no save editor**. The exe is native, unpacked, fixed-base and
@@ -108,7 +108,20 @@ nothing past it is surfaced. Do not "fix" this by guessing — close it by decom
 is now `[Confirmed]`: a game with 32 cities across 13 civs validated every record, and tallying
 `CityCivId` reproduced each leader's own `Cities_Count` exactly for all 13 — two unrelated structures
 agreeing — with the food and shield stores additionally round-tripped. `cultural_level` stays
-`[Inferred]`.
+`[Inferred]`, which is why the Cities tab's **Max culture** button writes
+`GameFacts.MaxCityCulturePreset` — a deliberately small level (6), since the field indexes the loaded
+ruleset's own culture-level table and a huge value would index a long way past it. Do not raise it to
+something that merely looks impressive.
+
+**Banking research points shortens research without finishing it.** `Research_Bulbs` is confirmed
+writable and "Finish research" now banks 1,000,000, but a live game still took a few more turns at
+30,000 — an amount that already cleared any epic-game advance cost, so the shortfall is not points.
+The likely cause is a floor on how few turns an advance may take. Do not "fix" this by inflating the
+preset further; the leads that would actually settle it are in `docs/ReverseEngineering.md` §8.2.
+
+**Food and shields are separate buttons, and the combined "max" action fills shields only.** A full
+granary makes a city grow every turn, growth outruns happiness, and the city riots — so food is opt-in
+per click rather than something a one-click action does to the whole empire. Do not fold it back in.
 
 **Tile visibility is inferred**, which is why "Reveal map" is gated behind an explicit acknowledgement
 instead of being a one-click button, and why every tile is checked for its own `'TILE'` tag before it

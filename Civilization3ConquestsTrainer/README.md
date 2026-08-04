@@ -79,11 +79,16 @@ change your gold in game, and narrow by **Changed**. The Treasury guide button s
 
 | Field | Notes |
 | --- | --- |
-| Treasury | Decoded/encoded as above. Freeze holds it against income. |
+| Treasury | Decoded/encoded as above. **Max treasury** writes the amount in the box beside it — 100,000,000 to start with, but type any amount Civ3 can hold and the button keeps using it. The per-row **Freeze $** column holds a treasury against the turn's income. |
 | Tax / Science / Luxury | Tens of percent, always totalling 10. Editing one rebalances the others, because Civ3 rejects any other combination. Your government's rate cap still applies, so the game may clamp further. |
-| Era, Research bulbs | **Finish research** banks enough points to complete your current advance; Civ3 grants it when you end the turn. |
+| Era, Research bulbs | **Finish research** banks a million points — far past what any advance costs. Civ3 compares them at a turn boundary, so the tech never arrives instantly, and it may still take a few turns: the game appears to floor how few turns an advance can take, and banked points cannot buy past that floor. See [`docs/ReverseEngineering.md`](docs/ReverseEngineering.md) §8. |
 | Culture (total) | Cultural level is shown read-only — it is derived. |
 | City / unit counts | Read-only. |
+
+**Max treasury, research + city shields** is three of those in one click, for the start of a session:
+it sets the treasury to the amount in the box, banks the research, and fills the shield store of every
+city you own. **Food is deliberately not part of it** — a city with a full granary grows every turn,
+growth outruns happiness, and the city riots. *Max food* is its own button, for when you want it.
 
 The city and unit lists keep themselves current: the trainer watches the game's own containers and
 rebuilds automatically when units are built or killed and when cities are founded, captured or razed.
@@ -102,8 +107,16 @@ round, the kill and the score update — so there is no instant during combat at
 between frames could intervene. Heal restores a unit that survived; a unit that lost dies anyway.
 Promoting to Elite is the only per-unit durability lever the data model offers.
 
-**Cities** — position, stored food, stored shields, cultural level, with a freeze, plus a
-**Max food + shields** button that fills every city you own.
+**Cities** — position, stored food, stored shields, cultural level, with a freeze, plus three
+all-my-cities buttons: **Max shields** (each city finishes what it is building next turn), **Max
+food** (each city grows next turn — separate on purpose, because repeated growth outruns happiness and
+tips a city into disorder), and **Max culture** (raises every one of them to cultural level 6).
+
+*Max culture* moves the **border-expansion ladder**, not accumulated culture: the level indexes the
+loaded ruleset's own culture-level table, so the preset is deliberately a small number rather than a
+true ceiling — and `cultural_level` is one of the few offsets here that is inferred rather than
+confirmed, so check the effect in game. For a cultural victory it is the empire-wide **Culture** column
+on the Players tab that counts.
 
 Deliberately narrow. Past this prefix the community struct header stops being reliable, so population,
 corruption, per-turn incomes, the build queue and the city name are not shown at all — see

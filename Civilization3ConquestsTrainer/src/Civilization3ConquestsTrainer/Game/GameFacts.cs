@@ -61,16 +61,34 @@ public static class GameFacts
     /// </summary>
     public const int MaxCombatExperience = 3;
 
-    /// <summary>What "Max treasury" writes. Deliberately short of int32 range: the game adds income
-    /// to this every turn, and a value near <see cref="int.MaxValue"/> would overflow into debt.</summary>
+    /// <summary>The amount "Max treasury" starts out offering; the user can type any other amount into
+    /// the toolbar box, bounded by <see cref="Civ3Layout.IsPlausibleTreasury"/>. Deliberately short of
+    /// int32 range: the game adds income to this every turn, and a value near
+    /// <see cref="int.MaxValue"/> would overflow into debt.</summary>
     public const int MaxTreasuryPreset = 100_000_000;
 
     /// <summary>
-    /// What "Max food + shields" banks in each city. Far above any granary size or build cost, so the
-    /// city grows and completes whatever it is building on its next turn, but small enough that the
-    /// game's own per-turn arithmetic on it cannot overflow.
+    /// What "Max food" and "Max shields" bank in each city. Far above any granary size or build cost,
+    /// so the city grows and completes whatever it is building on its next turn, but small enough that
+    /// the game's own per-turn arithmetic on it cannot overflow.
+    ///
+    /// <para>The two are separate buttons, and the combined action fills shields only, because food is
+    /// not an unmixed blessing: a full granary makes the city grow every turn, and growth outruns
+    /// happiness — new citizens arrive discontented, and a city can tip into disorder, which produces
+    /// nothing at all. Shields have no such downside.</para>
     /// </summary>
     public const int MaxCityStorePreset = 5_000;
+
+    /// <summary>
+    /// What "Max culture" writes into each city's <c>cultural_level</c>. That field is the
+    /// border-expansion <i>ladder</i>, not accumulated culture: the level indexes the loaded ruleset's
+    /// own culture-level table, which the epic game fills with a handful of entries and a conquest or
+    /// a mod resizes freely. So "max" here means "past anything the epic game reaches", not a true
+    /// ceiling — and it is deliberately a small number, because the offset itself is <b>[Inferred]</b>
+    /// (see <c>docs/ReverseEngineering.md</c> §4.4) and a huge level would index a long way past
+    /// whatever table the game reads. The grid still accepts any level 0–100 typed by hand.
+    /// </summary>
+    public const int MaxCityCulturePreset = 6;
 
     /// <summary>
     /// What "Finish research" banks in <c>Research_Bulbs</c>. Civ3 completes an advance when the
@@ -81,8 +99,16 @@ public static class GameFacts
     /// the difficulty and how many civs already know it, none of which is confirmed here. This value
     /// is simply chosen to exceed any real Civ3 tech cost by a wide margin while staying nowhere near
     /// <see cref="int.MaxValue"/>, so whatever carry-over arithmetic the game does cannot overflow.</para>
+    ///
+    /// <para><b>Why it is this large.</b> It was 30,000 — already past any epic-game advance cost — and
+    /// a live game still took a few more turns to hand the tech over. Raising it to a million costs
+    /// nothing and rules out "the advance simply cost more than we banked" for even a modded or
+    /// late-game tree. It does <i>not</i> make the tech arrive instantly, and the reason is very likely
+    /// not the amount at all: Civ3 appears to enforce a floor on how few turns an advance can take, so
+    /// banked points buy turns down to that floor and no further. That floor is <b>unconfirmed</b> —
+    /// see <c>docs/ReverseEngineering.md</c> §4.2 for what would settle it.</para>
     /// </summary>
-    public const int FinishResearchBulbs = 30_000;
+    public const int FinishResearchBulbs = 1_000_000;
 
     /// <summary>Poll/freeze interval. Civ3 recomputes economy and unit state at turn boundaries.</summary>
     public const int PollIntervalMs = 500;
