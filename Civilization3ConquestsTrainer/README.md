@@ -23,7 +23,9 @@ Reverse-engineering notes and a full strategy guide live in [`docs/`](docs/):
    state to find, and the trainer will say so rather than attach to nothing.)
 2. Run `.\Run.ps1` from this folder. A UAC prompt appears — the trainer needs administrator rights to
    `Read/WriteProcessMemory`.
-3. The `Civ3Conquests` process is preselected. Click **Attach**. Auto-locate runs immediately.
+3. The `Civ3Conquests` process is preselected and marked *← the game* in the list (the trainer only
+   ever auto-selects an exact name match, and never offers its own process). Click **Attach**;
+   auto-locate runs immediately.
 4. The status bar should read something like
    *"Located via static globals: 32/32 leader slots validated, playing civ 1."*
 
@@ -79,9 +81,14 @@ change your gold in game, and narrow by **Changed**. The Treasury guide button s
 | --- | --- |
 | Treasury | Decoded/encoded as above. Freeze holds it against income. |
 | Tax / Science / Luxury | Tens of percent, always totalling 10. Editing one rebalances the others, because Civ3 rejects any other combination. Your government's rate cap still applies, so the game may clamp further. |
-| Era, Research bulbs | |
+| Era, Research bulbs | **Finish research** banks enough points to complete your current advance; Civ3 grants it when you end the turn. |
 | Culture (total) | Cultural level is shown read-only — it is derived. |
 | City / unit counts | Read-only. |
+
+The city and unit lists keep themselves current: the trainer watches the game's own containers and
+rebuilds automatically when units are built or killed and when cities are founded, captured or razed.
+(*Refresh list* on the toolbar re-lists **processes**, not game data — you should never need it once
+attached.)
 
 **Units** — full heal, refresh movement, promote to elite, per-unit or all at once.
 
@@ -89,13 +96,18 @@ Two fields read backwards from the UI and the grid labels them accordingly: the 
 points **lost** and movement **spent**, so zero is a fresh, undamaged unit. Maximum hit points are not
 stored anywhere — the game derives them from the unit type and veteran level.
 
-**Cities** — position, stored food, stored shields, cultural level, with a freeze.
+The per-unit **Heal** toggle re-zeroes damage and spent movement every poll. It **cannot make a unit
+invincible**, and does not claim to: Civ3 resolves an entire battle inside a single call — every
+round, the kill and the score update — so there is no instant during combat at which a trainer polling
+between frames could intervene. Heal restores a unit that survived; a unit that lost dies anyway.
+Promoting to Elite is the only per-unit durability lever the data model offers.
 
-Deliberately narrow, and marked *Inferred* rather than confirmed: the community struct header brackets
-these offsets on both sides but none of them has been round-tripped through the game's own screens,
-because the session they were checked against had no cities. Past that prefix the header stops being
-reliable altogether, so population, corruption, per-turn incomes, the build queue and the city name
-are not shown at all — see [`docs/ReverseEngineering.md`](docs/ReverseEngineering.md) §4.4.
+**Cities** — position, stored food, stored shields, cultural level, with a freeze, plus a
+**Max food + shields** button that fills every city you own.
+
+Deliberately narrow. Past this prefix the community struct header stops being reliable, so population,
+corruption, per-turn incomes, the build queue and the city name are not shown at all — see
+[`docs/ReverseEngineering.md`](docs/ReverseEngineering.md) §4.4.
 
 **Map** — world size and the tile array, plus a "reveal map" action **gated behind an explicit
 acknowledgement**: the map header itself is confirmed, but the per-tile visibility masks are inferred
@@ -132,7 +144,7 @@ Civilization3ConquestsTrainer/
       ConquestBook.cs           the nine conquests and the behaviour notes
     Memory/IMemorySource.cs     the seam that lets the locator be tested without a game
     ViewModels/                 hand-rolled MVVM on GameTrainers.Common
-  test/FormatCheck/             278-check headless harness, no game required
+  test/FormatCheck/             299-check headless harness, no game required
 ```
 
 Reverse-engineering scratch (the Ghidra project, the C3X reference data, a read-only probe, a PKWare

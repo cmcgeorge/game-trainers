@@ -107,7 +107,8 @@ public sealed class GameLocator
         }
         if (pe.Machine != 0x014C)
         {
-            LastError = $"Target is not a 32-bit x86 image (machine 0x{pe.Machine:X4}).";
+            LastError = $"Target is not a 32-bit x86 image (machine 0x{pe.Machine:X4}) — " +
+                        $"{GameFacts.ProcessName}.exe is. Pick the process marked \"the game\" in the list.";
             return null;
         }
 

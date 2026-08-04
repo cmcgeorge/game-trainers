@@ -220,9 +220,21 @@ The trainer therefore exposes **only the anchored prefix** — position, stored 
 cultural level — and `Civ3Layout.CityTrustedPrefixEnd` marks the boundary in code. Displaying a
 plausible-looking population read from an unconfirmed offset would be worse than not displaying it.
 
-Closing this gap needs either a live game that actually has cities (the probed session was at turn 0
-with `p_cities->LastIndex == -1`) or a decompile of `City_recompute_happiness` @ `0x4C4660` /
-`City_recompute_commerce` @ `0x4B7770`, which name their own field accesses.
+**The prefix itself is now confirmed.** A later session with 32 cities across 13 civs gave two
+independent checks that agree:
+
+- Every one of the 32 records passed `ValidateCity` — `ID == index`, coordinates inside the 130×130
+  map, non-negative stores.
+- Tallying `City_Body.CivID` (`+0x0C`) across the container reproduced **each leader's own
+  `Cities_Count` (`Leader+0x194`) exactly, for all 13 civs** — 1, 3, 3, 3, 3, 3, 3, 2, 3, 3, 2, 3.
+  Those are two unrelated structures in memory, so agreement is not self-confirming.
+- `StoredFood`/`StoredProduction` were round-tripped: the trainer wrote them and the game held the
+  written values.
+
+`cultural_level` remains Inferred — plausible (1–2 early game) but not cross-checked against anything.
+
+Opening up the *rest* of the record still needs a decompile of `City_recompute_happiness` @ `0x4C4660`
+/ `City_recompute_commerce` @ `0x4B7770`, which name their own field accesses.
 
 ### 4.5 Map and tiles
 
@@ -339,13 +351,15 @@ scan normally.
 - the container shape, and every `Unit_Body` field the trainer surfaces
 - `Map` width/height/tile-count/seed, and the `'TILE'` tag offset
 - the `BIC` table pointers, counts and both strides, plus `Race` and `UnitType` fields
+- the `City_Body` prefix — `ID`, `X`/`Y`, `CivID` (tallied against `Leader.Cities_Count` for 13 civs),
+  and the food/shield stores (write round-trip)
+- `Leader.Research_Bulbs` as writable (30,000 written and restored)
 
 **Inferred** — derived from the community header and internally consistent, but never round-tripped
 through the game's own display:
 
 - `Leader` `CapitalID`, `Golden_Age_End`, `GovernmentType`, `Tiles_Discovered`, research id/turns
-- every `City_Body` field (the prefix is anchor-bracketed, but there were no cities to read, so the
-  constants are tagged `[Inferred]` in `Civ3Layout` and the Cities tab says so)
+- `City_Body.cultural_level`, and every City field past the anchored prefix (not surfaced at all)
 - all four tile visibility masks
 - `Race.AggressionLevel`
 
@@ -356,6 +370,16 @@ through the game's own display:
 - **Gold per turn.** Not stored — `Leader_recompute_economy` @ `0x56D420` recomputes it from the
   cities each turn, so there is nothing to poke and a poke would be undone immediately.
 - **"Always your turn."** No such flag exists; turn flow is `perform_interturn` @ `0x4FF290`.
+- **Unit invincibility.** Not reachable by writing data, for two independent reasons. Combat is
+  *atomic*: `Fighter_begin` @ `0x4AB470` runs every round of a battle, the kill and `Unit_score_kill`
+  before it returns, so a poll loop running between frames can never intervene — the damage freeze can
+  only heal a unit that already survived. And maximum hit points are *not stored*: `Unit_get_max_hp` @
+  `0x5CD180` computes them from the unit type and veteran level, so there is no per-unit ceiling to
+  raise. `UnitType.Defence` (`+0x58`, confirmed) and `Hit_Point_Bonus` (`+0xA4`, arithmetic from the
+  `field_94` anchor but **unconfirmable by observation** — every base unit reads 0 there) would work,
+  but unit types are shared rules data, so the AI's units of the same type are buffed identically.
+  Genuine per-unit invincibility would need a code cave and a `JMP` patched into `.text`; the trainer
+  is deliberately data-only.
 - **A save editor.** See §7.
 
 ---
@@ -394,15 +418,21 @@ uncompressed save, but that path is untested here).
 
 ## 8. Open questions
 
-1. **`City_Body` past `+0x54`** — the largest gap. Needs a game with cities, or the two `City_recompute_*`
+1. **`City_Body` past `+0x54`** — still the largest gap; the anchored prefix is now confirmed but
+   population, corruption, the incomes and the build queue are not. Needs the two `City_recompute_*`
    decompiles.
-2. **Tile visibility** — four candidate masks, none confirmed on screen. Decompiling
+2. **What an advance actually costs.** "Finish research" banks a flat 30,000 points into
+   `Research_Bulbs` rather than reading the threshold, because the cost is derived from the rules
+   database, the difficulty and how many civs already know the tech — none of which is decoded here.
+   The field is confirmed writable; the completion rule (points compared at the turn boundary) is
+   inferred from the game's behaviour, not from its code.
+3. **Tile visibility** — four candidate masks, none confirmed on screen. Decompiling
    `Leader_reveal_tile` @ `0x567100` would say which must be set together.
-3. **Tech storage** — see §6.
-4. **Whether `Gold_Decrement` is ever re-seeded mid-game.** The trainer is written to survive it
+4. **Tech storage** — see §6.
+5. **Whether `Gold_Decrement` is ever re-seeded mid-game.** The trainer is written to survive it
    (it re-encodes against a fresh read every tick), but it has not been observed happening.
    `Leader_set_treasury` @ `0x4C9B30` would answer it.
-5. **The save container's record framing**, if a save editor is ever wanted.
+6. **The save container's record framing**, if a save editor is ever wanted.
 
 ---
 

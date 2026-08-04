@@ -65,6 +65,25 @@ public static class GameFacts
     /// to this every turn, and a value near <see cref="int.MaxValue"/> would overflow into debt.</summary>
     public const int MaxTreasuryPreset = 100_000_000;
 
+    /// <summary>
+    /// What "Max food + shields" banks in each city. Far above any granary size or build cost, so the
+    /// city grows and completes whatever it is building on its next turn, but small enough that the
+    /// game's own per-turn arithmetic on it cannot overflow.
+    /// </summary>
+    public const int MaxCityStorePreset = 5_000;
+
+    /// <summary>
+    /// What "Finish research" banks in <c>Research_Bulbs</c>. Civ3 completes an advance when the
+    /// accumulated research points reach that advance's cost, and it does the comparison at the turn
+    /// boundary — so the tech lands when you end the turn, not the instant this is written.
+    ///
+    /// <para>The threshold itself is not read: an advance's cost is derived from the rules database,
+    /// the difficulty and how many civs already know it, none of which is confirmed here. This value
+    /// is simply chosen to exceed any real Civ3 tech cost by a wide margin while staying nowhere near
+    /// <see cref="int.MaxValue"/>, so whatever carry-over arithmetic the game does cannot overflow.</para>
+    /// </summary>
+    public const int FinishResearchBulbs = 30_000;
+
     /// <summary>Poll/freeze interval. Civ3 recomputes economy and unit state at turn boundaries.</summary>
     public const int PollIntervalMs = 500;
 }

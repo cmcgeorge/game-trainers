@@ -96,6 +96,15 @@ public static class ConquestBook
             "The unit record stores hit points *lost*, and the maximum comes from the unit type plus its " +
             "veteran level. \"Full heal\" therefore writes zero damage rather than a hit-point total."),
 
+        new("Freezing a unit heals it — it cannot make it invincible",
+            "Civ3 fights a whole battle inside one call: every round, the kill, and the score update " +
+            "happen before the game hands control back. The trainer polls between frames, so there is " +
+            "no moment during combat when it could step in. Freeze restores a unit that survived; it " +
+            "cannot save one that lost. Nor is there a per-unit hit-point ceiling to raise — the game " +
+            "computes maximum hit points from the unit type and veteran level rather than storing " +
+            "them. Promoting to Elite is the one per-unit durability lever that exists, and it is " +
+            "worth roughly one extra hit point over a Regular."),
+
         new("Movement is spent, not remaining",
             "The same inversion applies to movement: the field counts points already used this turn, so " +
             "\"Refresh moves\" writes zero."),

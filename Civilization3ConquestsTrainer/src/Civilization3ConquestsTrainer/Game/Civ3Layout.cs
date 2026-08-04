@@ -153,26 +153,28 @@ public static class Civ3Layout
     public const int UnitRecordProbeBytes = 0x40;
 
     // --- City_Body --------------------------------------------------------------------------------
-    // Only the prefix is exposed, and it is all [Inferred]: the C3X header's own field_XX anchors
-    // bracket these offsets on both sides and agree with arithmetic up to +0x54, but — unlike the
-    // Leader and Unit fields — none of them has been round-tripped through the game's own screens,
-    // because the session they were read against had no cities. Past +0x54 the anchors drift by 0x18,
-    // so population, corruption, the incomes, the build queue and the city name are not surfaced at
-    // all. See docs/ReverseEngineering.md §4.4.
+    // Only the anchor-bracketed prefix is exposed. Past +0x54 the C3X header's own field_XX anchors
+    // drift by 0x18, so population, corruption, the incomes, the build queue and the city name are at
+    // offsets nobody has pinned and are not surfaced at all. See docs/ReverseEngineering.md §4.4.
+    //
+    // The prefix itself is now Confirmed against a live game with 32 cities across 13 civs: every
+    // record validated, and the per-civ tally taken from CityCivId matched each leader's own
+    // Cities_Count exactly — two independent structures agreeing. The food and shield stores were
+    // additionally round-tripped (the trainer wrote them and the game held the values).
 
-    public const int CityId = 0x04;                   // [Inferred] equals the slot index
-    public const int CityX = 0x08;                    // [Inferred] int16
-    public const int CityY = 0x0A;                    // [Inferred] int16
-    public const int CityCivId = 0x0C;                // [Inferred] int8
-    public const int CityImprovementsMaintenance = 0x10;   // [Inferred]
-    public const int CityStatus = 0x14;               // [Inferred]
-    public const int CityStoredFood = 0x24;           // [Inferred]
-    public const int CityStoredProduction = 0x28;     // [Inferred]
-    public const int CityOrderId = 0x30;              // [Inferred]
-    public const int CityOrderType = 0x34;            // [Inferred]
-    public const int CityFlipImmunityTurns = 0x3C;    // [Inferred]
-    public const int CityCulturalLevel = 0x40;        // [Inferred]
-    public const int CityDraftCount = 0x50;           // [Inferred]
+    public const int CityId = 0x04;                   // [Confirmed] equals the slot index, 32/32
+    public const int CityX = 0x08;                    // [Confirmed] int16, all within the map bounds
+    public const int CityY = 0x0A;                    // [Confirmed] int16
+    public const int CityCivId = 0x0C;                // [Confirmed] int8, tallies to Leader.Cities_Count
+    public const int CityImprovementsMaintenance = 0x10;   // [Inferred] not surfaced
+    public const int CityStatus = 0x14;               // [Inferred] not surfaced
+    public const int CityStoredFood = 0x24;           // [Confirmed] write round-trip
+    public const int CityStoredProduction = 0x28;     // [Confirmed] write round-trip
+    public const int CityOrderId = 0x30;              // [Inferred] not surfaced
+    public const int CityOrderType = 0x34;            // [Inferred] not surfaced
+    public const int CityFlipImmunityTurns = 0x3C;    // [Inferred] not surfaced
+    public const int CityCulturalLevel = 0x40;        // [Inferred] plausible, not cross-checked
+    public const int CityDraftCount = 0x50;           // [Inferred] not surfaced
 
     /// <summary>Last City_Body offset the header's anchors still agree on. Nothing past this is exposed.</summary>
     public const int CityTrustedPrefixEnd = 0x54;

@@ -399,6 +399,10 @@ Check("the gold obfuscation is documented in the UI",
     ConquestBook.Notes.Any(n => n.Topic.Contains("obfuscated") && n.Body.Contains("two fields")));
 Check("the damage inversion is documented in the UI",
     ConquestBook.Notes.Any(n => n.Body.Contains("lost")));
+// The UI must not imply a freeze can prevent a death: Civ3 resolves a battle inside one call, so a
+// poll loop can never intervene. This is the single most likely thing for a user to expect and not get.
+Check("the limits of freezing a unit are stated in the UI",
+    ConquestBook.Notes.Any(n => n.Topic.Contains("invincible") && n.Body.Contains("inside one call")));
 
 Equal("empty tables report no races", GameTables.Empty.Races.Count, 0);
 Equal("an unknown race id degrades to a label", GameTables.Empty.RaceName(7), "Race 7");
@@ -409,6 +413,56 @@ Equal("a race with no leader displays its country only",
 Equal("a race with a leader displays both",
     new RaceInfo(1, "Caesar", "Rome", "Roman", 1).Display, "Rome — Caesar");
 Equal("unit stats render", new UnitTypeInfo(9, "Swordsman", 3, 2, 1, 30).Stats, "A3 D2 M1  30 shields");
+
+// =================================================================================================
+Group("Process picker");
+// =================================================================================================
+// The trainer's own executable is Civ3ConqTrainer.exe, whose process name contains "civ3" and sorts
+// BEFORE Civ3Conquests under an ordinal comparison. A picker that substring-matched and then sorted
+// by name would auto-select the trainer itself and report "not a 32-bit image" — which is exactly
+// what happened before this was fixed, so it is pinned here.
+
+Equal("the game is an exact match", ProcessPicker.Rank("Civ3Conquests"), ProcessMatch.Exact);
+Equal("case does not matter", ProcessPicker.Rank("civ3conquests"), ProcessMatch.Exact);
+Equal("the trainer itself is only a hint match", ProcessPicker.Rank("Civ3ConqTrainer"), ProcessMatch.Hint);
+Equal("an unrelated process matches nothing", ProcessPicker.Rank("explorer"), ProcessMatch.None);
+Check("the trainer's own name really does sort first, which is what made this a bug",
+    StringComparer.OrdinalIgnoreCase.Compare("Civ3ConqTrainer", "Civ3Conquests") < 0);
+
+Check("the trainer never offers itself", !ProcessPicker.IsSelectable(1234, 1234));
+Check("other processes are offered", ProcessPicker.IsSelectable(1234, 5678));
+
+var candidates = new[]
+{
+    new ProcessEntry(1, "Civ3ConqTrainer", ProcessPicker.Rank("Civ3ConqTrainer")),
+    new ProcessEntry(2, "Civ3Conquests", ProcessPicker.Rank("Civ3Conquests")),
+    new ProcessEntry(3, "explorer", ProcessPicker.Rank("explorer")),
+};
+var ordered = ProcessPicker.Order(candidates, e => e.Match, e => e.Name).ToList();
+Equal("the exact match is ordered first despite sorting later by name", ordered[0].Name, "Civ3Conquests");
+Equal("a hint match outranks an unrelated process", ordered[1].Name, "Civ3ConqTrainer");
+
+var chosen = ProcessPicker.ChooseDefault(ordered, e => e.Match, e => e.Id, null);
+Equal("the default selection is the game, not the trainer", chosen?.Name, "Civ3Conquests");
+
+var hintsOnly = ProcessPicker.Order(new[]
+{
+    new ProcessEntry(1, "Civ3ConqTrainer", ProcessPicker.Rank("Civ3ConqTrainer")),
+    new ProcessEntry(3, "explorer", ProcessPicker.Rank("explorer")),
+}, e => e.Match, e => e.Name).ToList();
+Check("with no exact match nothing is auto-selected, rather than guessing",
+    ProcessPicker.ChooseDefault(hintsOnly, e => e.Match, e => e.Id, null) == null);
+Equal("a previous selection is preserved across a refresh",
+    ProcessPicker.ChooseDefault(ordered, e => e.Match, e => e.Id, 3)?.Name, "explorer");
+
+// A 64-bit image — which is what attaching to the trainer itself produced — must be refused with a
+// message that points at the fix.
+var wrongArch = new FakeModule(0x400000, 0x2000);
+wrongArch.WritePeHeader(GameFacts.KnownTimeDateStamp, machine: 0x8664);
+var wrongArchLocator = new GameLocator(wrongArch);
+Check("a 64-bit target is refused", wrongArchLocator.Locate() == null);
+Check("and the message names the process to pick instead",
+    wrongArchLocator.LastError.Contains(GameFacts.ProcessName));
 
 // =================================================================================================
 Group("Rules tables read from BIC");
@@ -583,6 +637,32 @@ unitRow.MakeElite();
 Equal("promote-to-elite reaches the top of the ladder", unitRow.Experience, 3);
 Check("and actually writes it",
     unitHost.Writes.Any(w => w.Address == body + (nuint)Civ3Layout.UnitExperience && w.Value == 3));
+
+// "Finish research" banks points rather than granting a tech: Civ3 compares the accumulated points
+// against the advance's cost at the turn boundary. The value has to clear any real tech cost while
+// staying far from int overflow, since the game does carry-over arithmetic on it.
+Check("the finish-research preset clears any plausible tech cost",
+    GameFacts.FinishResearchBulbs >= 10_000);
+Check("and leaves room for the game's own arithmetic",
+    GameFacts.FinishResearchBulbs < int.MaxValue / 1000);
+Check("the city-store preset is generous but bounded",
+    GameFacts.MaxCityStorePreset is >= 1_000 and <= 100_000);
+
+var researchHost = new FakeGameHost();
+nuint researchRecord = 0xB0000;
+researchHost.Seed(researchRecord + (nuint)Civ3Layout.LeaderGoldDecrement, -1);
+researchHost.Seed(researchRecord + (nuint)Civ3Layout.LeaderResearchBulbs, 12);
+var researcher = new PlayerRowViewModel(researchHost, researchRecord, 1, isHuman: true);
+researcher.FinishResearch();
+Check("finish research writes the banked points",
+    researchHost.Writes.Any(w => w.Address == researchRecord + (nuint)Civ3Layout.LeaderResearchBulbs
+                                 && w.Value == GameFacts.FinishResearchBulbs));
+Equal("and the row reflects it", researcher.ResearchBulbs, GameFacts.FinishResearchBulbs);
+
+researchHost.WritesAllowed = false;
+researchHost.Writes.Clear();
+researcher.FinishResearch();
+Equal("finish research is refused when writes are blocked", researchHost.Writes.Count, 0);
 
 unitHost.Writes.Clear();
 unitRow.Damage = -5;

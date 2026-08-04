@@ -35,14 +35,15 @@
                 <ComboBox Width="240" VerticalAlignment="Center"
                           ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
                           SelectedItem="{Binding SelectedProcess}"/>
-                <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                <Button Content="Refresh list" Command="{Binding RefreshProcessesCommand}"
+                        ToolTip="Re-list running processes. This does not refresh game data — that happens automatically."/>
                 <Button Content="Attach" Command="{Binding AttachCommand}"/>
                 <Button Content="Detach" Command="{Binding DetachCommand}"/>
                 <Separator Margin="6,0"/>
                 <Button Content="Auto-locate (no scan)" FontWeight="Bold" Command="{Binding AutoLocateCommand}"
                         ToolTip="Adds the recovered offsets to the module base and proves the result against all 32 leader slots."/>
-                <Button Content="Re-scan" Command="{Binding RescanCommand}"
-                        ToolTip="Rebuild the city and unit lists — they change every turn."/>
+                <Button Content="Re-scan now" Command="{Binding RescanCommand}"
+                        ToolTip="Rebuild the city and unit lists immediately. Normally unnecessary: the trainer notices units and cities appearing and disappearing on its own."/>
                 <CheckBox Content="My civ only" IsChecked="{Binding MineOnly}" VerticalAlignment="Center" Margin="10,0,0,0"/>
             </StackPanel>
         </Border>
@@ -64,10 +65,13 @@
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Style="{StaticResource Toolbar}">
                         <StackPanel Orientation="Horizontal">
-                            <Button Content="Max treasury (you)" Command="{Binding MaxTreasuryCommand}"/>
-                            <Button Content="Freeze treasury (you)" Command="{Binding FreezeTreasuryCommand}"/>
+                            <Button Content="Max treasury" Command="{Binding MaxTreasuryCommand}"/>
+                            <Button Content="Freeze treasury" Command="{Binding FreezeTreasuryCommand}"/>
+                            <Button Content="Finish research" Command="{Binding FinishResearchCommand}"
+                                    ToolTip="Banks enough research points to complete your current advance. Civ3 checks this at the turn boundary, so the tech arrives when you end the turn."/>
+                            <Button Content="Max my cities' food + shields" Command="{Binding MaxCityStoresCommand}"/>
                             <TextBlock Style="{StaticResource Note}" VerticalAlignment="Center"
-                                       Text="Treasury is decoded from two fields — see References. Rates are tens of percent and always total 100%."/>
+                                       Text="These apply to your civilization. Treasury is decoded from two fields — see References."/>
                         </StackPanel>
                     </Border>
                     <DataGrid ItemsSource="{Binding Players}" AutoGenerateColumns="False"
@@ -100,9 +104,9 @@
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Style="{StaticResource Toolbar}">
                         <StackPanel Orientation="Horizontal">
-                            <Button Content="Fill food + shields" Command="{Binding MaxCityStoresCommand}"/>
+                            <Button Content="Max food + shields (my cities)" Command="{Binding MaxCityStoresCommand}"/>
                             <TextBlock Style="{StaticResource Note}" VerticalAlignment="Center"
-                                       Text="Only the anchor-bracketed prefix of the city record is shown, and it is Inferred rather than confirmed — there were no cities to read when these offsets were checked. Population, corruption, incomes and the build queue sit past where the layout stops being reliable. See docs/ReverseEngineering.md §4.4."/>
+                                       Text="Only the anchor-bracketed prefix of the city record is shown. Population, corruption, incomes and the build queue sit past where the layout stops being reliable — see docs/ReverseEngineering.md §4.4."/>
                         </StackPanel>
                     </Border>
                     <DataGrid ItemsSource="{Binding Cities}" AutoGenerateColumns="False"
@@ -130,7 +134,7 @@
                             <Button Content="Refresh all moves" Command="{Binding RefreshAllMovesCommand}"/>
                             <Button Content="Promote all to elite" Command="{Binding EliteAllUnitsCommand}"/>
                             <TextBlock Style="{StaticResource Note}" VerticalAlignment="Center"
-                                       Text="Damage is hit points LOST and Moves is points SPENT — zero is a fresh, undamaged unit."/>
+                                       Text="Damage is hit points LOST and Moves is points SPENT — zero is a fresh, undamaged unit. Freeze heals a unit between battles; it cannot stop one from being killed, because Civ3 resolves a whole battle inside a single call. See References."/>
                         </StackPanel>
                     </Border>
                     <DataGrid ItemsSource="{Binding Units}" AutoGenerateColumns="False"
@@ -144,7 +148,7 @@
                             <DataGridTextColumn Header="Damage" Binding="{Binding Damage, UpdateSourceTrigger=LostFocus}" Width="70"/>
                             <DataGridTextColumn Header="Moves used" Binding="{Binding MovesUsed, UpdateSourceTrigger=LostFocus}" Width="86"/>
                             <DataGridTextColumn Header="Veteran" Binding="{Binding Experience, UpdateSourceTrigger=LostFocus}" Width="66"/>
-                            <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Freeze}" Width="60"/>
+                            <DataGridCheckBoxColumn Header="Heal" Binding="{Binding Freeze}" Width="60"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>

@@ -203,6 +203,13 @@ public sealed class PlayerRowViewModel : ObservableObject
     /// <summary>Sets the treasury to the "max" preset.</summary>
     public void MaxTreasury() => Treasury = GameFacts.MaxTreasuryPreset;
 
+    /// <summary>
+    /// Banks enough research points to complete the current advance. Civ3 compares the accumulated
+    /// points against the advance's cost at the turn boundary, so the tech arrives when you end the
+    /// turn rather than immediately.
+    /// </summary>
+    public void FinishResearch() => ResearchBulbs = GameFacts.FinishResearchBulbs;
+
     // --- writes --------------------------------------------------------------------------------
 
     /// <summary>

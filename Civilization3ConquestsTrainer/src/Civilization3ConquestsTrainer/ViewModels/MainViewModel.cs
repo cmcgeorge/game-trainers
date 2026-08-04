@@ -12,12 +12,19 @@ public sealed class ProcessEntry
 {
     public int Id { get; }
     public string Name { get; }
-    public bool IsLikelyTarget { get; }
-    public string Display => $"{Name}  (pid {Id})";
 
-    public ProcessEntry(int id, string name, bool isLikelyTarget)
+    /// <summary>How well this process's name matches the game.</summary>
+    public ProcessMatch Match { get; }
+
+    public bool IsLikelyTarget => Match != ProcessMatch.None;
+
+    public string Display => Match == ProcessMatch.Exact
+        ? $"{Name}  (pid {Id})  ← the game"
+        : $"{Name}  (pid {Id})";
+
+    public ProcessEntry(int id, string name, ProcessMatch match)
     {
-        Id = id; Name = name; IsLikelyTarget = isLikelyTarget;
+        Id = id; Name = name; Match = match;
     }
 }
 
@@ -42,6 +49,11 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     private int _targetPid;
     private bool _multiplayer;
     private bool _suspendRefresh;
+
+    // Container shape as of the last rebuild, so the poll loop can notice units and cities coming and
+    // going without the user having to ask.
+    private (uint Items, int Last) _unitsShape;
+    private (uint Items, int Last) _citiesShape;
 
     public ObservableCollection<ProcessEntry> Processes { get; } = new();
     public ObservableCollection<PlayerRowViewModel> Players { get; } = new();
@@ -88,6 +100,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     public ICommand RefreshAllMovesCommand { get; }
     public ICommand EliteAllUnitsCommand { get; }
     public ICommand MaxCityStoresCommand { get; }
+    public ICommand FinishResearchCommand { get; }
 
     public MainViewModel()
     {
@@ -104,6 +117,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         RefreshAllMovesCommand = new RelayCommand(_ => ForMyUnits(u => u.RefreshMoves()), _ => IsLocated);
         EliteAllUnitsCommand = new RelayCommand(_ => ForMyUnits(u => u.MakeElite()), _ => IsLocated);
         MaxCityStoresCommand = new RelayCommand(_ => MaxCityStores(), _ => IsLocated);
+        FinishResearchCommand = new RelayCommand(_ => ForHuman(p => p.FinishResearch()), _ => IsLocated);
 
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(GameFacts.PollIntervalMs) };
         _poll.Tick += (_, _) => PollTick();
@@ -116,15 +130,17 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     public void RefreshProcesses()
     {
         int? previous = SelectedProcess?.Id;
+        int self = Environment.ProcessId;
+
         Processes.Clear();
         var list = new List<ProcessEntry>();
         foreach (var p in Process.GetProcesses())
         {
             try
             {
+                if (!ProcessPicker.IsSelectable(p.Id, self)) continue;
                 string name = p.ProcessName;
-                bool hit = GameFacts.TargetHints.Any(h => name.Contains(h, StringComparison.OrdinalIgnoreCase));
-                list.Add(new ProcessEntry(p.Id, name, hit));
+                list.Add(new ProcessEntry(p.Id, name, ProcessPicker.Rank(name)));
             }
             catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
             {
@@ -132,13 +148,16 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
             }
             finally { p.Dispose(); }
         }
-        foreach (var e in list.OrderByDescending(e => e.IsLikelyTarget)
-                              .ThenBy(e => e.Name, StringComparer.OrdinalIgnoreCase))
+
+        foreach (var e in ProcessPicker.Order(list, e => e.Match, e => e.Name))
             Processes.Add(e);
 
-        SelectedProcess = Processes.FirstOrDefault(e => e.Id == previous)
-                          ?? Processes.FirstOrDefault(e => e.IsLikelyTarget)
-                          ?? Processes.FirstOrDefault();
+        SelectedProcess = ProcessPicker.ChooseDefault(Processes, e => e.Match, e => e.Id, previous)
+                          ?? Processes.FirstOrDefault(e => e.Id == previous);
+
+        if (SelectedProcess == null)
+            Status = $"{GameFacts.ProcessName}.exe is not running. Start Civilization III: Conquests, " +
+                     "load or begin a game, then click Refresh.";
     }
 
     private void Attach()
@@ -307,7 +326,23 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
             Units.Add(row);
         }
 
+        _unitsShape = ContainerShape(loc.UnitsContainer);
+        _citiesShape = ContainerShape(loc.CitiesContainer);
         UpdateSummary();
+    }
+
+    /// <summary>
+    /// The two header fields that change when a container gains or loses entries: the item array
+    /// pointer (which moves when the game grows the array — it went from 100 to 400 slots in one
+    /// observed game) and the highest used index.
+    /// </summary>
+    private (uint Items, int Last) ContainerShape(nuint container)
+    {
+        if (_source == null) return default;
+        byte[] head = _source.Read(container, Civ3Layout.ContainerCapacity + 4);
+        if (head.Length < Civ3Layout.ContainerCapacity + 4) return default;
+        return (BitConverter.ToUInt32(head, Civ3Layout.ContainerItems),
+                BitConverter.ToInt32(head, Civ3Layout.ContainerLastIndex));
     }
 
     /// <summary>
@@ -374,7 +409,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         var me = Players.FirstOrDefault(p => p.IsHuman);
         if (me == null) { Status = "No human player row — re-locate."; return; }
         action(me);
-        Status = "Applied to your civilization.";
+        Status = $"Applied to {me.CivName}.";
     }
 
     // These test ownership unconditionally rather than trusting the MineOnly filter: rows are not
@@ -395,17 +430,15 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         foreach (var c in Cities)
         {
             if (!c.IsMine) continue;
-            c.StoredFood = CityStorePreset;
-            c.StoredProduction = CityStorePreset;
+            c.StoredFood = GameFacts.MaxCityStorePreset;
+            c.StoredProduction = GameFacts.MaxCityStorePreset;
             n++;
         }
         Status = n == 0
-            ? "You have no cities in the list — found a city first, then Re-scan."
-            : $"Filled the food and shield stores of {n} of your city/cities.";
+            ? "You have no cities yet — found one first."
+            : $"Maxed the food and shield stores of {n} of your cities. They will grow and finish " +
+              "whatever they are building on their next turn.";
     }
-
-    /// <summary>What "Fill food + shields" writes — comfortably past any granary or build cost.</summary>
-    private const int CityStorePreset = 500;
 
     // --- poll loop ------------------------------------------------------------------------------
 
@@ -435,13 +468,29 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
 
         foreach (var p in Players) { p.Refresh(_tables); p.ApplyFreeze(); }
 
+        // A row that stops validating means the object behind it is gone — a unit killed, a city
+        // captured or razed. Note it and rebuild *after* the loops, never during: Rescan() replaces
+        // the collections these foreach statements are walking.
         bool dropped = false;
         foreach (var c in Cities) { if (!c.Refresh(_tables, loc)) { dropped = true; continue; } c.ApplyFreeze(); }
         foreach (var u in Units) { if (!u.Refresh(_tables, loc)) { dropped = true; continue; } u.ApplyFreeze(); }
 
+        // Gains show up as a changed container shape; losses show up as a dropped row (a unit dying
+        // mid-array nulls its slot without moving LastIndex, so the shape alone would miss it).
+        bool grew = ContainerShape(loc.UnitsContainer) != _unitsShape
+                    || ContainerShape(loc.CitiesContainer) != _citiesShape;
+
+        if (grew || dropped)
+        {
+            int unitsBefore = Units.Count, citiesBefore = Cities.Count;
+            Rescan();
+            if (Units.Count != unitsBefore || Cities.Count != citiesBefore)
+                Status = $"Rebuilt: {Cities.Count} cities, {Units.Count} units " +
+                         (MineOnly ? "(yours)" : "(all civs)") + ".";
+            return;
+        }
+
         UpdateSummary();
-        if (dropped)
-            Status = "Some cities or units no longer validate (captured, razed or killed). Click Re-scan.";
     }
 
     private bool HasTargetExited()
@@ -506,7 +555,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
                  {
                      AttachCommand, DetachCommand, AutoLocateCommand, RescanCommand, MaxTreasuryCommand,
                      FreezeTreasuryCommand, HealAllUnitsCommand, RefreshAllMovesCommand, EliteAllUnitsCommand,
-                     MaxCityStoresCommand,
+                     MaxCityStoresCommand, FinishResearchCommand,
                  })
             (c as RelayCommand)?.RaiseCanExecuteChanged();
     }

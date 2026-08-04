@@ -40,7 +40,7 @@ Three projects in `Civilization3ConquestsTrainer.sln`: the WPF app, its harness,
     (`IScanHost`, `ScanValue`, `ScanResultViewModel`, `FrozenValueViewModel`) matches the repo's other
     value-scanner trainers.
 - `test/FormatCheck/` — headless harness (console `Exe`, `net8.0-windows` + `UseWPF` because it
-  references the WPF app for the view-model types). **278 checks**, no game and no copyrighted files
+  references the WPF app for the view-model types). **299 checks**, no game and no copyrighted files
   needed.
 
 It **has a `GameLocator`** and **no save editor**. The exe is native, unpacked, fixed-base and
@@ -103,13 +103,37 @@ at all; the game derives them from unit type plus veteran level.
 **The `City_Body` gap is real and deliberate.** The C3X header's own `field_XX` anchors agree with
 arithmetic up to `+0x54` and then drift by `0x18`, so population, corruption, incomes, the build queue
 and the city name are at unconfirmed offsets. `Civ3Layout.CityTrustedPrefixEnd` marks the boundary and
-nothing past it is surfaced. Do not "fix" this by guessing — close it with a game that actually has
-cities, or by decompiling `City_recompute_happiness` (`0x4C4660`) / `City_recompute_commerce`
-(`0x4B7770`).
+nothing past it is surfaced. Do not "fix" this by guessing — close it by decompiling
+`City_recompute_happiness` (`0x4C4660`) / `City_recompute_commerce` (`0x4B7770`). The prefix *itself*
+is now `[Confirmed]`: a game with 32 cities across 13 civs validated every record, and tallying
+`CityCivId` reproduced each leader's own `Cities_Count` exactly for all 13 — two unrelated structures
+agreeing — with the food and shield stores additionally round-tripped. `cultural_level` stays
+`[Inferred]`.
 
 **Tile visibility is inferred**, which is why "Reveal map" is gated behind an explicit acknowledgement
 instead of being a one-click button, and why every tile is checked for its own `'TILE'` tag before it
 is written to.
+
+**The trainer is data-only: it never writes to the game's code, and that is a decision, not an
+oversight.** The obvious missing feature is making a unit invincible, and it cannot be done by writing
+data. Civ3 resolves an entire battle inside one call to `Fighter_begin` (`0x4AB470`) — every round, the
+kill, and `Unit_score_kill` — so a trainer polling between frames has no instant at which to intervene;
+the damage freeze can only heal a survivor. And there is no per-unit hit-point ceiling to raise:
+maximum HP is computed by `Unit_get_max_hp` (`0x5CD180`) from unit type plus veteran level, never
+stored on the unit. The two ways forward were both considered and declined: buffing `UnitType.Defence`
+works but is *shared rules data*, so every AI unit of the same type is buffed too; and a real
+per-unit patch needs a code cave plus a `JMP` into `.text`, which is a different risk class from
+anything else here. Elite promotion is the only per-unit durability lever, and the References tab says
+so. Do not add a code patcher without asking.
+
+**The process picker must prefer an exact name match, and must exclude the trainer itself.** This bit
+once and the fix is pinned by `FormatCheck`: the trainer's own executable is `Civ3ConqTrainer.exe`,
+whose process name contains the `"civ3"` hint **and** sorts *before* `Civ3Conquests` under an ordinal
+comparison (`StringComparer.OrdinalIgnoreCase.Compare("Civ3ConqTrainer", "Civ3Conquests") < 0`). A
+picker that merely substring-matched and then sorted by name therefore auto-selected the trainer,
+attached to a 64-bit .NET process, and reported "not a 32-bit x86 image" — a correct diagnosis of the
+wrong target. `ProcessPicker` now ranks Exact above Hint, drops `Environment.ProcessId`, and refuses to
+auto-select a hint-only match rather than guessing. Do not "simplify" it back into a substring test.
 
 **Saves are PKWare DCL ("implode"), not zlib** — confirmed by decompressing a shipped save from offset
 0 (222 KB → 2.15 MB, `CIV3` magic, `LEAD` ×33). Save offsets equal RAM offsets, because the container

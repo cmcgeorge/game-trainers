@@ -9,8 +9,9 @@ namespace Civilization3ConquestsTrainer.ViewModels;
 /// to <c>City_Body + 0x54</c> and then drift by 0x18, which means population, corruption, the per-turn
 /// incomes, the build queue and the city name are all at offsets nobody has confirmed. Rather than
 /// display plausible-looking numbers read from unconfirmed offsets, this row exposes only the fields
-/// inside the anchored prefix — the ones the header brackets on both sides. See
-/// <c>docs/ReverseEngineering.md</c> for what it would take to open the rest up.
+/// inside the anchored prefix — which are themselves confirmed against a live game, by tallying
+/// <c>CivID</c> across every city and matching it to each leader's own <c>Cities_Count</c>. See
+/// <c>docs/ReverseEngineering.md</c> §4.4 for what it would take to open the rest up.
 /// </summary>
 public sealed class CityRowViewModel : ObservableObject
 {

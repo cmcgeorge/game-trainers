@@ -75,7 +75,18 @@ public sealed class UnitRowViewModel : ObservableObject
     }
 
     private bool _freeze;
-    /// <summary>Holds damage at zero and movement at zero against the turn tick and against combat.</summary>
+
+    /// <summary>
+    /// Re-zeroes damage and spent movement on every poll tick.
+    ///
+    /// <para><b>This heals; it does not shield.</b> Civ3 resolves a whole battle inside a single call
+    /// to <c>Fighter_begin</c> — every round, the kill, and the score update happen before that call
+    /// returns — so there is no instant during combat at which a 500 ms poll could intervene. A frozen
+    /// unit that survives a battle is restored to full before the next one; a frozen unit that loses a
+    /// battle dies exactly as it would have anyway. Making a unit genuinely unkillable is not possible
+    /// by writing data alone: maximum hit points are not stored on the unit, they are computed by
+    /// <c>Unit_get_max_hp</c> from the unit type and veteran level.</para>
+    /// </summary>
     public bool Freeze { get => _freeze; set => SetField(ref _freeze, value); }
 
     /// <summary>Refuses an out-of-range edit, or any edit at all while writes are blocked.</summary>
