@@ -86,6 +86,13 @@
     and play past the title screen -- the trainer locates the character roster
     automatically and needs no value searching. Its 'Save Editor' tab edits
     DDCHARS.DAT offline and works with the game closed.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer Wizardry1
+    Builds and launches the Wizardry 1 trainer. Start WIZ1.BAT in DOSBox
+    (it runs wizdos wiz1.dsk, a UCSD p-system emulator) and load or create
+    a party -- the trainer locates the roster automatically by structural scan
+    and needs no value searching.
 #>
 [CmdletBinding()]
 param(
