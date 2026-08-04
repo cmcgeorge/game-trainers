@@ -364,28 +364,33 @@ Iron Gargoyle, Golem, Evil Unicorn, Fire Elemental, Air Elemental, Water Element
 ### Step 2: Enter the Castle
 
 1. Press **G** at the town menu to enter Grelminar's Castle
-2. You start on the **Ground Level** outside the castle gate
+2. You start on the **Ground Level** at **(16, 31)**, outside the castle gate, facing north
 3. Walk forward (Up Arrow) 6 times to reach the gate, then once more to enter
 
 ### Step 3: Explore the Castle
 
-The castle has five levels:
+The castle is five levels. The game numbers them from the top down, so *going down* stairs makes the
+level number go *up*:
 
-1. **Ground Level** — The entrance floor. You start here. Contains the main entrance and stairs.
-2. **Top Castle Level** — The highest floor. Grelminar's private laboratory is here — this is where the Staff is found.
-3. **Mid Castle Level** — The middle floor. Connects the ground level to the top level.
-4. **Dungeon Level 1** — The first underground level. Contains tougher monsters and better treasure.
-5. **Dungeon Level 2** — The deepest level. The most dangerous monsters and best treasure.
+1. **Top Castle Level** — Grelminar's staff room and his lab. **The Staff is here.**
+2. **Mid Castle Level** — The royal floor: throne room, the main treasury, the commander's safe.
+3. **Ground Level** — The entrance floor. You start here, outside the gate.
+4. **Dungeon Level 1** — The first underground level: the most chests of any level, tougher monsters.
+5. **Dungeon Level 2** — The deepest level. The lich's living quarters and the hardest monsters.
+
+Full maps of all five, with every stairway, chest, locked and secret door marked, are under
+[Maps](#maps) below.
 
 ### Step 4: Find the Staff
 
-The Staff of Grelminar is in his private laboratory on the **Top Castle Level** (the third floor). You need to:
+The Staff of Grelminar sits on the **Top Castle Level** at **(20, 22)**, in the staff room past his
+lab. You need to:
 
-1. Navigate from the Ground Level up to the Mid Castle Level (find the stairs)
-2. Continue up to the Top Castle Level
-3. Explore the Top Castle Level to find the laboratory
-4. Search for secret doors (press **S** while facing walls) — the laboratory may be hidden
-5. Retrieve the Staff
+1. From the Ground Level, take the stairs up at **(9, 13)** to the Mid Castle Level
+2. Take the stairs up at **(12, 7)** to the Top Castle Level
+3. Work east and then south to the staff room in the south-east of the level
+4. Search for secret doors (press **S** while facing walls) — parts of the route are hidden behind them
+5. Step onto (20, 22) — "You find an item!"
 
 ### Step 5: Escape and Win
 
@@ -407,41 +412,390 @@ If you find a gate (the otherplanar portal) in the dungeon levels, use the Staff
 
 ## Maps
 
-The castle consists of five levels, each stored in a `DDMAP*.DAT` file (12,648 bytes each). The game provides an **auto-map** in the upper-right corner of the screen — a small arrow shows your position and facing direction. Squares you have explored are shown; unexplored squares are colored in. Small colored squares indicate something special (treasure, stairs, encounters, etc.).
+The castle is five levels, each a **32 x 32 grid** stored in its own `DDMAP<n>.DAT`. **X runs east**
+across the level and **Y runs south** down it, both 0-31, and the game numbers the levels from the
+top of the castle down - so *going down* stairs makes the level number go *up*:
 
-### Level layout
+| Level | Name | File | Role |
+|---|---|---|---|
+| 1 | Top Castle Level | `DDMAP1.DAT` | Grelminar's lab - **the Staff is here** |
+| 2 | Mid Castle Level | `DDMAP2.DAT` | Connector; the main treasury |
+| 3 | Ground Level | `DDMAP3.DAT` | Entrance and exit - you start outside the gate at **(16, 31)** |
+| 4 | Dungeon Level 1 | `DDMAP4.DAT` | Better treasure, tougher monsters |
+| 5 | Dungeon Level 2 | `DDMAP5.DAT` | Deepest and most dangerous |
+
+The stairways line up exactly - the same square on both levels - which makes the whole castle one
+column you can walk straight up and down:
 
 ```
-        Top Castle Level  (DDMAP1.DAT)  — Staff location
-              ↑
-        Mid Castle Level  (DDMAP2.DAT)  — Connector
-              ↑
-        Ground Level      (DDMAP3.DAT)  — Entrance/exit
-              ↓
-        Dungeon Level 1   (DDMAP4.DAT)  — Treasure & tough monsters
-              ↓
-        Dungeon Level 2   (DDMAP5.DAT)  — Deepest, most dangerous
+   Top Castle Level  (1)          (12,  7) down
+   Mid Castle Level  (2)  (12,  7) up      (9, 13) down
+   Ground Level      (3)   (9, 13) up     (20, 13) down     entrance (16, 31)
+   Dungeon Level 1   (4)  (20, 13) up      (5, 18) down
+   Dungeon Level 2   (5)   (5, 18) up
 ```
 
+The game draws its own **auto-map** in the upper-right of the screen, but only for squares you have
+already stood on. The maps below are the complete levels, read straight out of the map files; the
+trainer's **Maps tab** draws the same thing live, marks where you are, and can teleport you.
+
+### Reading the maps
+
+Y increases downward, so **north is up** on the page, exactly as the game shows it.
+
+| Glyph | Meaning |
+|---|---|
+| `-` `\|` | Wall |
+| `.` `:` | Door - walk straight through |
+| `#` | **Locked** door - needs Key 1, 2 or 3 |
+| `s` | **Secret** door - press `S` facing it to find it; it looks like a plain wall in game |
+| `<` `>` | Stairs up / stairs down |
+| `$` | Treasure chest |
+| `*` | Item - the two fixed items, including **THE STAFF** at (20, 22) on the Top Castle Level |
+| `!` | Ledge - walking here drops you to the level below and hurts |
+
+The secret doors are shown here because this is a guide; the game itself, and the trainer's map,
+draw them as ordinary walls until you have searched them out.
+
+### 1. Top Castle Level — `DDMAP1.DAT`
+
+Occupies X 5–26, Y 5–26. Stairs down (12, 7); item (20, 22); 9 chest squares.
+
+```
+                1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2
+      5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6
+
+   5
+       ------                            ------
+   6   |     |                           |     |
+             ----------------------------
+   7   |     :   :  >|                   :     |
+                 ----  ------------------
+   8   |     |   :     |     :           |     |
+       ------..--------##----            ..----
+   9       |     |$ $    |   |           | |
+                             ----------..
+  10       |     |$ $    |   |           | |
+
+  11       |     |$ $    :   |           | |
+           ##--------------------
+  12       |                     :       | |
+
+  13       |                     :       | |
+           ..--------------------
+  14       | | | | | | | | | |           | |
+
+  15       | | | | | | | | | |           | |
+             --  --  --  --  ----------..
+  16       |                 |           | |
+             --  --  --
+  17       | | | | | | |     |           | |
+                             ..----------
+  18       | | | | | | |     |           | |
+                             ----------..
+  19       | | | | | | |     |           | |
+           --------------..--..----------
+  20       |                 | |         | |
+           ss----..--..--..--
+  21       |  $|   |   |     | :         | |
+
+  22       |  $|   |   |     | :    *    | |
+       ------                            ..----
+  23   |     |$|   |   |     | |         |     |
+             ----------------------------
+  24   |     :                           :     |
+             ----------------------------
+  25   |     |                           |     |
+       ------                            ------
+  26
+
+```
+
+### 2. Mid Castle Level — `DDMAP2.DAT`
+
+Occupies X 5–26, Y 5–26. Stairs up (12, 7); stairs down (9, 13); edge (24, 15), (24, 16), (24, 17), (24, 18); 6 chest squares.
+
+```
+                1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2
+      5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6
+
+   5
+       ------                            ------
+   6   |     |                           |     |
+             ----------------------------
+   7   |     | s   |<      #             |     |
+                   --------
+   8   |     |$|   |$ $    |             |     |
+       ----..--                          ..----
+   9       |   :   |$ $ $  s             | |
+                   --------          ..--..
+  10       |   |   s       |         |     |
+           ....    ------          --
+  11       | | |   |     | |       |       |
+               ----              --
+  12       | | |         | |     |         |
+                               --
+  13       | |>|         s |   |           |
+             ----------..ss----
+  14       | :                 :           |
+
+  15       | :                 :            !
+             ----------....----
+  16       | :       |       | |            !
+                               --
+  17       | |       |       |   |          !
+                                 --
+  18       | |       |       |     |        !
+             ----------------      --
+  19       | :               |       |     |
+                             ------....----
+  20       | :                   |         |
+             ..--..--..--..--..--
+  21       | |   |   |   |   |   |         |
+
+  22       | |   |   |   |   |   |         |
+       ----..                    --------------
+  23   |     |   |   |   |   |   |       |     |
+             ----------------------------
+  24   |     :                           :     |
+             ----------------------------
+  25   |     |                           |     |
+       ------                            ------
+  26
+
+```
+
+### 3. Ground Level — `DDMAP3.DAT`
+
+Occupies X 0–31, Y 0–31. Stairs up (9, 13); stairs down (20, 13); 5 chest squares.
+
+```
+                          1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3
+      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+
+   0
+
+   1
+         --------------------------------------------------------
+   2     |                                                       |
+           ----------------------------------------------------
+   3     | |                       | |                         | |
+                                 --  --
+   4     | |                     |     |                       | |
+                                 --  --
+   5     | |                       | |                         | |
+                 ------            ##              ------
+   6     | |     |     |                           |    $|     | |
+                       ----------------------------
+   7     | |     |     |       |           | s     s    $|     | |
+
+   8     | |     |     |       |           |$|     |     |     | |
+                 ----....------            --      ------
+   9     | |         | :       :           |         |         | |
+                       --..ss--
+  10     | |         | | | |   |           |         |         | |
+                               ----....--------..----
+  11     | |         | | | |     |       |     : |   |         | |
+
+  12     | |         | | | |     |       |     | |   |         | |
+                       --                    --
+  13     | |         | |<| |     |       |   |>| |   |         | |
+                         ..------        ----
+  14     | |         | : |       |       |   | | |   |         | |
+                       --------
+  15     | |         | |       : |       |   | | |   |         | |
+
+  16     | |         | |$      | |       |   | | |   |         | |
+                       --------  --....----......
+  17     | |         | |       | |       :   :   |             | |
+
+  18     | |         | |       : |       |   |   |             | |
+                       --------
+  19     | |         | |       : |       |   |   |   |         | |
+                           ------        --------
+  20     | |         | |$  |     |       |   |   |   |         | |
+                     ..----..----
+  21     | |         |     |     |       |   |   |   |         | |
+
+  22     | |         |     |     |       |   |   |   |         | |
+                 ------..----..----....--..----......----
+  23     | |     |     :         :       :         |     |     | |
+                       ..--------        --------..
+  24     | |     |     |         |       |         |     |     | |
+                       ------------....------------
+  25     | |     |     |                           |     |     | |
+                 ------                            ------
+  26     | |                                                   | |
+
+  27     | |                                                   | |
+
+  28     | |                                                   | |
+           --------------..--------    --------##--------------
+  29     |               | :       |   |       : |               |
+         ------------------                    ------------------
+  30                       | | | | |   | | | | |
+                           --------    --------
+  31
+
+```
+
+### 4. Dungeon Level 1 — `DDMAP4.DAT`
+
+Occupies X 0–28, Y 0–31. Stairs up (20, 13); stairs down (5, 18); 14 chest squares.
+
+```
+                          1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2
+      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8
+                                           ------
+   0                                       |     |
+                                         --      --
+   1                                     |         |
+                   ------------------  --  --  --  --    ----
+   2               |   : |     | :   | |   | | | |   |   |   |
+
+   3               |   | |     | |  $| |   | | | |   |   |   |
+           ------                      --  --  --  --  ----..
+   4       |     | |   |         |  $|   |         |   |     |
+                   ----          ----    --      --
+   5       |     |     |         |         |     |     |     |
+                                           --  --    --
+   6       |     |     |         |           | |     | :     |
+           --  --      ----..----
+   7         | |           | |               | |     | |     |
+
+   8         | |           | |               | |     | |    $|
+         --                                            ------
+   9     | | | |           | |               | |     | |
+       --  --  ------------  ----------------  ------
+  10   |                                               |
+               ------  ------------  --------  ------
+  11   |       |     | |           | |       | |     | |
+             ------
+  12   |     |     | | |           | |       | |     | |
+         ----                          ----        --  --
+  13   | |   :    $| | |           | | |$  | |<|   |     |
+           --                                --
+  14   |   | |     | | |           | | |   |       |     |
+             ------                        --
+  15   |   |         | |           | | |   : |     |     |
+       --          --          ----..--ss--        --  --
+  16     | |       | | |       |         | | |       | |
+       --        --    ------                  ------  ------
+  17   |   |     |   | |     | |         | | | |   :     :   |
+     --    --  --                              ----      ----
+  18 |       | |>    : |     | |         | | | |   :     :   |
+     --        --              ----..----      ----      ----
+  19 |       |   |   | |     | |$  | |$  | | | |   :     :   |
+     ------      --                            ----      ----
+  20 |     | |     | | |     | |   | |   | | | |   :     :   |
+       --          --                          ----      ----
+  21 | |   | |       | |     | |   | |   | | | |   :     :   |
+       --              --..--                  ----      ----
+  22 |$ $| | |       |     |   |   : :   | | | |   :     :   |
+     ----            ------    ----ss----      ----      ----
+  23 |     | |                     | |     | | |   #     #   |
+     ----            --------------            ------ss------
+  24     |   |       |               |     | |     |     |
+         ----          ------------ss        ------
+  25                 | |           | |     |             |
+                                           --------
+  26                 | |           | |             |     |
+             --------..                            ------
+  27         | #       |           | |
+                       ------
+  28         |$|       |     |     | |
+
+  29         |$|       :    $|     | |
+             ----------      ------
+  30                   |    $s       |
+                             --------
+  31                   |    $|
+                       ------
+```
+
+### 5. Dungeon Level 2 — `DDMAP5.DAT`
+
+Occupies X 0–29, Y 0–26. Stairs up (5, 18); item (9, 1); 8 chest squares.
+
+```
+                          1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2
+      0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9
+             --------------------------
+   0         |                     s   |
+               --------ss--------  --
+   1         | |       |*|       | | | |
+     --------..--  ----  ----  --..--
+   2 |     :     | |         | |     | |
+                 --          --          ----------------------
+   3 |     |     |             |     | | |   :     | |     :   |
+           ------              ------    --                  --
+   4 |     :   |                 |   | | | | |     | |     | | |
+                                           --              --
+   5 |$ $  |   |                 |   | | |   |$    | |    $|   |
+     ------                              ..----          ----..
+   6       |   |                 |   | | |     |   | |   |$    |
+           ----------      ------              --  --  --
+   7                 |     |         | | |       | : : |       |
+                     --..--  --------            --  --
+   8                 |     | |         | |         : :         |
+                               --------  ----------  ----------
+   9                 |     | | |         |         | |   | |   |
+
+  10                 |     | | |         |         : |   : |   |
+                                                         --
+  11                 |     | | |         |         : |   | :   |
+                     --..--
+  12                   | |   | |         |         | |   | |   |
+                                         ----------  ..------..
+  13                   | |   | |         |                     |
+                         ----            ..----..--  ..------..
+  14                   | s     |         |   | |   | |   | |   |
+                         ----------------
+  15                   | |     |         |   : |   | |   | :   |
+                                             --          --
+  16                   | |     :         |   | :   | |   : |   |
+           ------------##
+  17       |             |     |         |   | |  $| |  $| |  $|
+             ----------  --------..----------------..----------
+  18       |    <|   : |   :                         |
+           ------------  ----------------------------
+  19                   | |         | |     | |     |
+                       ..                              ------
+  20                   | |         | |     | |     |   |     |
+                               --##----..------..--
+  21                   | |     |                   |   |     |
+                         ------                    ----
+  22                   |       :                   : # #     |
+                     --..------                    ----
+  23                 |     |   |                   |   |     |
+                               --##----..------..--
+  24                 |     |       | |     | |     |   |     |
+                                                       ------
+  25                 |     |       | |     | |     |
+                     --------------  ------  ------
+  26
+
+```
 ### Navigation tips
 
 - **Stairs** connect levels. Look for "Going up stairs..." or "Going down stairs..." messages.
 - **Secret doors** are found by pressing **S** while facing a wall. The message "No Wall!" means you found one.
-- **Locked doors** require the appropriate Key (Key 1, Key 2, or Key 3).
-- **Treasure chests** are found by exploring — "You find a treasure chest!!!"
-- **Items** are found by exploring — "You find an item!"
-- **Falling off edges**: "You foolishly walk off the edge of the building and crash to the ground 20 feet below, injuring yourself!" — be careful near edges on upper levels.
-- **Encounters** are random as you walk — "ENCOUNTER!" appears when monsters attack.
+- **Locked doors** require the appropriate Key (Key 1, Key 2, or Key 3) - and the key is consumed on
+  the roll described under *Using an item may destroy it*, so carry spares.
+- **Treasure chests** are found by exploring - "You find a treasure chest!!!"
+- **Items** are found by exploring - "You find an item!"
+- **Falling off edges**: "You foolishly walk off the edge of the building and crash to the ground 20 feet below, injuring yourself!" - marked `!` on the maps above, and they drop you a level.
+- **Encounters** are random as you walk - "ENCOUNTER!" appears when monsters attack.
 
 ### What to look for on each level
 
 | Level | Key features |
 |---|---|
-| Ground Level | Castle entrance, stairs up, initial encounters (easier monsters) |
-| Mid Castle Level | Stairs up and down, mid-difficulty monsters, mid-tier treasure |
-| Top Castle Level | Grelminar's laboratory (the Staff), harder monsters, secret doors |
-| Dungeon Level 1 | Good treasure, tough monsters (Trolls, Ogres, Minotaurs) |
-| Dungeon Level 2 | Best treasure, hardest monsters (Demons, Death Knights, Demon Lord) |
+| Ground Level | Castle entrance at (16, 31), stairs both ways, initial encounters (easier monsters) |
+| Mid Castle Level | The main treasury, the army commander's safe, stairs both ways |
+| Top Castle Level | Grelminar's staff room (the Staff at (20, 22)), the lich in his lab, secret doors |
+| Dungeon Level 1 | The most chests of any level, tough monsters (Trolls, Ogres, Minotaurs) |
+| Dungeon Level 2 | The lich's living quarters, hardest monsters (Demons, Death Knights, Demon Lord) |
 
 ## Hints
 

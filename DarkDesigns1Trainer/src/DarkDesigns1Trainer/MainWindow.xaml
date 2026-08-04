@@ -1,11 +1,17 @@
 <Window x:Class="DarkDesigns1Trainer.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:DarkDesigns1Trainer"
         Title="Dark Designs I Trainer" Height="720" Width="960"
         Icon="Assets/app.ico"
         WindowStartupLocation="CenterScreen" WindowState="Maximized">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+        <local:MapScaleConverter x:Key="MapScale"/>
+        <local:WallBrushConverter x:Key="WallBrush"/>
+        <local:SquareBrushConverter x:Key="SquareBrush"/>
+        <local:VisitedBrushConverter x:Key="VisitedBrush"/>
+        <local:FacingAngleConverter x:Key="FacingAngle"/>
         <Style TargetType="TextBox">
             <Setter Property="Margin" Value="2"/>
             <Setter Property="Padding" Value="2,1"/>
@@ -475,6 +481,7 @@
                 <Grid Margin="6">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
@@ -485,7 +492,27 @@
                         <TextBlock Text="{Binding SaveFilePath}" VerticalAlignment="Center" Margin="8,0" Foreground="#555"/>
                     </StackPanel>
 
-                    <GroupBox Grid.Row="1" Header="Characters in DDCHARS.DAT">
+                    <GroupBox Grid.Row="1" Header="Saved party position" Margin="0,0,0,6"
+                              Visibility="{Binding HasSaveFile, Converter={StaticResource BoolToVis}}">
+                        <StackPanel Margin="4">
+                            <TextBlock TextWrapping="Wrap" Foreground="#555"
+                                       Text="The save header carries where the party was standing. Unlike the live teleport on the Maps tab, the level is safe to change here: the game loads whichever level's map the header names when it reads this file back, so the two can never disagree. Level 0 means the party is in town. Edit with the game closed — Dark Designs rewrites this file from memory on (Q)uit and save."/>
+                            <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                <TextBlock Text="Level" Style="{StaticResource FieldLabel}"/>
+                                <TextBox Width="50" Text="{Binding SaveLevel}"/>
+                                <TextBlock Text="X" Style="{StaticResource FieldLabel}" MinWidth="0"/>
+                                <TextBox Width="50" Text="{Binding SaveX}"/>
+                                <TextBlock Text="Y" Style="{StaticResource FieldLabel}" MinWidth="0"/>
+                                <TextBox Width="50" Text="{Binding SaveY}"/>
+                                <TextBlock Text="Facing" Style="{StaticResource FieldLabel}" MinWidth="0"/>
+                                <TextBox Width="50" Text="{Binding SaveFacing}"/>
+                                <TextBlock Text="{Binding SavePositionText}" Style="{StaticResource FieldLabel}"
+                                           MinWidth="0" Foreground="#555"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox Grid.Row="2" Header="Characters in DDCHARS.DAT">
                         <Grid Margin="6">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="200"/>
@@ -663,6 +690,186 @@
                             <ItemsControl ItemsSource="{Binding Reference.Monsters}" FontFamily="Consolas"/>
                         </ScrollViewer>
                     </GroupBox>
+                </Grid>
+            </TabItem>
+
+            <!-- ======================= MAPS ======================= -->
+            <TabItem Header="🗺 Maps">
+                <Grid Margin="6" DataContext="{Binding Maps}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="300"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Level picker + the level's own room list -->
+                    <GroupBox Grid.Column="0" Header="Places on this level">
+                        <DockPanel>
+                            <ComboBox DockPanel.Dock="Top" Margin="2"
+                                      ItemsSource="{Binding Levels}" SelectedItem="{Binding SelectedLevel}"
+                                      DisplayMemberPath="Header"/>
+                            <TextBlock DockPanel.Dock="Top" Margin="4,2" Foreground="#666" TextWrapping="Wrap"
+                                       Text="Room names and descriptions come out of the level's own map file, so they are the game's words, not a walkthrough's. Click one to aim the teleport at it."/>
+                            <ListBox ItemsSource="{Binding Rooms}" SelectedItem="{Binding SelectedRoom}"
+                                     HorizontalContentAlignment="Stretch"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,1">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Coord}" Width="62" Foreground="#777"/>
+                                                <TextBlock Text="{Binding Header}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
+                                                       Foreground="#666" Margin="62,0,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </DockPanel>
+                    </GroupBox>
+
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Margin="6,0,0,0">
+                        <StackPanel>
+                            <GroupBox Header="Where the party is">
+                                <StackPanel Margin="4">
+                                    <TextBlock TextWrapping="Wrap" Foreground="#555"
+                                               Text="The party's level, square and facing are four values in the game's data segment, and the level it is walking around is a 12,648-byte buffer a little further on. Attach and scan on the Party tab first, then click Locate: the roster the scan found pins both, and the map bytes behind them are checked before anything is believed. Nothing works until the party is inside Grelminar's castle — in town there is no level loaded to recognise."/>
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <Button Content="Locate the party" Command="{Binding LocateCommand}"/>
+                                        <TextBlock Text="{Binding LocateState}" Foreground="#777"
+                                                   VerticalAlignment="Center" Margin="8,0,0,0" TextWrapping="Wrap"/>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding PositionText}" FontWeight="Bold" FontSize="13" Margin="2,6,0,0"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Map" Margin="0,8,0,0">
+                                <StackPanel Margin="4">
+                                    <TextBlock TextWrapping="Wrap" Foreground="#555"
+                                               Text="X runs east across the level and Y runs south down it, matching the game — the castle entrance is (16, 31) on the Ground Level, at the bottom. Grey edges are walls (an undiscovered secret door draws as one, exactly as the game shows it); amber edges are doors, locked or not. Green squares are stairs up, blue stairs down, amber chests, purple the two fixed items, red the ledges you fall off. A green tint marks squares the party has already mapped. Click any square to aim the teleport at it."/>
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <Button Content="Load game folder…" Command="{Binding LoadFolderCommand}"
+                                                ToolTip="Point at the folder holding DDMAP1.DAT … DDMAP5.DAT to browse every level, not just the one the party is on."/>
+                                        <Button Content="Reveal whole level" Command="{Binding RevealCommand}"
+                                                ToolTip="Marks every square on the current level as mapped, which is what the game's own automap draws from. The game keeps it and writes it into that level's DDMAP file when it next saves — the same thing walking everywhere would do."/>
+                                        <TextBlock Text="{Binding FolderStatus}" Foreground="#777"
+                                                   VerticalAlignment="Center" Margin="8,0,0,0" TextWrapping="Wrap"/>
+                                    </WrapPanel>
+                                    <TextBlock Text="{Binding MapSource}" Foreground="#777" Margin="2,6,0,0" TextWrapping="Wrap"/>
+
+                                    <!-- 32 squares at 18px plus the border: sized so a whole level
+                                         fits without scrolling, and scrolls anyway on a short window. -->
+                                    <ScrollViewer MaxHeight="580" Margin="0,6,0,0"
+                                                  HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                        <!-- The border wraps the grid rather than being sized with it, so
+                                             the 32 cells get their full 576px and Map_Click's coordinates,
+                                             taken relative to the Grid, line up with what is drawn. -->
+                                        <Border BorderBrush="#CCC" BorderThickness="1" Background="#FBFBF5"
+                                                HorizontalAlignment="Left" VerticalAlignment="Top">
+                                            <Grid MouseLeftButtonDown="Map_Click" Background="Transparent"
+                                                  ClipToBounds="True"
+                                                  Width="{Binding GridSize, Converter={StaticResource MapScale}}"
+                                                  Height="{Binding GridSize, Converter={StaticResource MapScale}}">
+                                                <Rectangle>
+                                                    <Rectangle.Fill>
+                                                        <DrawingBrush TileMode="Tile" Viewport="0,0,18,18" ViewportUnits="Absolute">
+                                                            <DrawingBrush.Drawing>
+                                                                <GeometryDrawing Geometry="M0,0 L18,0 18,18 0,18 Z">
+                                                                    <GeometryDrawing.Pen>
+                                                                        <Pen Brush="#E8E8DC" Thickness="1"/>
+                                                                    </GeometryDrawing.Pen>
+                                                                </GeometryDrawing>
+                                                            </DrawingBrush.Drawing>
+                                                        </DrawingBrush>
+                                                    </Rectangle.Fill>
+                                                </Rectangle>
+
+                                                <ItemsControl ItemsSource="{Binding Squares}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <Canvas/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemContainerStyle>
+                                                        <Style TargetType="ContentPresenter">
+                                                            <Setter Property="Canvas.Left" Value="{Binding X, Converter={StaticResource MapScale}}"/>
+                                                            <Setter Property="Canvas.Top" Value="{Binding Y, Converter={StaticResource MapScale}}"/>
+                                                        </Style>
+                                                    </ItemsControl.ItemContainerStyle>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Grid Width="18" Height="18" Background="Transparent">
+                                                                <Grid.ToolTip>
+                                                                    <StackPanel MaxWidth="280">
+                                                                        <TextBlock FontWeight="Bold">
+                                                                            <Run Text="{Binding Coord, Mode=OneWay}"/>
+                                                                            <Run Text="  "/>
+                                                                            <Run Text="{Binding RoomName, Mode=OneWay}"/>
+                                                                        </TextBlock>
+                                                                    </StackPanel>
+                                                                </Grid.ToolTip>
+                                                                <Rectangle Fill="{Binding Visited, Converter={StaticResource VisitedBrush}}"/>
+                                                                <Rectangle Margin="3" Fill="{Binding Kind, Converter={StaticResource SquareBrush}}"/>
+                                                                <Rectangle Width="2" HorizontalAlignment="Left"
+                                                                           Fill="{Binding West, Converter={StaticResource WallBrush}}"/>
+                                                                <Rectangle Width="2" HorizontalAlignment="Right"
+                                                                           Fill="{Binding East, Converter={StaticResource WallBrush}}"/>
+                                                                <Rectangle Height="2" VerticalAlignment="Top"
+                                                                           Fill="{Binding North, Converter={StaticResource WallBrush}}"/>
+                                                                <Rectangle Height="2" VerticalAlignment="Bottom"
+                                                                           Fill="{Binding South, Converter={StaticResource WallBrush}}"/>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <!-- Teleport target -->
+                                                <Canvas>
+                                                    <Border Width="18" Height="18" BorderBrush="#2E86DE" BorderThickness="2"
+                                                            Canvas.Left="{Binding TargetX, Converter={StaticResource MapScale}}"
+                                                            Canvas.Top="{Binding TargetY, Converter={StaticResource MapScale}}"/>
+                                                </Canvas>
+
+                                                <!-- Live party marker, pointing the way it faces -->
+                                                <Canvas>
+                                                    <Grid Width="18" Height="18" ToolTip="The party's live position"
+                                                          Visibility="{Binding ShowLiveMarker, Converter={StaticResource BoolToVis}}"
+                                                          Canvas.Left="{Binding LiveX, Converter={StaticResource MapScale}}"
+                                                          Canvas.Top="{Binding LiveY, Converter={StaticResource MapScale}}">
+                                                        <Path Fill="#27AE60" Stroke="White" StrokeThickness="1"
+                                                              Data="M9,2 L15,15 L9,12 L3,15 Z"
+                                                              RenderTransformOrigin="0.5,0.5">
+                                                            <Path.RenderTransform>
+                                                                <RotateTransform Angle="{Binding Position.Facing, Converter={StaticResource FacingAngle}}"/>
+                                                            </Path.RenderTransform>
+                                                        </Path>
+                                                    </Grid>
+                                                </Canvas>
+                                            </Grid>
+                                        </Border>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Teleport" Margin="0,8,0,0">
+                                <StackPanel Margin="4">
+                                    <TextBlock TextWrapping="Wrap" Foreground="#555"
+                                               Text="Click a square or a place on the left, then Teleport. This only moves the party around the level it is already on: the game loads a level's map when you take its stairs, so moving the level number alone would leave you walking a different map than the one on screen. To change level, teleport onto a stairway and take a step — or edit the saved position in DDCHARS.DAT on the Save Editor tab, where the level is safe to change because the game loads the matching map when it reads the file back. Do it while exploring, not mid-fight."/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <TextBlock Text="Target X" Style="{StaticResource FieldLabel}"/>
+                                        <TextBox Width="60" Text="{Binding TargetX}"/>
+                                        <TextBlock Text="Y" Style="{StaticResource FieldLabel}" MinWidth="0"/>
+                                        <TextBox Width="60" Text="{Binding TargetY}"/>
+                                        <TextBlock Text="Facing" Style="{StaticResource FieldLabel}" MinWidth="0"/>
+                                        <ComboBox Width="90" Margin="2" ItemsSource="{Binding Facings}"
+                                                  SelectedIndex="{Binding TargetFacing}"/>
+                                        <Button Content="Teleport" Command="{Binding TeleportCommand}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding TargetDescription}" Foreground="#555" Margin="4,2,0,0" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
             </TabItem>
         </TabControl>

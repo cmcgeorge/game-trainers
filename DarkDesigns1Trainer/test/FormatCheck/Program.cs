@@ -8,6 +8,7 @@ using DarkDesigns1Trainer.Game;
 
 using DarkDesigns1Trainer.Memory;
 using DarkDesigns1Trainer.ViewModels;
+using GameTrainers.Common.Memory;
 
 int failures = 0;
 
@@ -786,6 +787,668 @@ else
 }
 Console.WriteLine();
 
+// =============================================================================
+//  MAPS: level format, party position, and the map locator
+// =============================================================================
+
+// --- map format constants ----------------------------------------------------
+Console.WriteLine("Map format constants:");
+Check("map file size", MapFormat.FileSize, 12648);
+Check("grid size", MapFormat.GridSize, 32);
+Check("directions", MapFormat.Directions, 4);
+Check("wall section length", MapFormat.WallsLength, 4096);
+Check("contents section length", MapFormat.ContentsLength, 1024);
+Check("contents follow the walls", MapFormat.OffWalls + MapFormat.WallsLength, MapFormat.OffContents);
+Check("wall X stride", MapFormat.WallStrideX, 128);
+Check("wall Y stride", MapFormat.WallStrideY, 4);
+// The text block is the tail of the file: 127 forty-byte lines ending exactly on the file size,
+// which is what accounts for every one of the 12,648 bytes.
+Check("text block ends at the file size",
+      MapFormat.OffTextLines + MapFormat.TextLineCount * MapFormat.TextLineSize, MapFormat.FileSize);
+Check("the two text index tables are 64 entries apart",
+      MapFormat.OffTextCount - MapFormat.OffTextFirst, MapFormat.EventCodeCount);
+Check("undecoded span sits between the tables and the text",
+      MapFormat.OffTextCount + MapFormat.EventCodeCount, MapFormat.OffUndecoded);
+Check("position block size", MapFormat.PositionBlockSize, 8);
+Check("levels", MapBook.Levels.Count, 5);
+Check("level 3 is the Ground Level", MapBook.LevelName(3), "Ground Level");
+Check("level 0 is town", MapBook.LevelName(0), "Town");
+Check("map file name", MapBook.MapFileName(3), "DDMAP3.DAT");
+
+// The locator's arithmetic is a chain of data-segment offsets the disassembly pinned; assert the
+// deltas against the offsets themselves so a typo in one cannot quietly move the other.
+Check("position block sits 0xEFC past the roster array",
+      MapFormat.PositionFromRosterArray, 0x1320 - 0x0424);
+Check("position block sits 0xEB4 past the file's first record",
+      MapFormat.PositionFromRosterFirstFileSlot, 0x1320 - 0x046C);
+Check("map buffer sits 0x3DD4 past the position block", MapFormat.MapFromPosition, 0x3DD4);
+Check("the two roster deltas differ by one record",
+      MapFormat.PositionFromRosterArray - MapFormat.PositionFromRosterFirstFileSlot,
+      CharacterFormat.RecordSize);
+Console.WriteLine();
+
+// --- indexing ----------------------------------------------------------------
+Console.WriteLine("Map indexing:");
+Check("first wall byte", MapFormat.WallIndex(0, 0, 0), 0);
+Check("last wall byte", MapFormat.WallIndex(31, 31, 3), MapFormat.WallsLength - 1);
+Check("first content byte", MapFormat.ContentIndex(0, 0), MapFormat.OffContents);
+Check("last content byte", MapFormat.ContentIndex(31, 31), MapFormat.OffContents + MapFormat.ContentsLength - 1);
+Check("north then south returns", MapFormat.Opposite(MapFormat.North), MapFormat.South);
+Check("east then west returns", MapFormat.Opposite(MapFormat.East), MapFormat.West);
+// The deltas are the game's own tables: north walks Y down, east walks X up.
+Check("north steps Y down", MapFormat.DeltaY[MapFormat.North], -1);
+Check("north holds X", MapFormat.DeltaX[MapFormat.North], 0);
+Check("east steps X up", MapFormat.DeltaX[MapFormat.East], 1);
+Check("south steps Y up", MapFormat.DeltaY[MapFormat.South], 1);
+Check("west steps X down", MapFormat.DeltaX[MapFormat.West], -1);
+Check("facing 0 is North", MapFormat.FacingName(0), "North");
+Check("facing 3 is West", MapFormat.FacingName(3), "West");
+for (int d = 0; d < MapFormat.Directions; d++)
+{
+    int back = MapFormat.Opposite(d);
+    if (MapFormat.DeltaX[d] != -MapFormat.DeltaX[back] || MapFormat.DeltaY[d] != -MapFormat.DeltaY[back])
+        Check($"direction {d} and its opposite cancel", false, true);
+}
+Console.WriteLine("  [OK] every direction and its opposite cancel out");
+Console.WriteLine();
+
+// --- wall bytes --------------------------------------------------------------
+// Both tables below are the game's, not a judgement call: the classification is the 16-byte array
+// the main loop builds on its stack for the automap renderer, and the passability rule is the
+// movement routine's own test (0 and 2 outright, 8..16, everything else blocked).
+Console.WriteLine("Wall byte semantics:");
+Check("0 is open", MapFormat.Classify(0), WallKind.Open);
+Check("1 is a wall", MapFormat.Classify(1), WallKind.Wall);
+Check("2 is a door", MapFormat.Classify(2), WallKind.Door);
+Check("a secret door draws as a wall", MapFormat.Classify(MapFormat.WallSecretDoor), WallKind.Wall);
+Check("a found secret door draws as a door", MapFormat.Classify(MapFormat.WallOpenedSecret), WallKind.Door);
+Check("an unlocked door draws as a door", MapFormat.Classify(MapFormat.WallUnlocked1), WallKind.Door);
+Check("out-of-table values draw as a wall", MapFormat.Classify(200), WallKind.Wall);
+Check("open is passable", MapFormat.IsPassable(0), true);
+Check("a wall is not", MapFormat.IsPassable(1), false);
+Check("a door is passable", MapFormat.IsPassable(2), true);
+Check("a locked door is not", MapFormat.IsPassable(MapFormat.WallLocked2), false);
+Check("a secret door is not, until it is found", MapFormat.IsPassable(MapFormat.WallSecretDoor), false);
+Check("a found secret door is", MapFormat.IsPassable(MapFormat.WallOpenedSecret), true);
+Check("16 is the last passable value", MapFormat.IsPassable(16), true);
+Check("17 is not", MapFormat.IsPassable(17), false);
+Check("key 1 opens lock 3", MapFormat.KeyFor(MapFormat.WallLocked1), 1);
+Check("key 3 opens lock 5", MapFormat.KeyFor(MapFormat.WallLocked3), 3);
+Check("a plain wall needs no key", MapFormat.KeyFor(1), 0);
+Console.WriteLine();
+
+// --- party position ----------------------------------------------------------
+Console.WriteLine("Party position encode / decode:");
+var pos = new PartyPosition(3, 16, 31, 0);
+var posBytes = pos.ToBytes();
+Check("encodes to 8 bytes", posBytes.Length, 8);
+Check("level word", ReadU16(posBytes, MapFormat.PosOffLevel), 3);
+Check("X word", ReadU16(posBytes, MapFormat.PosOffX), 16);
+Check("Y word", ReadU16(posBytes, MapFormat.PosOffY), 31);
+Check("facing word", ReadU16(posBytes, MapFormat.PosOffFacing), 0);
+Check("round-trips", PartyPosition.FromBytes(posBytes), pos);
+Check("in the dungeon", pos.InDungeon, true);
+Check("is plausible", pos.IsPlausible, true);
+Check("town is plausible but not in the dungeon", new PartyPosition(0, 0, 0, 0).InDungeon, false);
+Check("town position is still plausible", new PartyPosition(0, 0, 0, 0).IsPlausible, true);
+Check("level 6 is not plausible", new PartyPosition(6, 0, 0, 0).IsPlausible, false);
+Check("X 32 is not plausible", new PartyPosition(1, 32, 0, 0).IsPlausible, false);
+Check("facing 4 is not plausible", new PartyPosition(1, 0, 0, 4).IsPlausible, false);
+Check("clamping pulls a wild value into range",
+      new PartyPosition(99, -4, 400, 9).Clamped(), new PartyPosition(5, 0, 31, 3));
+
+// The teleport writes X, Y and facing and deliberately leaves the level word alone: the game only
+// loads a level's map when it takes a stairway, so moving the level on its own would leave the
+// party walking a map it is not on. Drive the exact range MapsViewModel.Teleport uses.
+{
+    var host = new FakeHost(64);
+    new PartyPosition(3, 16, 31, MapFormat.North).WriteTo(host.Mem, 0);
+    var target = new PartyPosition(1, 20, 13, MapFormat.East);      // a level the write must ignore
+    Check("teleport write accepted",
+          ((ICharacterHost)host).WriteBytes(0, target.ToBytes(), MapFormat.PosOffX,
+                                            MapFormat.PositionBlockSize - MapFormat.PosOffX), true);
+    var landed = PartyPosition.FromBytes(host.Mem, 0);
+    Check("teleport moved X", landed.X, 20);
+    Check("teleport moved Y", landed.Y, 13);
+    Check("teleport turned the party", landed.Facing, MapFormat.East);
+    Check("teleport left the level alone", landed.Level, 3);
+    Check("teleport touched exactly six bytes",
+          MapFormat.PositionBlockSize - MapFormat.PosOffX, 6);
+}
+
+// The reveal write is the easier of the two to get wrong: WriteRange applies the offset to both
+// source and destination, so a regression to offset 0 would blast 1,024 bytes over the wall
+// section of a live map instead of the contents section. Drive the exact call.
+{
+    var host = new FakeHost(MapFormat.FileSize);
+    var original = BuildTestMap();
+    Array.Copy(original, host.Mem, MapFormat.FileSize);
+
+    var map = new DungeonMap(host.Mem, 0, 3);
+    Check("reveal marks the unmapped squares", map.RevealAll() > 0, true);
+    Check("reveal write accepted",
+          ((ICharacterHost)host).WriteBytes(0, host.Mem, MapFormat.OffContents, MapFormat.ContentsLength), true);
+
+    bool wallsIntact = host.Mem.AsSpan(MapFormat.OffWalls, MapFormat.WallsLength)
+                       .SequenceEqual(original.AsSpan(MapFormat.OffWalls, MapFormat.WallsLength));
+    bool textIntact = host.Mem.AsSpan(MapFormat.OffTextLines)
+                      .SequenceEqual(original.AsSpan(MapFormat.OffTextLines));
+    Check("reveal left the wall section untouched", wallsIntact, true);
+    Check("reveal left the text section untouched", textIntact, true);
+    Check("reveal only set the mapped bit — event codes survive",
+          new DungeonMap(host.Mem, 0, 3).EventCode(5, 5), MapFormat.CodeStairsUp);
+    Check("a revealed map still validates", MapFormat.LooksLikeMap(host.Mem, 0), true);
+}
+Console.WriteLine();
+
+// --- a synthetic level -------------------------------------------------------
+Console.WriteLine("Synthetic level decode:");
+byte[] mapData = BuildTestMap();
+Check("validates as a map", MapFormat.LooksLikeMap(mapData, 0), true);
+Check("walls are reciprocal", MapFormat.HasWallReciprocity(mapData, 0), true);
+
+var dm = new DungeonMap(mapData, 0, 3);
+Check("level name", dm.LevelName, "Ground Level");
+Check("outer north edge is a wall", dm.Wall(4, 0, MapFormat.North), WallKind.Wall);
+Check("outer south edge is a wall", dm.Wall(4, 31, MapFormat.South), WallKind.Wall);
+Check("the planted door reads as a door", dm.Wall(10, 10, MapFormat.East), WallKind.Door);
+Check("and the square east of it agrees", dm.Wall(11, 10, MapFormat.West), WallKind.Door);
+Check("the planted door is passable", dm.CanWalk(10, 10, MapFormat.East), true);
+Check("the planted secret door is not", dm.CanWalk(12, 10, MapFormat.East), false);
+Check("but it draws as a wall", dm.Wall(12, 10, MapFormat.East), WallKind.Wall);
+Check("stairs up", dm.Kind(5, 5), SquareKind.StairsUp);
+Check("stairs down", dm.Kind(6, 6), SquareKind.StairsDown);
+Check("chest", dm.Kind(7, 7), SquareKind.TreasureChest);
+Check("item", dm.Kind(8, 8), SquareKind.Item);
+Check("edge", dm.Kind(9, 9), SquareKind.Edge);
+Check("a described room is not a special square", dm.Kind(3, 3), SquareKind.Plain);
+// The game retires a looted square by stamping a code past 0x3F over it — 0xF7 for a chest, 0xF8
+// for an item. Both have bit 6 set, so a validator that assumed six-bit codes would reject any map
+// the player had actually looted, and a six-bit mask would keep reading them back as treasure.
+Check("an emptied chest reads as emptied, not as a chest", dm.Kind(10, 3), SquareKind.Emptied);
+Check("an emptied item reads as emptied, not as an item", dm.Kind(11, 3), SquareKind.Emptied);
+Check("an emptied square has no event code left", dm.EventCode(10, 3), 0);
+Check("an emptied square is still marked visited", dm.IsVisited(10, 3), true);
+Check("0xF7 decodes to nothing", MapFormat.DecodeEventCode(0xF7), 0);
+Check("0xF8 decodes to nothing", MapFormat.DecodeEventCode(0xF8), 0);
+Check("0xF7 is recognised as emptied", MapFormat.IsEmptied(0xF7), true);
+Check("a visited chest is not emptied", MapFormat.IsEmptied(MapFormat.VisitedFlag | MapFormat.CodeTreasureChest), false);
+Check("a visited chest still decodes as a chest",
+      MapFormat.DecodeEventCode(MapFormat.VisitedFlag | MapFormat.CodeTreasureChest), MapFormat.CodeTreasureChest);
+Check("the code field is seven bits, not six", MapFormat.EventCodeMask, 0x7F);
+Check("its event code", dm.EventCode(3, 3), 1);
+Check("visited bit is read, not confused with the code", dm.EventCode(3, 4), 1);
+Check("the visited square is visited", dm.IsVisited(3, 4), true);
+Check("its neighbour is not", dm.IsVisited(3, 3), false);
+// One square walked, plus the looted chest and item the game stamped its mapped bit onto.
+Check("visited count", dm.VisitedCount, 3);
+
+var text1 = dm.TextFor(1);
+Check("room 1 has three lines", text1.Count, 3);
+Check("room 1 name", text1[0], "GREAT HALL");
+Check("room 1 body", text1[2], "banners.");
+Check("room 2 name", dm.TextFor(2)[0], "GUARD ROOM");
+Check("an unused code has no text", dm.TextFor(40).Count, 0);
+Check("code 0 has no text", dm.TextFor(0).Count, 0);
+
+var rooms = dm.Rooms();
+Check("great hall is listed", rooms.Any(r => r.Name == "GREAT HALL"), true);
+Check("great hall covers both squares", rooms.First(r => r.Name == "GREAT HALL").Squares.Count, 2);
+Check("stairs up are listed as a place", rooms.Any(r => r.Code == MapFormat.CodeStairsUp), true);
+Check("stairs up name", rooms.First(r => r.Code == MapFormat.CodeStairsUp).Name, "Stairs up");
+Check("special squares carry no description",
+      rooms.First(r => r.Code == MapFormat.CodeStairsUp).Description, "");
+Check("stairs-up lookup finds the square",
+      dm.SquaresOfKind(SquareKind.StairsUp).Single().Coord, "(5, 5)");
+Check("blank squares are left out of the drawing",
+      dm.DrawableSquares().Any(s => s.X == 20 && s.Y == 20), false);
+Check("the stairs square is drawn",
+      dm.DrawableSquares().Any(s => s.X == 5 && s.Y == 5), true);
+
+int revealed = dm.RevealAll();
+Check("reveal marks the rest of the level", revealed, MapFormat.ContentsLength - 3);
+Check("and then everything is mapped", dm.VisitedCount, MapFormat.ContentsLength);
+Check("revealing again changes nothing", dm.RevealAll(), 0);
+Check("revealing does not disturb the event codes", dm.EventCode(5, 5), MapFormat.CodeStairsUp);
+Check("a revealed map still validates", MapFormat.LooksLikeMap(mapData, 0), true);
+Console.WriteLine();
+
+// --- rejecting things that are not levels -----------------------------------
+Console.WriteLine("Map validation rejects:");
+Check("all zeros", MapFormat.LooksLikeMap(new byte[MapFormat.FileSize], 0), false);
+Check("a short buffer", MapFormat.LooksLikeMap(new byte[MapFormat.FileSize - 1], 0), false);
+{
+    // One wall byte edited from one side only: exactly what a bad address, or a partial read
+    // landing mid-structure, looks like — and the single strongest signal that this is not a map.
+    var broken = (byte[])BuildTestMap().Clone();
+    broken[MapFormat.WallIndex(10, 10, MapFormat.East)] = 1;
+    Check("a one-sided wall edit", MapFormat.LooksLikeMap(broken, 0), false);
+    Check("and reciprocity says why", MapFormat.HasWallReciprocity(broken, 0), false);
+}
+{
+    var broken = (byte[])BuildTestMap().Clone();
+    broken[MapFormat.WallIndex(3, 3, MapFormat.North)] = MapFormat.MaxWallValue + 1;
+    Check("a wall byte the game would not walk", MapFormat.LooksLikeMap(broken, 0), false);
+}
+{
+    // An *unvisited* square still holds the code the file shipped, which cannot exceed 0x3F.
+    // A visited one constrains nothing, because the game writes 0xF7/0xF8 over looted squares —
+    // which is why this check is conditioned on the mapped bit rather than on bit 6.
+    var broken = (byte[])BuildTestMap().Clone();
+    broken[MapFormat.ContentIndex(3, 3)] = 0x40;
+    Check("an unvisited square with a code above 0x3F", MapFormat.LooksLikeMap(broken, 0), false);
+
+    var looted = (byte[])BuildTestMap().Clone();
+    looted[MapFormat.ContentIndex(3, 3)] = 0xF7;
+    Check("but a looted (visited) square is fine", MapFormat.LooksLikeMap(looted, 0), true);
+    Check("as is a taken item square",
+          MapFormat.IsPlausibleContentByte(0xF8), true);
+    Check("and an unvisited 0x78 is not", MapFormat.IsPlausibleContentByte(0x78), false);
+}
+{
+    // The regression that started this: a level the player had looted must still locate.
+    var played = (byte[])BuildTestMap().Clone();
+    played[MapFormat.ContentIndex(7, 7)] = 0xF7;    // the chest, opened
+    played[MapFormat.ContentIndex(8, 8)] = 0xF8;    // the item, taken
+    Check("a level whose chest and item have been taken still validates",
+          MapFormat.LooksLikeMap(played, 0), true);
+    Check("and still passes the sweep's quick probe",
+          MapFormat.PassesReciprocityProbe(played, 0), true);
+}
+{
+    // The text tables are what pin the buffer's byte alignment; wall reciprocity cannot, because it
+    // only relates squares a fixed distance apart and so survives sliding the whole grid. Each of
+    // these corruptions is one the alignment check has to catch on its own.
+    var runsPastEnd = (byte[])BuildTestMap().Clone();
+    runsPastEnd[MapFormat.OffTextFirst + 1] = MapFormat.TextLineCount - 1;
+    runsPastEnd[MapFormat.OffTextCount + 1] = 5;               // would read past the last line
+    Check("a text run that overruns the block", MapFormat.HasConsistentTextTables(runsPastEnd, 0), false);
+    Check("and LooksLikeMap refuses it too", MapFormat.LooksLikeMap(runsPastEnd, 0), false);
+    Check("even though its walls are still perfect", MapFormat.HasWallReciprocity(runsPastEnd, 0), true);
+
+    var runsFromZero = (byte[])BuildTestMap().Clone();
+    runsFromZero[MapFormat.OffTextFirst + 1] = 0;              // the game would read line -1
+    Check("a text run starting before line 1", MapFormat.HasConsistentTextTables(runsFromZero, 0), false);
+
+    var badLength = (byte[])BuildTestMap().Clone();
+    badLength[MapFormat.OffTextLines + 40 * MapFormat.TextLineSize] = MapFormat.TextLineSize;
+    Check("a line whose length prefix overflows its slot",
+          MapFormat.HasConsistentTextTables(badLength, 0), false);
+
+    Check("a good map has consistent tables", MapFormat.HasConsistentTextTables(BuildTestMap(), 0), true);
+}
+{
+    // The probe is the sweep's fast reject; it has to actually catch a broken map.
+    var broken = (byte[])BuildTestMap().Clone();
+    broken[MapFormat.WallIndex(0, 0, MapFormat.East)] = 3;
+    Check("the reciprocity probe rejects a one-sided edit", MapFormat.PassesReciprocityProbe(broken, 0), false);
+    Check("the probe accepts a good map", MapFormat.PassesReciprocityProbe(BuildTestMap(), 0), true);
+    // All-zero memory is trivially reciprocal, so the probe waves it through by design — the
+    // nonzero-wall floor in LooksLikeMap is what rejects it. Pinned so nobody "fixes" the probe.
+    Check("the probe alone lets a blank buffer past",
+          MapFormat.PassesReciprocityProbe(new byte[MapFormat.FileSize], 0), true);
+    Check("and the full check still rejects it", MapFormat.LooksLikeMap(new byte[MapFormat.FileSize], 0), false);
+}
+{
+    var bare = (byte[])BuildTestMap().Clone();
+    Array.Clear(bare, MapFormat.OffContents, MapFormat.ContentsLength);
+    Check("a level with no square contents at all", MapFormat.LooksLikeMap(bare, 0), false);
+}
+{
+    var thin = new byte[MapFormat.FileSize];
+    for (int i = 0; i < MapFormat.MinWallBytes - 1; i++) thin[i] = 1;   // not reciprocal, but the
+    thin[MapFormat.ContentIndex(0, 0)] = 1;                             // count filter fires first
+    Check("too few walls to be a level", MapFormat.LooksLikeMap(thin, 0), false);
+}
+Console.WriteLine();
+
+// --- the locator over a synthetic address space ------------------------------
+Console.WriteLine("Map locator:");
+{
+    const int Base = 0x100000;
+    const int Size = 6 * 1024 * 1024;
+    // Put the roster where the in-memory array starts, so the position block is one full record
+    // further from it than the file-anchored case — the delta the locator has to pick between.
+    const int RosterAt = 0x40000;
+    int positionAt = RosterAt + MapFormat.PositionFromRosterArray;
+    int mapAt = positionAt + MapFormat.MapFromPosition;
+
+    var space = new byte[Size];
+    Array.Copy(BuildTestMap(), 0, space, mapAt, MapFormat.FileSize);
+    new PartyPosition(3, 16, 31, MapFormat.North).WriteTo(space, positionAt);
+
+    var fake = new FakeMemory(space, (nuint)Base);
+
+    var fromRoster = MapLocator.FindFromRoster(fake, (nuint)(Base + RosterAt));
+    Check("found from the roster", fromRoster != null, true);
+    if (fromRoster != null)
+    {
+        Check("position address", (ulong)fromRoster.PositionAddress, (ulong)(Base + positionAt));
+        Check("map address", (ulong)fromRoster.MapAddress, (ulong)(Base + mapAt));
+        Check("decoded position", fromRoster.Position, new PartyPosition(3, 16, 31, 0));
+        Check("method", fromRoster.Method, MapLocateMethod.Roster);
+    }
+
+    // The same space, anchored on the record the file's first character occupies instead: the other
+    // delta has to be the one that lands.
+    var fromFileSlot = MapLocator.FindFromRoster(
+        fake, (nuint)(Base + positionAt - MapFormat.PositionFromRosterFirstFileSlot));
+    Check("found from a roster anchored one record later", fromFileSlot != null, true);
+    if (fromFileSlot != null)
+        Check("same position address either way",
+              (ulong)fromFileSlot.PositionAddress, (ulong)(Base + positionAt));
+
+    // A roster address that leads nowhere must report nothing rather than a confident guess.
+    Check("a wrong roster address finds nothing",
+          MapLocator.FindFromRoster(fake, (nuint)(Base + RosterAt + 0x1000)) == null, true);
+
+    // An implausible position block is rejected even though the map behind it is real.
+    {
+        var spoiled = (byte[])space.Clone();
+        WriteU16(spoiled, positionAt + MapFormat.PosOffLevel, 9);   // no such level
+        var f = new FakeMemory(spoiled, (nuint)Base);
+        Check("an out-of-range level is rejected",
+              MapLocator.FindFromRoster(f, (nuint)(Base + RosterAt)) == null, true);
+    }
+    {
+        var spoiled = (byte[])space.Clone();
+        WriteU16(spoiled, positionAt + MapFormat.PosOffX, 40);      // off the 32×32 grid
+        var f = new FakeMemory(spoiled, (nuint)Base);
+        Check("an off-grid X is rejected",
+              MapLocator.FindFromRoster(f, (nuint)(Base + RosterAt)) == null, true);
+    }
+    {
+        // Before the party first walks into the castle the map buffer is empty, and there is
+        // nothing left to recognise: a zeroed position block reads as a perfectly plausible "in
+        // town", so accepting a merely in-range buffer would let the wrong address through. This
+        // deliberately reports nothing rather than guess.
+        var blank = (byte[])space.Clone();
+        Array.Clear(blank, mapAt, MapFormat.FileSize);
+        WriteU16(blank, positionAt + MapFormat.PosOffLevel, MapFormat.TownLevel);
+        var f = new FakeMemory(blank, (nuint)Base);
+        Check("with no map loaded there is nothing to find",
+              MapLocator.FindFromRoster(f, (nuint)(Base + RosterAt)) == null, true);
+
+        var stillBlank = (byte[])blank.Clone();
+        WriteU16(stillBlank, positionAt + MapFormat.PosOffLevel, 3);   // claims to be underground
+        var f2 = new FakeMemory(stillBlank, (nuint)Base);
+        Check("and a party claiming to be in the castle with no map is rejected too",
+              MapLocator.FindFromRoster(f2, (nuint)(Base + RosterAt)) == null, true);
+    }
+    {
+        // The trap the strict rule exists for: the roster scan can anchor one record early or
+        // late, so the other delta lands the map window a record away from the real one. Every
+        // byte in that window is still in range, and the position block in front of it is zeros
+        // that read as "in town" — only reciprocity rejects it.
+        var shifted = (byte[])space.Clone();
+        WriteU16(shifted, positionAt + MapFormat.PosOffLevel, 9);   // spoil the real candidate
+        var f = new FakeMemory(shifted, (nuint)Base);
+        Check("a map window shifted by one record is not mistaken for the real one",
+              MapLocator.FindFromRoster(f, (nuint)(Base + RosterAt)) == null, true);
+    }
+
+    // Structural sweep: no roster at all, and the map deliberately straddles a 1 MiB scan seam.
+    {
+        var seam = new byte[Size];
+        int seamMapAt = (1 << 20) - (MapFormat.FileSize / 2);          // half in each chunk
+        int seamPosAt = seamMapAt - MapFormat.MapFromPosition;
+        Array.Copy(BuildTestMap(), 0, seam, seamMapAt, MapFormat.FileSize);
+        new PartyPosition(2, 7, 8, MapFormat.West).WriteTo(seam, seamPosAt);
+
+        var f = new FakeMemory(seam, (nuint)Base);
+        var found = MapLocator.FindByStructure(f);
+        Check("structural sweep finds a map across a chunk seam", found != null, true);
+        if (found != null)
+        {
+            Check("structural map address", (ulong)found.MapAddress, (ulong)(Base + seamMapAt));
+            Check("structural position", found.Position, new PartyPosition(2, 7, 8, 3));
+            Check("structural method", found.Method, MapLocateMethod.Structural);
+        }
+
+        Check("structural sweep finds nothing in empty memory",
+              MapLocator.FindByStructure(new FakeMemory(new byte[Size], (nuint)Base)) == null, true);
+
+        // The position block precedes the map, so a map that close to address zero cannot be real
+        // and must not be reached for by wrapping the address around.
+        var low = new byte[MapFormat.FileSize + 64];
+        Array.Copy(BuildTestMap(), 0, low, 16, MapFormat.FileSize);
+        Check("a map too close to address zero is skipped, not wrapped",
+              MapLocator.FindByStructure(new FakeMemory(low, 0)) == null, true);
+
+        var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        bool threw = false;
+        try { MapLocator.FindByStructure(f, cancelled.Token); }
+        catch (OperationCanceledException) { threw = true; }
+        Check("structural sweep honours cancellation", threw, true);
+
+        // Past the first scan window, so the sweep has to step correctly rather than finding it in
+        // the very first chunk it reads.
+        var far = new byte[Size];
+        int farMapAt = (2 << 20) + 5000;
+        Array.Copy(BuildTestMap(), 0, far, farMapAt, MapFormat.FileSize);
+        new PartyPosition(4, 3, 4, MapFormat.South).WriteTo(far, farMapAt - MapFormat.MapFromPosition);
+        var farFound = MapLocator.FindByStructure(new FakeMemory(far, (nuint)Base));
+        Check("structural sweep steps past the first window", farFound != null, true);
+        if (farFound != null)
+            Check("and finds the map there", (ulong)farFound.MapAddress, (ulong)(Base + farMapAt));
+    }
+
+    // A region the target will only serve in pieces. ProcessMemory reads all-or-nothing, and the
+    // sweep halves its window down on failure — so a readable prefix that lands *between* two
+    // halving steps (13,000 bytes: more than one map, less than the 16 KB trial above it) fails
+    // every attempt unless the halving ends with an explicit try at exactly one map's worth.
+    // Without that final try the sweep walks straight past a map at the head of such a region.
+    {
+        const int CappedMapAt = 3 << 20;
+        var capped = new byte[Size];
+        Array.Copy(BuildTestMap(), 0, capped, CappedMapAt, MapFormat.FileSize);
+        new PartyPosition(5, 11, 12, MapFormat.South).WriteTo(capped, CappedMapAt - MapFormat.MapFromPosition);
+
+        // Two regions, so the sweep's window for the second one starts exactly at the map — the
+        // position block still reads fine, since reads do not care about region boundaries.
+        var f = new FakeMemory(capped, (nuint)Base)
+        {
+            MaxReadable = 13000,
+            Regions = new[] { (0, CappedMapAt), (CappedMapAt, MapFormat.FileSize) },
+        };
+        var found = MapLocator.FindByStructure(f);
+        Check("a region that only reads 13,000 bytes at a time is still swept", found != null, true);
+        if (found != null)
+        {
+            Check("and the map in it is found", (ulong)found.MapAddress, (ulong)(Base + CappedMapAt));
+            Check("with its position", found.Position, new PartyPosition(5, 11, 12, 2));
+        }
+    }
+
+    // The candidate filter on its own, so a change to the fast path is caught even if the sweep
+    // around it still happens to work.
+    {
+        var buf = new byte[MapFormat.FileSize * 3];
+        int at = 1234;
+        Array.Copy(BuildTestMap(), 0, buf, at, MapFormat.FileSize);
+        var hits = MapLocator.FindCandidates(buf, buf.Length).ToList();
+        Check("candidate filter finds the planted map", hits.Contains(at), true);
+        Check("and nothing else", hits.Count, 1);
+    }
+
+    // Reading a located position back is what the poll loop does every tick. The two failure modes
+    // are kept apart on purpose: an unreadable address means the game is gone, whereas bytes that
+    // simply do not decode is a state the game puts itself in — stepping off a ledge on the bottom
+    // level increments the level past 5 — and must not tear down a good locate.
+    {
+        Check("position re-read",
+              MapLocator.TryReadPosition(fake, (nuint)(Base + positionAt), out var live),
+              MapLocator.ReadOutcome.Ok);
+        Check("re-read value", live, new PartyPosition(3, 16, 31, 0));
+        Check("re-read of unreadable memory reports Unreadable",
+              MapLocator.TryReadPosition(fake, (nuint)(Base + Size + 0x1000), out _),
+              MapLocator.ReadOutcome.Unreadable);
+
+        var offLedge = (byte[])space.Clone();
+        WriteU16(offLedge, positionAt + MapFormat.PosOffLevel, 6);   // what walking off the bottom does
+        Check("a level past the bottom reports Implausible, not Unreadable",
+              MapLocator.TryReadPosition(new FakeMemory(offLedge, (nuint)Base),
+                                         (nuint)(Base + positionAt), out _),
+              MapLocator.ReadOutcome.Implausible);
+    }
+
+    // Re-validating before a write is what stops a cached address outliving the layout it belongs
+    // to: the position's four values are only range-checked, so the map behind them has to agree.
+    {
+        Check("revalidate accepts a live locate",
+              MapLocator.TryRevalidate(fake, (nuint)(Base + positionAt), out var live, out var bytes), true);
+        Check("and hands back the bytes it checked", bytes.Length, MapFormat.FileSize);
+        Check("with the position", live, new PartyPosition(3, 16, 31, 0));
+
+        // A position block that still range-checks, over a map that no longer does.
+        var rotted = (byte[])space.Clone();
+        rotted[mapAt + MapFormat.WallIndex(10, 10, MapFormat.East)] = 1;   // break reciprocity
+        Check("revalidate rejects a position whose map stopped decoding",
+              MapLocator.TryRevalidate(new FakeMemory(rotted, (nuint)Base),
+                                       (nuint)(Base + positionAt), out _, out _), false);
+    }
+}
+Console.WriteLine();
+
+// --- the saved position in DDCHARS.DAT ---------------------------------------
+Console.WriteLine("Saved party position:");
+{
+    string dir = Path.Combine(Path.GetTempPath(), "dd1-mapcheck-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(dir);
+    try
+    {
+        // A file whose header carries the position the shipped sample has: Ground Level, the
+        // castle entrance at the bottom edge, facing north into the gate.
+        string path = Path.Combine(dir, "DDCHARS.DAT");
+        var data = new byte[CharacterFormat.FileSize];
+        PlantCharacter(data, CharacterFormat.HeaderSize, "TESTER", CharacterFormat.ClassFighter, 100);
+        WriteU16(data, CharacterFormat.HdrOffPartySlots, 1);
+        new PartyPosition(3, 16, 31, MapFormat.North).WriteTo(data, CharacterFormat.HdrOffPosition);
+        data[CharacterFormat.HdrOffUnknown] = 0xAB;      // a byte nothing decodes — must survive
+        File.WriteAllBytes(path, data);
+
+        using (var sf = new SaveFile(path))
+        {
+            Check("reads the saved position", sf.Position, new PartyPosition(3, 16, 31, 0));
+            Check("party position 1 holds roster slot 1", sf.PartySlot(1), 1);
+            Check("party position 2 is empty", sf.PartySlot(2), 0);
+            Check("out-of-range party position reads 0", sf.PartySlot(9), 0);
+
+            sf.Position = new PartyPosition(5, 9, 1, MapFormat.East);
+            sf.Save();
+        }
+
+        var written = File.ReadAllBytes(path);
+        Check("the edit reached the file",
+              PartyPosition.FromBytes(written, CharacterFormat.HdrOffPosition),
+              new PartyPosition(5, 9, 1, 1));
+        Check("undecoded header bytes round-trip", written[CharacterFormat.HdrOffUnknown], (byte)0xAB);
+        Check("the party slots are left alone", ReadU16(written, CharacterFormat.HdrOffPartySlots), 1);
+        Check("a .bak was taken", File.Exists(path + ".bak"), true);
+        Check("the .bak holds the original position",
+              PartyPosition.FromBytes(File.ReadAllBytes(path + ".bak"), CharacterFormat.HdrOffPosition),
+              new PartyPosition(3, 16, 31, 0));
+        Check("the character survived the header edit",
+              new SaveFile(path).Characters[0].Name, "TESTER");
+    }
+    finally
+    {
+        try { Directory.Delete(dir, true); } catch { }
+    }
+}
+Console.WriteLine();
+
+// --- the shipped map files ---------------------------------------------------
+if (gameDir != null)
+{
+    Console.WriteLine("Shipped DDMAP files:");
+    if (MapBook.TryLoadFromFolder(gameDir, out var shipped, out var mapError))
+    {
+        Check("all five levels parse", shipped.Count, 5);
+        foreach (var (level, map) in shipped.OrderBy(kv => kv.Key))
+        {
+            Check($"{MapBook.MapFileName(level)} walls are reciprocal",
+                  MapFormat.HasWallReciprocity(map.Bytes, map.Offset), true);
+            var up = map.SquaresOfKind(SquareKind.StairsUp);
+            var down = map.SquaresOfKind(SquareKind.StairsDown);
+            Console.WriteLine($"  {MapBook.LevelName(level),-16} rooms={map.Rooms().Count,3}  " +
+                              $"up={Describe(up)}  down={Describe(down)}  " +
+                              $"chests={map.SquaresOfKind(SquareKind.TreasureChest).Count}  " +
+                              $"visited={map.VisitedCount}");
+            // Going down increases the level number, so the top level has no way up and the
+            // bottom no way down — the same ordering the level-name table prints.
+            if (level == MapFormat.MinLevel) Check("  the top level has no stairs up", up.Count, 0);
+            if (level == MapFormat.MaxLevel) Check("  the bottom level has no stairs down", down.Count, 0);
+        }
+
+        // The game hard-codes two squares by coordinate: the quest staff on the top level and the
+        // other fixed item at the bottom. Both must land on a square the map marks as an item.
+        if (shipped.TryGetValue(1, out var top))
+            Check("THE STAFF sits on the item square the game names (20, 22)",
+                  top.Kind(20, 22), SquareKind.Item);
+        if (shipped.TryGetValue(5, out var bottom))
+            Check("the deep item sits on the square the game names (9, 1)",
+                  bottom.Kind(9, 1), SquareKind.Item);
+
+        // The description text is indexed by a per-code line number, and the synthetic fixture is
+        // built with the decoder's own convention — so only the real files can prove the decoder
+        // reads the same lines the game does. A shift of one would take the first line from the
+        // previous room and cut this room's last sentence off mid-clause, so assert both ends.
+        if (shipped.TryGetValue(3, out var ground))
+        {
+            var gate = ground.TextFor(1);
+            Check("DDMAP3 room 1 is the MAIN GATE", gate.Count > 0 ? gate[0] : "", "MAIN GATE");
+            Check("and its description runs to the end of its own sentence",
+                  gate.Count > 0 ? gate[^1] : "", "bastillion towers.");
+            Check("the square by the entrance carries that room",
+                  ground.Square(15, 29).RoomName, "MAIN GATE");
+            Check("the room list names it too",
+                  ground.Rooms().Any(r => r.Name == "MAIN GATE"), true);
+        }
+        if (shipped.TryGetValue(1, out var top2))
+        {
+            var stair = top2.TextFor(2);
+            Check("DDMAP1 room 2 is the STAIRWAY DOWN", stair.Count > 0 ? stair[0] : "", "STAIRWAY DOWN");
+        }
+
+        // The regression that a live run caught and 537 synthetic checks did not. In memory the map
+        // buffer is preceded by a few hundred zero bytes, and wall reciprocity — being a relation
+        // between squares a fixed distance apart — holds just as well for the whole grid slid along
+        // by whole squares. Measured against the running game, 113 offsets around the real buffer
+        // passed the wall test. Reproduce that here with a real level and assert that only the true
+        // offset survives the full check.
+        if (shipped.TryGetValue(3, out var real))
+        {
+            const int Pad = 512;
+            var padded = new byte[Pad + MapFormat.FileSize];
+            Array.Copy(real.Bytes, real.Offset, padded, Pad, MapFormat.FileSize);
+
+            int reciprocal = 0, validated = 0;
+            for (int shift = 0; shift <= Pad; shift += MapFormat.WallStrideY)   // whole squares
+            {
+                int at = Pad - shift;
+                if (MapFormat.HasWallReciprocity(padded, at)) reciprocal++;
+                if (MapFormat.LooksLikeMap(padded, at)) validated++;
+            }
+            Console.WriteLine($"  shifted windows over a real level: {reciprocal} pass the wall test, {validated} pass in full");
+            Check("more than one shifted window fools wall reciprocity alone", reciprocal > 1, true);
+            Check("but exactly one passes the full check", validated, 1);
+            Check("and it is the true offset", MapFormat.LooksLikeMap(padded, Pad), true);
+        }
+    }
+    else
+    {
+        Console.WriteLine($"  WARNING: {mapError}");
+    }
+    Console.WriteLine();
+}
+else
+{
+    Console.WriteLine("Game directory not found — skipping shipped-map checks (not a failure).");
+    Console.WriteLine();
+}
+
 // --- summary -----------------------------------------------------------------
 Console.WriteLine($"=== {failures} failure(s) ===");
 return failures == 0 ? 0 : 1;
@@ -862,6 +1525,86 @@ static double BruteForce(int[] mins, int totalMin)
     return p;
 }
 
+/// <summary>Renders a list of squares as coordinates, for the shipped-map summary lines.</summary>
+static string Describe(IReadOnlyList<MapSquare> squares) =>
+    squares.Count == 0 ? "-" : string.Join(" ", squares.Select(s => s.Coord));
+
+/// <summary>
+/// Builds a synthetic Dark Designs level: a walled border, a wall down every other column, a door,
+/// a secret door, one square of each special kind, and two described rooms with their text. Every
+/// wall is written through <c>SetWall</c>, which sets both sides, so the result satisfies the
+/// reciprocity invariant the locator leans on — that is the point of building it this way.
+/// </summary>
+static byte[] BuildTestMap()
+{
+    var m = new byte[MapFormat.FileSize];
+
+    void SetWall(int x, int y, int d, int v)
+    {
+        m[MapFormat.WallIndex(x, y, d)] = (byte)v;
+        int nx = x + MapFormat.DeltaX[d], ny = y + MapFormat.DeltaY[d];
+        if (MapFormat.InBounds(nx, ny)) m[MapFormat.WallIndex(nx, ny, MapFormat.Opposite(d))] = (byte)v;
+    }
+
+    for (int i = 0; i < MapFormat.GridSize; i++)
+    {
+        SetWall(i, 0, MapFormat.North, MapFormat.WallSolid);
+        SetWall(i, MapFormat.GridSize - 1, MapFormat.South, MapFormat.WallSolid);
+        SetWall(0, i, MapFormat.West, MapFormat.WallSolid);
+        SetWall(MapFormat.GridSize - 1, i, MapFormat.East, MapFormat.WallSolid);
+    }
+    // Walls down the western half only, so the eastern half has genuinely blank squares to prove
+    // the drawing pass leaves them out.
+    for (int x = 2; x < 16; x += 2)
+        for (int y = 0; y < MapFormat.GridSize; y++)
+            SetWall(x, y, MapFormat.West, MapFormat.WallSolid);
+
+    SetWall(10, 10, MapFormat.East, MapFormat.WallDoor);
+    SetWall(12, 10, MapFormat.East, MapFormat.WallSecretDoor);
+
+    void SetContent(int x, int y, int code, bool visited = false)
+        => m[MapFormat.ContentIndex(x, y)] = (byte)(code | (visited ? MapFormat.VisitedFlag : 0));
+
+    SetContent(3, 3, 1);
+    SetContent(3, 4, 1, visited: true);
+    SetContent(4, 4, 2);
+    // A looted chest and a taken item, exactly as the game stamps them: the whole byte, mapped bit
+    // and all, with a code past 0x3F.
+    m[MapFormat.ContentIndex(10, 3)] = 0xF7;
+    m[MapFormat.ContentIndex(11, 3)] = 0xF8;
+    SetContent(5, 5, MapFormat.CodeStairsUp);
+    SetContent(6, 6, MapFormat.CodeStairsDown);
+    SetContent(7, 7, MapFormat.CodeTreasureChest);
+    SetContent(8, 8, MapFormat.CodeItem);
+    SetContent(9, 9, MapFormat.CodeEdge);
+
+    // Room 1 uses lines 1-3, room 2 lines 4-5 — the game reads `first .. first + count - 1`.
+    m[MapFormat.OffTextFirst + 1] = 1; m[MapFormat.OffTextCount + 1] = 3;
+    m[MapFormat.OffTextFirst + 2] = 4; m[MapFormat.OffTextCount + 2] = 2;
+    WriteTextLine(m, 1, "GREAT HALL");
+    WriteTextLine(m, 2, "A long hall with");
+    WriteTextLine(m, 3, "banners.");
+    WriteTextLine(m, 4, "GUARD ROOM");
+    WriteTextLine(m, 5, "Two bunks.");
+    return m;
+}
+
+/// <summary>
+/// Writes one 40-byte text slot the way the game stores them: a length byte, the text, the game's
+/// <c>]</c> end-of-line marker, and <c>0x02</c> padding — all three of which the decoder has to
+/// drop rather than print.
+/// </summary>
+static void WriteTextLine(byte[] m, int line, string text)
+{
+    int at = MapFormat.OffTextLines + line * MapFormat.TextLineSize;
+    int len = MapFormat.TextLineSize - 1;
+    m[at] = (byte)len;
+    for (int i = 0; i < len; i++) m[at + 1 + i] = 0x02;
+    var bytes = System.Text.Encoding.ASCII.GetBytes(text);
+    Array.Copy(bytes, 0, m, at + 1, Math.Min(bytes.Length, len - 1));
+    m[at + 1 + Math.Min(bytes.Length, len - 1)] = (byte)']';
+}
+
 static string? FindGameDir()
 {
     string[] candidates =
@@ -880,6 +1623,64 @@ sealed class TestPack : IItemPack
     public TestPack(CharacterRecord rec) => _rec = rec;
     public bool HasFreeSlot => _rec.ItemCount < CharacterFormat.ItemSlotCount;
     public bool TryAddItem(int itemId) => itemId != 0 && _rec.AddItem(itemId) >= 0;
+}
+
+/// <summary>
+/// A flat byte array standing in for the emulator's address space, so <see cref="MapLocator"/> can
+/// be driven without a running game — including the cases a real process could not be made to
+/// produce on demand, such as a map buffer straddling a scan seam or sitting near address zero.
+/// Reads are all-or-nothing, matching <c>ProcessMemory</c>.
+/// </summary>
+sealed class FakeMemory : IMemorySource
+{
+    private readonly byte[] _mem;
+    private readonly nuint _base;
+
+    public FakeMemory(byte[] mem, nuint baseAddress)
+    {
+        _mem = mem;
+        _base = baseAddress;
+    }
+
+    /// <summary>
+    /// Largest single read the fixture will satisfy, standing in for a region whose tail is not
+    /// committed. Reads are all-or-nothing either way, matching <c>ProcessMemory</c>.
+    /// </summary>
+    public int MaxReadable { get; init; } = int.MaxValue;
+
+    /// <summary>
+    /// Which spans of the array the sweep is told about, as (start, length) pairs relative to the
+    /// base address. Defaults to one region covering everything. Reads ignore this — a real
+    /// process happily reads across a region boundary too.
+    /// </summary>
+    public IReadOnlyList<(int Start, int Length)>? Regions { get; init; }
+
+    public IEnumerable<MemoryRegion> EnumerateRegions()
+    {
+        if (Regions == null)
+        {
+            yield return new MemoryRegion(_base, (nuint)_mem.Length);
+            yield break;
+        }
+        foreach (var (start, length) in Regions)
+            yield return new MemoryRegion(_base + (nuint)start, (nuint)length);
+    }
+
+    public int Read(nuint address, byte[] buffer, int count)
+    {
+        if (address < _base) return 0;
+        long at = (long)(address - _base);
+        if (at < 0 || count < 0 || at + count > _mem.Length) return 0;
+        if (count > MaxReadable) return 0;
+        Array.Copy(_mem, at, buffer, 0, count);
+        return count;
+    }
+
+    public byte[] Read(nuint address, int count)
+    {
+        var buf = new byte[count];
+        return Read(address, buf, count) == count ? buf : Array.Empty<byte>();
+    }
 }
 
 /// <summary>

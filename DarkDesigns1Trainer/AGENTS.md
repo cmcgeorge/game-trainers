@@ -22,8 +22,14 @@ library.
     statistics. `AttributeBook.cs` describes the five attributes. `SpellBook.cs` / `ItemBook.cs` /
     `MonsterBook.cs` hold the reference tables (16 spells, all 64 item ids of which 41 are obtainable, 43 monsters)
     transcribed from the unpacked EXE — `ItemBook`'s array index **is** the byte the game stores,
-    so never reorder it. `GameFacts.cs` holds game metadata and the locator anchor string.
-    `SaveFile.cs` reads/writes `DDCHARS.DAT` with a one-shot `.bak`.
+    so never reorder it. `MapFormat.cs` holds the 12,648-byte level layout (a 32×32×4 wall grid, a
+    32×32 contents array, the description-text tables) plus the wall/square rules and the DGROUP
+    deltas the map locator uses; `DungeonMap.cs` is a typed view over one level (walls, event codes,
+    the mapped bit, the room list read from the level's own text, reveal-all); `MapBook.cs` holds
+    the five levels and reads `DDMAP<n>.DAT`; `PartyPosition.cs` is the level / X / Y / facing block
+    — the same four `uint16` live and in the save header. `GameFacts.cs` holds game metadata and the
+    locator anchor string. `SaveFile.cs` reads/writes `DDCHARS.DAT` with a one-shot `.bak`,
+    including the party position in its header.
   - `Memory/` — `RosterLocator.cs` finds the roster by **dual strategy**: (1) string-anchored scan
     for the 34-byte title string, then a 256 KB window forward for the 15-record pattern; (2)
     fallback structural scan of all readable memory for contiguous 72-byte records matching the
@@ -38,9 +44,15 @@ library.
     captured values sorted), and can read or write the pool. `ItemTableLocator.cs` finds the
     64-entry item table by content (three known names at the 40-byte stride, then "NO ITEM" at
     entry 0) and reads/writes the per-item **potency** word — game-wide data, not per-character,
-    so `MainViewModel` keeps the originals and restores them on detach. The generic process-memory wrapper
-    (`ProcessMemory`/`MemoryRegion`) and `KeyboardSender` come from `GameTrainers.Common.Memory`
-    (imported via csproj `<Using>` items), not a local copy.
+    so `MainViewModel` keeps the originals and restores them on detach. `MapLocator.cs` finds the
+    party-position block and the map buffer of the level the party is on: **primarily from the
+    roster** `RosterLocator` already found (both are at constant DGROUP offsets from it — `0xEFC`
+    from the array base or `0xEB4` from the file's first record, since the roster scan can anchor on
+    either, so both are tried and only the one whose bytes validate is used), with a **structural
+    sweep** for the map buffer as a fallback. It takes `IMemorySource.cs` rather than
+    `ProcessMemory` so `FormatCheck` can drive it over a synthetic address space. The generic
+    process-memory wrapper (`ProcessMemory`/`MemoryRegion`) and `KeyboardSender` come from
+    `GameTrainers.Common.Memory` (imported via csproj `<Using>` items), not a local copy.
   - `ViewModels/` — hand-rolled MVVM. `MainViewModel` (attach/scan/detach, poll loop, party-wide
     actions, save editor, and the attached pid the roller sends keys to), `CharacterViewModel`
     (per-character editable fields, inventory/equipment, freeze, max actions),
@@ -49,8 +61,10 @@ library.
     `ItemSlotViewModel` (one item byte — a pack slot or a readied slot — shared by the live and
     save editors; its `DuplicateCommand` goes through `IItemPack`, implemented by
     `CharacterViewModel` for live edits and by `MainViewModel.SavePack` for the save editor),
-    `ReferenceViewModel` (read-only spell/item/monster lists), `ICharacterHost`
-    (the read/write channel). Views (`*.xaml`) bind to these.
+    `MapsViewModel` (the Maps tab: locate, the level schematic, teleport, reveal, offline `DDMAP`
+    browsing), `ReferenceViewModel` (read-only spell/item/monster lists), `ICharacterHost`
+    (the read/write channel). Views (`*.xaml`) bind to these; `MapConverters.cs` holds the map
+    schematic's value converters.
 
     `CharacterViewModel.Poll()` is the poll tick: it re-checks every address it holds against an
     identity snapshot taken at scan time (name length + name + class) before trusting or writing to
@@ -95,8 +109,26 @@ gold=100, XP=0/1000, magic=0/0). It further covers the creation
 roller: pool encode/decode, the plausibility gate, `Arrange`/`MeetsTarget`/`Shortfall`, the roll
 distribution, `CreationScanner`'s signature scan, and `CreationFormat.TryParseValues` — plus a
 cross-check of `RollOdds.PMeetsTarget` against brute force over all 59,049 possible rolls, and the
-specific probabilities quoted in `docs/StrategyGuide.md` so prose and model can't drift. Add new
-checks there and keep it exiting 0. Any parser/format change must keep the assertions green.
+specific probabilities quoted in `docs/StrategyGuide.md` so prose and model can't drift. It also
+covers the map layer: the section offsets (asserted so they still account for all 12,648 bytes), the
+wall classification and passability tables, the direction deltas against their opposites, a
+synthetic level decoded square by square (looted squares included), every way a buffer can fail to
+be a level (a one-sided wall edit, an out-of-range wall byte, an unvisited square with a code past
+`0x3F`, a text run that overruns the block or starts before line 1, an oversized line-length prefix,
+a blank buffer), the party position's encode/decode/clamping, the exact byte ranges the teleport and
+reveal writes touch — driven through `FakeHost` so the level word and the wall/text sections are
+proved untouched — the saved position round-tripping through `DDCHARS.DAT` with its `.bak`, and
+`MapLocator` driven over a `FakeMemory` synthetic address space (found from either roster delta,
+rejected for an implausible position, a map straddling a chunk seam, one past the first scan window,
+one near address zero, one shifted by a record, a region that only reads 13,000 bytes at a time,
+re-validation, cancellation). When the game directory is present it additionally parses all five
+shipped `DDMAP` files and asserts their wall reciprocity, the stairs-up/down topology, the two item
+squares the game hard-codes by coordinate, real room names decoded out of the shipped text (the only
+thing that can pin the text-line indexing, since the synthetic fixture is built with the decoder's
+own convention), and — the regression a live run caught and 537 synthetic checks did not — that of
+the **129** shifted windows over a real level which fool wall reciprocity, exactly one survives the
+full check. It runs **546 checks** with the game files present. Add new checks there and keep it exiting 0. Any parser/format
+change must keep the assertions green.
 
 ## Commit & Pull Request Guidelines
 
@@ -110,7 +142,8 @@ The roster is **15 × 72-byte** slots (only the first few are occupied); occupie
 by exists flag = 1, name length 1–12, ASCII name starting with a letter, status 1–5, class 1–3, five
 uint16 LE attributes in 1..999, level 1–99, and body max > 0. Empty slots have exists flag = 0 (the
 game may leave stale data in other fields, so only the flag is checked). Names are plain ASCII. The
-144-byte file header is only partially decoded and is round-tripped without interpretation.
+file header's first 16 bytes are the four party roster slots and the party position (level, X, Y,
+facing); the remaining 128 are round-tripped without interpretation.
 `DARKDES.EXE` is LZEXE 0.91 compressed; the unpacked image is a multi-code-segment Borland C build
 with a BSS-allocated character buffer.
 
@@ -148,6 +181,47 @@ The layout is **live-verified** (`docs/ReverseEngineering.md` §4.7): items writ
 came back out of the game's own item screen with the right names, and the party status line
 independently confirms body cur/max, status, class, and magic as a cur/max pair. Note the item
 screen does not repaint on a write — leave and re-enter it.
+
+Each castle level is **12,648 bytes** — a `DDMAP<n>.DAT` the game reads *verbatim* into one buffer at
+`DGROUP:0x50F4`, so the file layout and the live layout are the same thing. It is a 32×32×4 wall
+grid at `0x0000` indexed `x*128 + y*4 + facing`, a 32×32 contents array at `0x1000` indexed
+`x*32 + y` (bit 7 = mapped, bits 0–5 = event code), two 64-entry text-index tables, 2,320 undecoded
+bytes, and 127 forty-byte description lines. **X grows east and Y grows south**, facing is
+0 N / 1 E / 2 S / 3 W, and facing indexes the wall byte directly — the wall in front of the party is
+literally `walls[X][Y][facing]`. Don't transpose the axes: the level-1 item square the game
+hard-codes as `(0x1322, 0x1324) == (20, 22)` only lands on an item square under this reading, and
+the stairways only line up across levels under it. See `docs/ReverseEngineering.md` §6.
+
+**`LooksLikeMap` has three layers and every one earns its place.** (1) Range checks on wall and
+content bytes. (2) **Wall reciprocity** — a square's east wall byte equals its eastern neighbour's
+west wall byte, 3,968 of 3,968 interior pairs on every shipped level. (3) **Text-table
+consistency** — every run named by `firstLine`/`lineCount` lands inside the 127 lines and every
+line's length prefix fits its 40-byte slot.
+
+Do not drop layer 2 or 3 to make something else easier:
+
+- Range checks alone accept an address one 72-byte record off, because a zeroed position block reads
+  as a plausible "in town" position and a shifted window of a real map is still all in-range bytes.
+- Reciprocity alone accepts **113 different offsets** (measured live). It relates squares a *fixed
+  distance apart*, so it survives sliding the whole grid by whole squares, and the buffer is
+  preceded by a few hundred zero bytes that a slid window reads as empty map. Only the text tables
+  pin the absolute alignment. `FormatCheck` reproduces this with a real level and asserts that
+  exactly one shifted window survives the full check.
+
+Don't relax any of it to make locating work in town, either — in town there is no level loaded,
+which is the honest answer.
+
+**Square content bytes are 7-bit codes, not 6.** The game decodes `byte - 0x80` and treats anything
+over `0x3F` as "nothing here any more", which is how it retires a looted square: an opened chest
+becomes the whole byte `0xF7` and a taken item `0xF8`. Both have bit 6 set. A validator that assumes
+six-bit codes passes the shipped maps (none has been played) and then rejects the player's own the
+first time they open a chest; a six-bit *mask* makes a looted chest read back as a chest. Use
+`MapFormat.DecodeEventCode`/`IsPlausibleContentByte` rather than masking by hand.
+
+**The live teleport writes X, Y and facing only, never the level.** The game loads a level's map when
+it processes a stairway; moving the level word alone leaves the party on the wrong map. Level changes
+belong either to the game (teleport onto a stairway, take a step) or to the save editor, where the
+game reloads the matching map itself. `FormatCheck` asserts the 6-byte write range.
 
 The create screen keeps a separate five-value **rolled pool** (5 × uint16 LE, contiguous), not a
 roster record — located, sampled and write-tested against the running game. Each value is

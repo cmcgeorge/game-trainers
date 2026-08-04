@@ -9,8 +9,10 @@ slots**, and the **four readied equipment slots**, with per-vital **freeze** tog
 **max** actions, both per-character and party-wide.
 
 It additionally includes a **character-creation roller** that automates the town (C)reate screen's
-re-roll, an **offline save editor** for `DDCHARS.DAT` (the character file) that edits inventory too,
-and a **References** tab listing all 16 spells, the 41 obtainable items, and 43 monsters from the game.
+re-roll, an **offline save editor** for `DDCHARS.DAT` (the character file) that edits inventory and
+the saved party position, a **Maps** tab that draws all five castle levels, tracks where the party
+is standing and teleports it, and a **References** tab listing all 16 spells, the 41 obtainable
+items, and 43 monsters from the game.
 
 > Single-player cheat tool for your own game. Nothing here touches other machines or online services.
 
@@ -172,12 +174,47 @@ See [Reverse Engineering §5](docs/ReverseEngineering.md#5-character-creation-th
 ### Save editor
 
 The **Save Editor** tab edits `DDCHARS.DAT` offline (no game running required), including each
-character's readied equipment and carried pack. The file is 1,224 bytes = 144-byte header +
-15 × 72-byte records, with no checksum. A one-shot `.bak` backup is taken before the first write.
-The "Max All & Save" button maxes every occupied character in one click.
+character's readied equipment and carried pack, and the **saved party position** in the file header.
+The file is 1,224 bytes = 144-byte header + 15 × 72-byte records, with no checksum. A one-shot
+`.bak` backup is taken before the first write. The "Max All & Save" button maxes every occupied
+character in one click.
 
 Edit the save with the game closed: Dark Designs rewrites `DDCHARS.DAT` from memory when you
 `(Q)uit and save`, which would discard offline edits made while it was running.
+
+---
+
+## The 🗺 Maps tab
+
+Grelminar's castle is five 32 × 32 levels, each stored in a `DDMAP<n>.DAT` that the game reads
+verbatim into one buffer. The Maps tab draws them, shows where the party is, and teleports it.
+
+- **The level schematic.** Walls, doors, locked doors, stairs, chests, the two fixed items and the
+  ledges you can fall off. **X runs east, Y runs south**, matching the game — you start outside the
+  gate at (16, 31) on the Ground Level. Squares the party has already mapped are tinted green.
+- **The places list** on the left is the level's own room names and descriptions —
+  `MAIN GATE`, `ROYAL DINING ROOM`, `GRELMINARS STAFF ROOM` — read out of the map file itself, not
+  transcribed from a walkthrough. Click one to aim the teleport at it.
+- **Where the party is.** Click **Locate the party** after attaching; the level, square and facing
+  then track live, and a green arrow points the way you are looking.
+- **Teleport.** Click a square (or type X/Y and a facing) and press **Teleport**.
+- **Reveal whole level** marks every square as mapped, which is what the game's own auto-map draws
+  from — the same bit walking there would set.
+- **Load game folder…** points at the folder holding `DDMAP1.DAT`…`DDMAP5.DAT` so you can browse
+  all five levels offline, not just the one the party is standing on. The folder is remembered.
+
+Two deliberate limits:
+
+- **Teleport only moves you within the level you are already on.** The game loads a level's map when
+  it processes a stairway, so writing the level number on its own would leave the party walking a
+  different map than the one on screen. To change level live, teleport onto a stairway and take a
+  step. To change it offline, edit the position on the **Save Editor** tab — there it *is* safe,
+  because the game loads the matching map when it reads the file back.
+- **The party has to be inside the castle** for a locate to work. In town no level is loaded, and
+  the map buffer is what makes the address recognisable at all.
+
+"Reveal whole level" is the one action that reaches the player's own data files: the game keeps the
+mapped bits and writes them into that level's `DDMAP` file the next time it saves.
 
 ---
 
@@ -196,6 +233,19 @@ a **dual-strategy locator** (`Memory/RosterLocator.cs`):
 Having found the roster, the locator sweeps ~10 KB of the surrounding data segment for the game's
 **party working copies** — matched on name and class, never on a fixed offset — so live edits are
 applied to both the roster and the copy the game is actually playing out of.
+
+The party's **position and the level it is walking around** are found from that same roster
+(`Memory/MapLocator.cs`): both sit at constant offsets from it inside the game's single data
+segment. The roster scan can anchor on either the array's scratch slot or the first record the file
+holds, so both offsets are tried and the bytes decide — and the map buffer behind the candidate has
+to decode as a real level before anything is believed. Two tests do that work. **Wall reciprocity**
+— a square's east wall byte equals its eastern neighbour's west wall byte, true of 3,968 of 3,968
+interior pairs on every shipped level — rules out unrelated memory. **Text-table consistency** then
+pins the byte alignment, which reciprocity cannot: it relates squares a fixed distance apart, so it
+survives sliding the whole grid along by whole squares, and 113 shifted offsets passed it in a live
+measurement. A structural sweep for the same signature is the fallback when there is no roster to
+start from. Against the running game the roster path located in **1 ms** and the full sweep of 16 MB
+in **138 ms**, both landing on the same address.
 
 The freshly-rolled stats on the create screen are **not** a roster record — there is no name, class
 or level until you finish arranging them — so neither strategy can see them.
@@ -218,6 +268,16 @@ It was then confirmed **against the running game**: the party working copy turne
 game's own item screen as `LONG SWORD`, `SHIELD`, `LEATHER ARMOR`, `HEALING POTION` — the game
 resolving those ids to the names this trainer claims. See
 [Reverse Engineering §4.7](docs/ReverseEngineering.md).
+
+The map layer was confirmed the same way ([§6.6](docs/ReverseEngineering.md)). Against a live
+session the locator resolved the position block at exactly the `0xEB4` delta the disassembly
+predicts, decoded **Ground Level — X 16 · Y 31 facing North** (matching the save header field for
+field, and the castle entrance), and read a map that differed from `DDMAP3.DAT` on disk by **2 bytes
+— both squares walked since the last save — and 0 bytes in the whole 4,096-byte wall section**. A
+teleport was then written, read back, and reverted. Two further cross-checks fall out of the data
+alone: the stairways line up square-for-square across all five levels, and the two item squares the
+game hard-codes by coordinate (`THE  S T A F F` at level 1 (20, 22)) land exactly on squares the
+map files mark as items.
 
 The parser is regression-tested:
 
@@ -246,6 +306,16 @@ signature scan, and the "set the roll" parsing — and cross-checks the exact od
 brute force over all 59,049 possible rolls, so a mistake in either the combinatorics or the
 arrangement rule fails the build.
 
+The map layer is covered too: the section offsets pinned so they still account for all 12,648 bytes,
+the wall classification and passability tables against the game's own rules, the direction deltas
+against their opposites, a synthetic level decoded square by square (walls, doors, secret doors,
+stairs, chests, room text, the mapped bit, reveal-all), and every way a buffer can fail to be a
+level — a one-sided wall edit, an out-of-range wall byte, a content byte with bit 6 set, a blank
+buffer. `MapLocator` runs over a synthetic address space that a real process could not be made to
+produce: the map straddling a scan seam, sitting near address zero, one record away from where it
+should be, or missing entirely, plus cancellation. It runs **546 checks** with the game files
+present and skips the shipped-map and sample-save groups with a note when they are absent.
+
 ---
 
 ## Project layout
@@ -261,15 +331,22 @@ src/DarkDesigns1Trainer/
                SpellBook.cs        8 wizard + 8 priest spells with gold costs
                ItemBook.cs         all 64 item ids (41 obtainable) with type, damage/protection, price, class mask
                MonsterBook.cs      43 monsters from Kobold to Chaos Avatar
+               MapFormat.cs        the 12,648-byte level layout: wall grid, square contents, text, wall/square rules
+               DungeonMap.cs       typed view over one level: walls, events, the mapped bit, room list, reveal
+               MapBook.cs          the five levels and how to read their DDMAP files
+               PartyPosition.cs    level / X / Y / facing — the same four words live and in the save header
                GameFacts.cs        game metadata, anchor string, validator strings
-               SaveFile.cs         offline DDCHARS.DAT reader/writer with .bak backup
+               SaveFile.cs         offline DDCHARS.DAT reader/writer with .bak backup, incl. the saved position
   Memory/      RosterLocator.cs    dual-strategy locator (string anchor + structural scan) + party copies
                CreationScanner.cs  finds/reads/writes the create screen's rolled stat pool
                ItemTableLocator.cs finds the 64-entry item table by content; patches item potency
+               MapLocator.cs       finds the party position + map buffer (from the roster, or structurally)
+               IMemorySource.cs    the read-only slice MapLocator needs, so it can be driven from a fixture
                (shared)            ProcessMemory / MemoryRegion — from GameTrainers.Common.Memory
-  ViewModels/  MainViewModel, CharacterViewModel, CharacterRollerViewModel, NamedValueViewModel,
-               ItemSlotViewModel, IItemPack, ReferenceViewModel, ICharacterHost
-  App.xaml, MainWindow.xaml         the WPF UI (Party / Create / Save Editor / References tabs)
+  ViewModels/  MainViewModel, CharacterViewModel, CharacterRollerViewModel, MapsViewModel,
+               NamedValueViewModel, ItemSlotViewModel, IItemPack, ReferenceViewModel, ICharacterHost
+  MapConverters.cs                  WPF value converters for the map schematic
+  App.xaml, MainWindow.xaml         the WPF UI (Party / Create / Save Editor / References / Maps tabs)
 test/FormatCheck/                   headless verification harness
 docs/                               reverse-engineering notes and strategy guide
 .docs/                              RE working notes (git-ignored)
@@ -287,8 +364,12 @@ the shared `GameTrainers.Common` library rather than being duplicated here.
   attach/scan path needs the game running to exercise.
 - The Create tab drives the game by sending keystrokes to its window, so the emulator window comes
   to the front for each re-roll. Stop the roller before using the machine for anything else.
-- The 144-byte `DDCHARS.DAT` header is only partially decoded and is round-tripped without
-  interpretation; only the character records are exposed for editing.
+- The `DDCHARS.DAT` header's first 16 bytes are decoded — the four party roster slots and the party
+  position. The remaining 128 bytes are round-tripped without interpretation. The party slots are
+  shown as read-only: reassigning them without also rebuilding the game's working copies would
+  desynchronise the two.
+- The map's 2,320-byte span at offset `0x1480` is not decoded and is never written. Nothing the
+  trainer does needs it.
 - The status field encoding (KO/STUNED/STONE/DEAD) follows the game's own 5-entry status string
   table and its `status == 5` death check, but has not been observed on a character in those states.
 - Item ids 41–59 (monster hides, claws and bites) are real, writable ids but aren't player gear;
@@ -296,9 +377,16 @@ the shared `GameTrainers.Common` library rather than being duplicated here.
 - The item screen is painted when you open it and is **not** repainted when the bytes change
   underneath it — back out and re-enter it to see an edit land. (The create screen's roll row
   behaves the same way.)
-- Writing has been confirmed live for the pack bytes only; the other fields are pinned by the
-  disassembly and by the game's party status line, but haven't been round-tripped individually
-  through the game's own display.
-- Map files (`DDMAP1–5.DAT`) are not decoded or edited by the trainer.
+- Writing has been confirmed live for the pack bytes and the party position; the other character
+  fields are pinned by the disassembly and by the game's party status line, but haven't been
+  round-tripped individually through the game's own display.
+- After a teleport the 3D view still shows the old square until you step or turn — the game paints
+  it when it moves you, not when the position bytes change. Same caveat as the item and create
+  screens.
+- Teleport while exploring, not mid-combat.
+- Map files (`DDMAP1–5.DAT`) are decoded and drawn, but the only thing the trainer ever *writes*
+  into one is the mapped bit, via **Reveal whole level** — and it writes it to the game's live
+  buffer, not to the file. The game itself then saves it. Nothing else about a map is edited, and
+  the 2,320 undecoded bytes at map offset `0x1480` are never touched.
 - Edits take effect the next time the game reads the field (e.g. opening the character screen).
 - Requires the **.NET 8 SDK** to build and **Windows** (WPF + memory APIs).

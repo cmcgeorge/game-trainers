@@ -32,6 +32,22 @@ public static class CharacterFormat
     /// <summary>Party positions the game keeps live working copies for (roster slot 0 = none).</summary>
     public const int PartySize = 4;
 
+    // --- DDCHARS.DAT header fields -------------------------------------------
+    // The loader reads the header as six separate reads — 8, 2, 2, 2, 2 and 128 bytes — straight
+    // into the data-segment globals it uses at run time, which is what names these fields: the
+    // 8-byte read lands on the party-slot array at DGROUP:0x1318 and the four 2-byte reads on the
+    // level / X / Y / facing globals at 0x1320–0x1327. See docs/ReverseEngineering.md §4.1.
+
+    /// <summary>Four <c>uint16</c>: which roster slot each party position holds (0 = empty).</summary>
+    public const int HdrOffPartySlots = 0x00;
+
+    /// <summary>The party position: level, X, Y and facing as four consecutive <c>uint16</c>.</summary>
+    public const int HdrOffPosition = 0x08;
+
+    /// <summary>128 bytes the game keeps but the teardown has not identified; round-tripped as-is.</summary>
+    public const int HdrOffUnknown = 0x10;
+    public const int HdrUnknownLength = 0x80;
+
     // --- record field offsets ------------------------------------------------
     public const int OffExists = 0x00;       // byte: 1 = present, 0 = empty
     public const int OffNameLen = 0x01;      // byte: name length

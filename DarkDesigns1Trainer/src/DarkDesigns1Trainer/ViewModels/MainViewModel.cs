@@ -45,6 +45,17 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     /// <summary>The create-screen roller: locates the rolled stat pool, re-rolls, and can write it.</summary>
     public CharacterRollerViewModel Roller { get; }
 
+    /// <summary>The Maps tab: where the party is standing, the level schematic, and teleport.</summary>
+    public MapsViewModel Maps { get; }
+
+    /// <summary>
+    /// Base address of the located roster array — the first record the scan matched, backed up by
+    /// its slot index. The map locator starts from this, because the party position and the map
+    /// buffer sit at constant offsets from it inside the same data segment. Null until a scan
+    /// succeeds, and dropped on detach along with everything else tied to the process.
+    /// </summary>
+    private nuint? _rosterBase;
+
     private ProcessEntry? _selectedProcess;
     public ProcessEntry? SelectedProcess { get => _selectedProcess; set { SetField(ref _selectedProcess, value); RaiseCommands(); } }
 
@@ -241,6 +252,67 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
 
     public ObservableCollection<CharacterRecord> SaveCharacters { get; } = new();
 
+    /// <summary>True once a <c>DDCHARS.DAT</c> is open, so the position editor can show itself.</summary>
+    public bool HasSaveFile => SaveFile != null;
+
+    // --- saved party position (the DDCHARS.DAT header) -----------------------
+    // The header's level / X / Y / facing are exactly the four globals the game plays out of, so
+    // editing them here teleports the party on the next run — level included, which the live
+    // teleport deliberately does not do (see MapsViewModel).
+    private PartyPosition SavePosition
+    {
+        get => SaveFile?.Position ?? default;
+        set
+        {
+            if (SaveFile is not { } file) return;
+            file.Position = value;
+            OnPropertyChanged(nameof(SaveLevel));
+            OnPropertyChanged(nameof(SaveX));
+            OnPropertyChanged(nameof(SaveY));
+            OnPropertyChanged(nameof(SaveFacing));
+            OnPropertyChanged(nameof(SavePositionText));
+        }
+    }
+
+    /// <summary>Dungeon level 1–5, or 0 for "in town".</summary>
+    public int SaveLevel
+    {
+        get => SavePosition.Level;
+        set => SavePosition = SavePosition with { Level = Math.Clamp(value, MapFormat.TownLevel, MapFormat.MaxLevel) };
+    }
+
+    public int SaveX
+    {
+        get => SavePosition.X;
+        set => SavePosition = SavePosition with { X = Math.Clamp(value, 0, MapFormat.GridSize - 1) };
+    }
+
+    public int SaveY
+    {
+        get => SavePosition.Y;
+        set => SavePosition = SavePosition with { Y = Math.Clamp(value, 0, MapFormat.GridSize - 1) };
+    }
+
+    /// <summary>0 = North, 1 = East, 2 = South, 3 = West.</summary>
+    public int SaveFacing
+    {
+        get => SavePosition.Facing;
+        set => SavePosition = SavePosition with { Facing = Math.Clamp(value, 0, MapFormat.Directions - 1) };
+    }
+
+    /// <summary>The saved position in words, so the four boxes above can be read at a glance.</summary>
+    public string SavePositionText => SaveFile == null ? "" : SavePosition.Describe();
+
+    private void RefreshSavePosition()
+    {
+        OnPropertyChanged(nameof(HasSaveFile));
+        OnPropertyChanged(nameof(SaveLevel));
+        OnPropertyChanged(nameof(SaveX));
+        OnPropertyChanged(nameof(SaveY));
+        OnPropertyChanged(nameof(SaveFacing));
+        OnPropertyChanged(nameof(SavePositionText));
+    }
+
     private CharacterRecord? _selectedSaveCharacter;
     public CharacterRecord? SelectedSaveCharacter
     {
@@ -329,6 +401,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         SaveMaxAllCommand = new RelayCommand(_ => SaveMaxAll(), _ => SaveFile != null);
 
         Roller = new CharacterRollerViewModel(() => _mem, () => _attachedPid, msg => Status = msg);
+        Maps = new MapsViewModel(() => _mem, () => _rosterBase, this, msg => Status = msg);
 
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _poll.Tick += (_, _) => PollTick();
@@ -371,6 +444,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             OnPropertyChanged(nameof(IsAttached));
             RaiseCommands();
             Roller.RefreshCommands();
+            Maps.RaiseCommands();
             _poll.Start();
             Status = $"Attached to {SelectedProcess.Name} (pid {SelectedProcess.Id}). Scanning for characters…";
             Scan();
@@ -393,9 +467,11 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         bool leftBehind = LeavingPatchesBehind;
         ResetPotency(restore: !KeepPatchesOnDetach);
         Roller.Reset();       // its locked address belongs to the process we're letting go of
+        Maps.Reset();         // as do the position block and map buffer it found
         _mem?.Dispose();
         _mem = null;
         _attachedPid = null;
+        _rosterBase = null;
         Party.Clear();
         SelectedCharacter = null;
         _freezeBody = false; OnPropertyChanged(nameof(FreezeBody));
@@ -427,6 +503,13 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             foreach (var lc in found)
                 Party.Add(new CharacterViewModel(this, lc));
             SelectedCharacter = Party.FirstOrDefault();
+
+            // Back up from the first hit to the start of the roster array; the map locator works
+            // from there. A rescan may land on a different anchor, so recompute it every time.
+            _rosterBase = found.Count > 0
+                ? found[0].Address - (nuint)(found[0].Slot * CharacterFormat.RecordSize)
+                : null;
+            Maps.RaiseCommands();
             if (FreezeBody) foreach (var c in Party) c.FreezeBody = true;
             if (FreezeMagic) foreach (var c in Party) c.FreezeMagic = true;
             if (FreezeStatus) foreach (var c in Party) c.FreezeStatus = true;
@@ -459,6 +542,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     {
         if (_mem == null) return;
         foreach (var c in Party) c.Poll();
+        Maps.Tick();
 
         // Say so once rather than every tick.
         bool anyStale = Party.Any(c => c.IsStale);
@@ -487,9 +571,10 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             foreach (var c in SaveFile.OccupiedCharacters)
                 SaveCharacters.Add(c);
             SelectedSaveCharacter = SaveCharacters.FirstOrDefault();
+            RefreshSavePosition();
             Status = SaveCharacters.Count == 0
                 ? $"Loaded {dlg.FileName} — no characters found."
-                : $"Loaded {dlg.FileName} — {SaveCharacters.Count} character(s).";
+                : $"Loaded {dlg.FileName} — {SaveCharacters.Count} character(s), party at {SavePosition.Describe()}";
             RaiseCommands();
         }
         catch (Exception ex)
@@ -566,6 +651,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         // before it notices. Memory access stays safe either way (ProcessMemory holds a
         // SafeProcessHandle), so this isn't worth blocking shutdown on.
         Roller.Reset();
+        Maps.Reset();
         _scanCts?.Cancel();
         _scanCts?.Dispose();
         _mem?.Dispose();
