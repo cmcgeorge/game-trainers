@@ -1,0 +1,294 @@
+<Window x:Class="Civilization3ConquestsTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Civilization III: Conquests — Trainer" Height="780" Width="1180"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+        </Style>
+        <Style x:Key="Toolbar" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"/>
+            <Setter Property="Padding" Value="6,4"/>
+        </Style>
+        <Style x:Key="Note" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="4,2"/>
+            <Setter Property="Foreground" Value="#555"/>
+        </Style>
+        <Style x:Key="Head" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="4,10,4,3"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- process / attach / locate -->
+        <Border DockPanel.Dock="Top" Style="{StaticResource Toolbar}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Process:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <ComboBox Width="240" VerticalAlignment="Center"
+                          ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                          SelectedItem="{Binding SelectedProcess}"/>
+                <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                <Separator Margin="6,0"/>
+                <Button Content="Auto-locate (no scan)" FontWeight="Bold" Command="{Binding AutoLocateCommand}"
+                        ToolTip="Adds the recovered offsets to the module base and proves the result against all 32 leader slots."/>
+                <Button Content="Re-scan" Command="{Binding RescanCommand}"
+                        ToolTip="Rebuild the city and unit lists — they change every turn."/>
+                <CheckBox Content="My civ only" IsChecked="{Binding MineOnly}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <!-- session summary -->
+        <Border DockPanel.Dock="Top" Padding="8,3" Background="#F4F4F4">
+            <TextBlock Text="{Binding SessionSummary}" FontWeight="SemiBold"/>
+        </Border>
+
+        <!-- status -->
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource Toolbar}">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+        </Border>
+
+        <TabControl Margin="6">
+
+            <!-- ============ Players ============ -->
+            <TabItem Header="Players">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Style="{StaticResource Toolbar}">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Max treasury (you)" Command="{Binding MaxTreasuryCommand}"/>
+                            <Button Content="Freeze treasury (you)" Command="{Binding FreezeTreasuryCommand}"/>
+                            <TextBlock Style="{StaticResource Note}" VerticalAlignment="Center"
+                                       Text="Treasury is decoded from two fields — see References. Rates are tens of percent and always total 100%."/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Players}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                              BeginningEdit="Grid_BeginningEdit" CellEditEnding="Grid_CellEditEnding">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Civilization" Binding="{Binding RowLabel}" IsReadOnly="True" Width="190"/>
+                            <!-- No StringFormat: DataGridTextColumn reuses the same binding for the edit
+                                 TextBox, and Int64Converter parses without AllowThousands, so a grouped
+                                 string would fail to convert back and the edit would be silently lost. -->
+                            <DataGridTextColumn Header="Treasury" Width="110"
+                                                Binding="{Binding Treasury, UpdateSourceTrigger=LostFocus}"/>
+                            <DataGridTextColumn Header="Tax" Binding="{Binding TaxRate, UpdateSourceTrigger=LostFocus}" Width="46"/>
+                            <DataGridTextColumn Header="Sci" Binding="{Binding ScienceRate, UpdateSourceTrigger=LostFocus}" Width="46"/>
+                            <DataGridTextColumn Header="Lux" Binding="{Binding LuxuryRate, UpdateSourceTrigger=LostFocus}" Width="46"/>
+                            <DataGridTextColumn Header="Era" Binding="{Binding Era, UpdateSourceTrigger=LostFocus}" Width="46"/>
+                            <DataGridTextColumn Header="Bulbs" Binding="{Binding ResearchBulbs, UpdateSourceTrigger=LostFocus}" Width="70"/>
+                            <DataGridTextColumn Header="Cult. lvl" Binding="{Binding CultureLevel}" IsReadOnly="True" Width="62"/>
+                            <DataGridTextColumn Header="Culture" Binding="{Binding CultureTotal, UpdateSourceTrigger=LostFocus}" Width="80"/>
+                            <DataGridTextColumn Header="Cities" Binding="{Binding CityCount}" IsReadOnly="True" Width="50"/>
+                            <DataGridTextColumn Header="Units" Binding="{Binding UnitCount}" IsReadOnly="True" Width="50"/>
+                            <DataGridCheckBoxColumn Header="Freeze $" Binding="{Binding FreezeTreasury}" Width="66"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ============ Cities ============ -->
+            <TabItem Header="Cities">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Style="{StaticResource Toolbar}">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Fill food + shields" Command="{Binding MaxCityStoresCommand}"/>
+                            <TextBlock Style="{StaticResource Note}" VerticalAlignment="Center"
+                                       Text="Only the anchor-bracketed prefix of the city record is shown, and it is Inferred rather than confirmed — there were no cities to read when these offsets were checked. Population, corruption, incomes and the build queue sit past where the layout stops being reliable. See docs/ReverseEngineering.md §4.4."/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Cities}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                              BeginningEdit="Grid_BeginningEdit" CellEditEnding="Grid_CellEditEnding">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding Slot}" IsReadOnly="True" Width="40"/>
+                            <DataGridTextColumn Header="Owner" Binding="{Binding Owner}" IsReadOnly="True" Width="180"/>
+                            <DataGridTextColumn Header="Position" Binding="{Binding Position}" IsReadOnly="True" Width="80"/>
+                            <DataGridTextColumn Header="Food" Binding="{Binding StoredFood, UpdateSourceTrigger=LostFocus}" Width="80"/>
+                            <DataGridTextColumn Header="Shields" Binding="{Binding StoredProduction, UpdateSourceTrigger=LostFocus}" Width="80"/>
+                            <DataGridTextColumn Header="Cult. level" Binding="{Binding CulturalLevel, UpdateSourceTrigger=LostFocus}" Width="80"/>
+                            <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Freeze}" Width="60"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ============ Units ============ -->
+            <TabItem Header="Units">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Style="{StaticResource Toolbar}">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Full heal all" Command="{Binding HealAllUnitsCommand}"/>
+                            <Button Content="Refresh all moves" Command="{Binding RefreshAllMovesCommand}"/>
+                            <Button Content="Promote all to elite" Command="{Binding EliteAllUnitsCommand}"/>
+                            <TextBlock Style="{StaticResource Note}" VerticalAlignment="Center"
+                                       Text="Damage is hit points LOST and Moves is points SPENT — zero is a fresh, undamaged unit."/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Units}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal"
+                              BeginningEdit="Grid_BeginningEdit" CellEditEnding="Grid_CellEditEnding">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding Slot}" IsReadOnly="True" Width="40"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding TypeName}" IsReadOnly="True" Width="150"/>
+                            <DataGridTextColumn Header="Owner" Binding="{Binding Owner}" IsReadOnly="True" Width="180"/>
+                            <DataGridTextColumn Header="Position" Binding="{Binding Position}" IsReadOnly="True" Width="80"/>
+                            <DataGridTextColumn Header="Damage" Binding="{Binding Damage, UpdateSourceTrigger=LostFocus}" Width="70"/>
+                            <DataGridTextColumn Header="Moves used" Binding="{Binding MovesUsed, UpdateSourceTrigger=LostFocus}" Width="86"/>
+                            <DataGridTextColumn Header="Veteran" Binding="{Binding Experience, UpdateSourceTrigger=LostFocus}" Width="66"/>
+                            <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Freeze}" Width="60"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ============ Map ============ -->
+            <TabItem Header="Map" DataContext="{Binding Map}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="10">
+                        <TextBlock Text="World" Style="{StaticResource Head}"/>
+                        <TextBlock Text="{Binding Summary}" Style="{StaticResource Note}"/>
+                        <TextBlock Text="{Binding TilePointerNote}" Style="{StaticResource Note}" FontFamily="Consolas"/>
+
+                        <TextBlock Text="Reveal the map" Style="{StaticResource Head}"/>
+                        <TextBlock Style="{StaticResource Note}"
+                                   Text="This sets your civilization's bit in each tile's visibility masks. The map header itself is confirmed — its width, height and seed were checked against conquests.ini — but the per-tile visibility offsets are INFERRED from the community struct header and have not been round-tripped through the game's own display. Every tile is checked for its own 'TILE' tag before anything is written, so a wrong pointer stops the sweep rather than spraying writes; even so, back up your save first."/>
+                        <CheckBox Margin="4,6" IsChecked="{Binding ConfirmedRisk}"
+                                  Content="I understand these offsets are unconfirmed and I have a backup save"/>
+                        <Button Content="Reveal map" HorizontalAlignment="Left" Command="{Binding RevealMapCommand}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ============ Scanner ============ -->
+            <TabItem Header="Scanner" DataContext="{Binding Scanner}">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Style="{StaticResource Toolbar}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <ComboBox Width="80" VerticalAlignment="Center"
+                                          ItemsSource="{Binding Widths}" SelectedItem="{Binding SelectedWidth}"/>
+                                <TextBlock Text="Value:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                                <TextBox Width="120" Text="{Binding ScanText, UpdateSourceTrigger=PropertyChanged}"/>
+                                <Button Content="First scan" Command="{Binding FirstScanCommand}"/>
+                                <Button Content="Exact" Command="{Binding NextScanCommand}" CommandParameter="Exact"/>
+                                <Button Content="Increased" Command="{Binding NextScanCommand}" CommandParameter="Increased"/>
+                                <Button Content="Decreased" Command="{Binding NextScanCommand}" CommandParameter="Decreased"/>
+                                <Button Content="Changed" Command="{Binding NextScanCommand}" CommandParameter="Changed"/>
+                                <Button Content="Unchanged" Command="{Binding NextScanCommand}" CommandParameter="Unchanged"/>
+                                <Button Content="New scan" Command="{Binding NewScanCommand}"/>
+                                <TextBlock Text="{Binding MatchCount}" VerticalAlignment="Center" Margin="10,0"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Guides:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                <Button Content="Treasury" Command="{Binding TreasuryGuideCommand}"/>
+                                <Button Content="City stores" Command="{Binding CityGuideCommand}"/>
+                                <Button Content="Unit damage" Command="{Binding UnitGuideCommand}"/>
+                                <Button Content="Turn" Command="{Binding TurnGuideCommand}"/>
+                                <Button Content="Pin" Command="{Binding PinCommand}"/>
+                                <Button Content="Unpin" Command="{Binding RemoveFrozenCommand}"/>
+                                <Button Content="Freeze all" Command="{Binding FreezeAllCommand}"/>
+                                <Button Content="Freeze none" Command="{Binding FreezeNoneCommand}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border DockPanel.Dock="Bottom" Padding="6,3">
+                        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Foreground="#444"/>
+                    </Border>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <DataGrid Grid.Column="0" ItemsSource="{Binding Results}" SelectedItem="{Binding SelectedResult}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" Width="140"/>
+                                <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <DataGrid Grid.Column="1" ItemsSource="{Binding Frozen}" SelectedItem="{Binding SelectedFrozen}"
+                                  AutoGenerateColumns="False" CanUserAddRows="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Label" Binding="{Binding Label}" IsReadOnly="True" Width="130"/>
+                                <DataGridTextColumn Header="Address" Binding="{Binding AddressHex}" IsReadOnly="True" Width="120"/>
+                                <DataGridTextColumn Header="Live" Binding="{Binding Live}" IsReadOnly="True" Width="90"/>
+                                <DataGridTextColumn Header="Target" Binding="{Binding Target, UpdateSourceTrigger=LostFocus}" Width="90"/>
+                                <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen}" Width="60"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ============ References ============ -->
+            <TabItem Header="References" DataContext="{Binding Reference}">
+                <TabControl Margin="4">
+                    <TabItem Header="How it works">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding Notes}" Margin="10">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,0,10">
+                                            <TextBlock Text="{Binding Topic}" FontWeight="Bold"/>
+                                            <TextBlock Text="{Binding Body}" TextWrapping="Wrap" Foreground="#444" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </TabItem>
+                    <TabItem Header="The nine conquests">
+                        <DataGrid ItemsSource="{Binding Conquests}" AutoGenerateColumns="False"
+                                  CanUserAddRows="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Conquest" Binding="{Binding Name}" Width="150"/>
+                                <DataGridTextColumn Header="Era" Binding="{Binding Era}" Width="110"/>
+                                <DataGridTextColumn Header="Setting" Binding="{Binding Setting}" Width="300"/>
+                                <DataGridTextColumn Header="Victory" Binding="{Binding Victory}" Width="250"/>
+                                <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Civilizations">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top" Text="{Binding TablesNote}" Style="{StaticResource Note}"/>
+                            <DataGrid ItemsSource="{Binding Races}" AutoGenerateColumns="False"
+                                      CanUserAddRows="False" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="40"/>
+                                    <DataGridTextColumn Header="Civilization" Binding="{Binding Country}" Width="160"/>
+                                    <DataGridTextColumn Header="Leader" Binding="{Binding Leader}" Width="160"/>
+                                    <DataGridTextColumn Header="Adjective" Binding="{Binding Adjective}" Width="150"/>
+                                    <DataGridTextColumn Header="Aggression" Binding="{Binding Aggression}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </TabItem>
+                    <TabItem Header="Units">
+                        <DataGrid ItemsSource="{Binding UnitTypes}" AutoGenerateColumns="False"
+                                  CanUserAddRows="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="40"/>
+                                <DataGridTextColumn Header="Unit" Binding="{Binding Name}" Width="200"/>
+                                <DataGridTextColumn Header="Attack" Binding="{Binding Attack}" Width="60"/>
+                                <DataGridTextColumn Header="Defence" Binding="{Binding Defence}" Width="66"/>
+                                <DataGridTextColumn Header="Moves" Binding="{Binding Movement}" Width="60"/>
+                                <DataGridTextColumn Header="Cost" Binding="{Binding Cost}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

@@ -93,6 +93,15 @@
     (it runs wizdos wiz1.dsk, a UCSD p-system emulator) and load or create
     a party -- the trainer locates the roster automatically by structural scan
     and needs no value searching.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer Civilization3
+    Builds and launches the Civilization III: Conquests trainer. This one is a
+    native Win32 target, so there is no DOSBox: start Civ3Conquests.exe and load
+    or begin a game, then Attach. The trainer resolves the player, city and unit
+    data in a few milliseconds with no value searching. Note that Civ3 obfuscates
+    your treasury across two fields, so a Cheat-Engine-style exact scan for your
+    gold cannot work -- the auto-locate decodes it instead.
 #>
 [CmdletBinding()]
 param(
