@@ -17,6 +17,18 @@ public sealed record UnitTypeInfo(int Id, string Name, int Attack, int Defence, 
 }
 
 /// <summary>
+/// One terrain job from the loaded rules database — what a worker can be told to do, and what it costs.
+/// </summary>
+/// <param name="TurnToComplete">
+/// Base cost in worker-turns, before the game multiplies it by the terrain factor of the tile being
+/// worked. See <see cref="Civ3Layout.WorkerJobTurnToComplete"/>.
+/// </param>
+public sealed record WorkerJobInfo(int Id, string Name, int TurnToComplete)
+{
+    public string Display => $"{Name} ({TurnToComplete})";
+}
+
+/// <summary>
 /// The civilization and unit-type tables, read out of the game's own <c>BIC</c> database rather than
 /// curated in source.
 ///
@@ -37,14 +49,33 @@ public sealed class GameTables
     /// <summary>Unit types, indexed by <c>UnitTypeID</c>. Empty when the tables could not be read.</summary>
     public IReadOnlyList<UnitTypeInfo> UnitTypes { get; }
 
-    private GameTables(IReadOnlyList<RaceInfo> races, IReadOnlyList<UnitTypeInfo> unitTypes)
+    /// <summary>Worker jobs, indexed by <c>Job_ID</c>. Empty when the table could not be read.</summary>
+    public IReadOnlyList<WorkerJobInfo> WorkerJobs { get; }
+
+    /// <summary>
+    /// Address of the live <c>Worker_Job</c> table in the target, or 0 when it was not read. Held so the
+    /// job costs can be written as well as displayed — this is the one table the trainer edits, and the
+    /// address is kept here rather than re-derived at the call site so the read and the write cannot
+    /// disagree about where the table is.
+    /// </summary>
+    public nuint WorkerJobsTable { get; }
+
+    /// <summary>Stride the worker-job table was actually read at (normally <see cref="Civ3Layout.WorkerJobStride"/>).</summary>
+    public int WorkerJobStride { get; }
+
+    private GameTables(IReadOnlyList<RaceInfo> races, IReadOnlyList<UnitTypeInfo> unitTypes,
+                       IReadOnlyList<WorkerJobInfo> workerJobs, nuint workerJobsTable, int workerJobStride)
     {
         Races = races;
         UnitTypes = unitTypes;
+        WorkerJobs = workerJobs;
+        WorkerJobsTable = workerJobsTable;
+        WorkerJobStride = workerJobStride;
     }
 
     /// <summary>An empty set, used before a game is located.</summary>
-    public static GameTables Empty { get; } = new(Array.Empty<RaceInfo>(), Array.Empty<UnitTypeInfo>());
+    public static GameTables Empty { get; } = new(
+        Array.Empty<RaceInfo>(), Array.Empty<UnitTypeInfo>(), Array.Empty<WorkerJobInfo>(), 0, Civ3Layout.WorkerJobStride);
 
     /// <summary>Civilization label for a race id, or a placeholder when it is unknown or unset.</summary>
     public string RaceName(int raceId)
@@ -60,14 +91,26 @@ public sealed class GameTables
         return typeId < UnitTypes.Count ? UnitTypes[typeId].Name : $"Type {typeId}";
     }
 
-    /// <summary>Reads both tables from a located game. Never throws; returns <see cref="Empty"/> on failure.</summary>
+    /// <summary>Job name for a job id, empty for an idle unit (<c>-1</c>), or a placeholder.</summary>
+    public string WorkerJobName(int jobId)
+    {
+        if (jobId < 0) return "";
+        return jobId < WorkerJobs.Count ? WorkerJobs[jobId].Name : $"Job {jobId}";
+    }
+
+    /// <summary>The job a unit is doing, or null when it is idle or the table was not read.</summary>
+    public WorkerJobInfo? WorkerJob(int jobId)
+        => jobId >= 0 && jobId < WorkerJobs.Count ? WorkerJobs[jobId] : null;
+
+    /// <summary>Reads the tables from a located game. Never throws; returns <see cref="Empty"/> on failure.</summary>
     public static GameTables Read(IMemorySource mem, Civ3Location loc)
     {
         try
         {
             var races = ReadRaces(mem, loc.BicData);
             var units = ReadUnitTypes(mem, loc.BicData);
-            return new GameTables(races, units);
+            var (jobs, jobTable, jobStride) = ReadWorkerJobs(mem, loc.BicData);
+            return new GameTables(races, units, jobs, jobTable, jobStride);
         }
         catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentException or OverflowException)
         {
@@ -120,6 +163,58 @@ public sealed class GameTables
                 ReadInt(mem, u + (nuint)Civ3Layout.UnitTypeCost)));
         }
         return list;
+    }
+
+    /// <summary>
+    /// Reads the worker-job table, and returns where it is so the costs can be edited later.
+    ///
+    /// <para>This is the one table with no <c>ID</c> field, so <see cref="FindStride"/> — which proves a
+    /// stride by <c>Table[i].ID == i</c> — cannot be used. The substitute is
+    /// <see cref="Civ3Layout.ValidateWorkerJob"/> applied to <i>every</i> record: a printable name and a
+    /// sane cost, thirteen times running at a fixed spacing, is not something arbitrary memory offers.
+    /// If the expected stride fails, the same predicate drives a search rather than the table being read
+    /// through a stale constant.</para>
+    /// </summary>
+    private static (List<WorkerJobInfo> Jobs, nuint Table, int Stride) ReadWorkerJobs(IMemorySource mem, nuint bic)
+    {
+        var list = new List<WorkerJobInfo>();
+        int count = ReadInt(mem, bic + (nuint)Civ3Layout.BicWorkerJobCount);
+        nuint table = (nuint)ReadUInt(mem, bic + (nuint)Civ3Layout.BicWorkerJobs);
+        if (count is <= 0 or > 256 || !Civ3Layout.LooksLikeHeapPointer((uint)table))
+            return (list, 0, Civ3Layout.WorkerJobStride);
+
+        int stride = FindWorkerJobStride(mem, table, count);
+        if (stride <= 0) return (list, 0, Civ3Layout.WorkerJobStride);
+
+        for (int i = 0; i < count; i++)
+        {
+            nuint j = table + (nuint)(i * stride);
+            list.Add(new WorkerJobInfo(
+                i,
+                ReadString(mem, j + (nuint)Civ3Layout.WorkerJobName, 32),
+                ReadInt(mem, j + (nuint)Civ3Layout.WorkerJobTurnToComplete)));
+        }
+        return (list, table, stride);
+    }
+
+    private static int FindWorkerJobStride(IMemorySource mem, nuint table, int count)
+    {
+        if (WorkerJobStrideHolds(mem, table, count, Civ3Layout.WorkerJobStride)) return Civ3Layout.WorkerJobStride;
+        for (int s = 0x40; s <= MaxSearchStride; s += 4)
+            if (s != Civ3Layout.WorkerJobStride && WorkerJobStrideHolds(mem, table, count, s)) return s;
+        return -1;
+    }
+
+    private static bool WorkerJobStrideHolds(IMemorySource mem, nuint table, int count, int stride)
+    {
+        // Every record has to pass, not a sample of them: with no index to check, the only thing making
+        // a false stride implausible is that it would have to produce a valid record every single time.
+        for (int i = 0; i < count; i++)
+        {
+            byte[] rec = mem.Read(table + (nuint)(i * stride), Civ3Layout.WorkerJobRecordProbeBytes);
+            if (!Civ3Layout.ValidateWorkerJob(rec)) return false;
+        }
+        return true;
     }
 
     /// <summary>Widest stride the search will consider — comfortably past <c>Race</c>'s 0x974.</summary>

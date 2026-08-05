@@ -93,7 +93,13 @@ public static class Civ3Layout
     public const int LeaderGoldDecrement = 0x44;      // [Confirmed] see DecodeGold
     public const int LeaderGoldEncoded = 0x48;        // [Confirmed]
     public const int LeaderAnarchyTurns = 0x9C;       // [Inferred]
-    public const int LeaderGovernment = 0xA0;         // [Inferred]
+
+    /// <summary>
+    /// [Confirmed] Government type. Promoted from Inferred by the game's own worker-rate routine at
+    /// <c>0x5C1D10</c>, which does <c>mov ecx,[eax + 0xA75738]</c> with <c>eax = CivID × 0x20E4</c> —
+    /// and <c>0xA75738 − 0xA75698 = 0xA0</c> exactly. It reads this to apply the despotism work penalty.
+    /// </summary>
+    public const int LeaderGovernment = 0xA0;
     public const int LeaderTilesDiscovered = 0xA8;    // [Inferred]
     public const int LeaderEra = 0xF4;                // [Confirmed]
     public const int LeaderResearchBulbs = 0xF8;      // [Confirmed]
@@ -148,6 +154,36 @@ public static class Civ3Layout
 
     /// <summary>[Confirmed] Movement <i>used</i> this turn — "refresh moves" writes 0 here.</summary>
     public const int UnitMoves = 0x34;
+
+    /// <summary>
+    /// [Confirmed] Worker-turns <i>already put into</i> the current job — it counts <b>up</b> toward the
+    /// job's cost, so raising it finishes the job sooner and zeroing it starts the work over.
+    ///
+    /// <para>Confirmed out of the game's own code rather than inferred. <c>get_worker_remaining_turns_to_complete</c>
+    /// (<c>0x5D5520</c>) computes the total cost as <c>Worker_Job.TurnToComplete × a terrain factor</c>
+    /// and then, at <c>0x5D563D</c>, does <c>mov ebp,[esi+0x54]</c> / <c>sub ebx,ebp</c> — subtracting
+    /// this field from that total. (<c>Unit+0x54</c> is <c>Unit_Body+0x38</c>: the body pointer sits
+    /// <c>0x1C</c> past the object, which the same routine confirms with <c>lea esi,[eax-0x1C]</c>.)</para>
+    ///
+    /// <para><b>Progress pools across a stack.</b> That loop walks every unit standing on the tile and
+    /// subtracts the <c>Job_Value</c> of each one whose <see cref="UnitJobId"/> matches, which is why
+    /// several workers on one tile finish a job together — and why writing this on any one of them is
+    /// enough to finish it for the whole stack.</para>
+    /// </summary>
+    public const int UnitJobValue = 0x38;
+
+    /// <summary>
+    /// [Confirmed] Which job the unit is performing, or <c>-1</c> when it is idle — the
+    /// <c>enum Worker_Jobs</c> ordinal (0 mine, 1 irrigate, 2 fortress, 3 road, 4 railroad …), which
+    /// indexes the loaded ruleset's own job table. The routine above compares it against the job it was
+    /// asked about before pooling a unit's progress. Idle units read <c>-1</c> here and <c>0</c> in
+    /// <see cref="UnitJobValue"/>, confirmed live across 28 units of 11 civs.
+    ///
+    /// <para>The trainer reads this and never writes it: starting a job is more than setting a number
+    /// (the game also sets unit state, the tile's overlays and the animation), so a poked job id would
+    /// describe work the game never actually began.</para>
+    /// </summary>
+    public const int UnitJobId = 0x3C;
 
     /// <summary>How many bytes of a unit record <see cref="ValidateUnit"/> needs.</summary>
     public const int UnitRecordProbeBytes = 0x40;
@@ -220,6 +256,37 @@ public static class Civ3Layout
     public const int RaceCountryName = 0x9C;          // [Confirmed] char[40]
     public const int RaceAggression = 0x918;          // [Inferred]
     public const int RaceId = 0x91C;                  // [Confirmed]
+
+    /// <summary>[Confirmed] <c>WorkerJobCount</c> — 13 in the epic game, but a mod may ship its own.</summary>
+    public const int BicWorkerJobCount = 0x8B8;
+
+    /// <summary>
+    /// [Confirmed] <c>Worker_Job*</c> — the per-job cost table for whichever ruleset is loaded.
+    ///
+    /// <para>Read straight out of the game's code, not derived: <c>get_worker_remaining_turns_to_complete</c>
+    /// loads it with <c>mov esi,[0x9E9B24]</c>, and <c>0x9E9B24 − 0x9E5D08</c> (<c>p_bic_data</c>) is
+    /// <c>0x3E1C</c>. The arithmetic over the community header agrees, and so does the
+    /// <see cref="BicMap"/> anchor <c>0x48</c> further on.</para>
+    /// </summary>
+    public const int BicWorkerJobs = 0x3E1C;
+
+    /// <summary>[Confirmed] <c>sizeof(Worker_Job)</c>. The game indexes the table by <c>29 × id</c>
+    /// scaled by 4 (<c>lea</c> chain at <c>0x5D5565</c>), which is <c>0x74</c>.</summary>
+    public const int WorkerJobStride = 0x74;
+
+    public const int WorkerJobName = 0x04;            // [Confirmed] char[32] — "Mine", "Irrigation", "Road" …
+
+    /// <summary>
+    /// [Confirmed] Base cost of the job in worker-turns, read by the game as
+    /// <c>mov ebx,[esi + id×0x74 + 0x44]</c> and then multiplied by a terrain factor to give the real
+    /// cost. Epic-game values: Road 6, Irrigation 8, Mine 12, Railroad 12, Fortress 16, Clear Damage 24.
+    /// A worker contributes roughly two of these per turn, which is what makes a road on open ground the
+    /// familiar three turns.
+    /// </summary>
+    public const int WorkerJobTurnToComplete = 0x44;
+
+    /// <summary>How many bytes of a <c>Worker_Job</c> record <see cref="ValidateWorkerJob"/> needs.</summary>
+    public const int WorkerJobRecordProbeBytes = WorkerJobTurnToComplete + 4;
 
     public const int UnitTypeStride = 0x138;          // [Confirmed] brute-forced against UnitType[i].ID == i
     public const int UnitTypeName = 0x08;             // [Confirmed] char[32]
@@ -352,6 +419,44 @@ public static class Civ3Layout
         if (BitConverter.ToInt32(body.Slice(CityStoredProduction, 4)) < 0) return false;
         return BitConverter.ToInt32(body.Slice(CityCulturalLevel, 4)) is >= 0 and <= 100;
     }
+
+    /// <summary>
+    /// Whether a <c>Worker_Job</c> record looks real. Unlike <c>Race</c> and <c>UnitType</c> this table
+    /// has <b>no <c>ID</c> field</b>, so the usual <c>Table[i].ID == i</c> stride proof is unavailable
+    /// and the record has to vouch for itself: a printable, non-empty name and a cost inside
+    /// <see cref="GameFacts.MaxWorkerJobTurnToComplete"/>. Thirteen consecutive records satisfying that
+    /// at a stride of <c>0x74</c> is what stands in for the missing index.
+    /// </summary>
+    public static bool ValidateWorkerJob(ReadOnlySpan<byte> record)
+    {
+        if (record.Length < WorkerJobRecordProbeBytes) return false;
+
+        int cost = BitConverter.ToInt32(record.Slice(WorkerJobTurnToComplete, 4));
+        if (cost < 0 || cost > GameFacts.MaxWorkerJobTurnToComplete) return false;
+
+        // A name, not just bytes: printable ASCII up to the terminator, and at least one character of it.
+        var name = record.Slice(WorkerJobName, 32);
+        int length = 0;
+        while (length < name.Length && name[length] != 0)
+        {
+            if (name[length] is < 0x20 or > 0x7E) return false;
+            length++;
+        }
+        return length is > 0 and < 32;
+    }
+
+    /// <summary>
+    /// What to write into <see cref="UnitJobValue"/> so a job of the given base cost completes.
+    ///
+    /// <para>The game's real threshold is <c>TurnToComplete × a terrain factor</c> it derives from the
+    /// tile the worker is standing on, and the trainer does not decode that factor — so this multiplies
+    /// by <see cref="GameFacts.WorkerJobTerrainFactorCeiling"/> to clear the worst terrain rather than
+    /// writing some huge round number. Enough to finish the job, small enough that it stays a plausible
+    /// count of worker-turns instead of a value the game's own arithmetic has to survive.</para>
+    /// </summary>
+    public static int WorkerJobWorkToFinish(int turnToComplete)
+        => Math.Clamp(turnToComplete, 1, GameFacts.MaxWorkerJobTurnToComplete)
+           * GameFacts.WorkerJobTerrainFactorCeiling;
 
     /// <summary>Whether a <c>Map</c> header is self-consistent: Civ3's staggered grid holds W*H/2 tiles.</summary>
     public static bool ValidateMap(int width, int height, int tileCount)

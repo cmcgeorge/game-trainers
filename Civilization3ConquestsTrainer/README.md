@@ -6,8 +6,8 @@ v1.22). It attaches straight to `Civ3Conquests.exe` — no emulator — and **fi
 one click resolves the player, city and unit data with no value searching.
 
 It edits treasury, the tax/science/luxury rates, culture, era and research points per civilization;
-heals, refreshes and promotes units; and fills city food and shield stores — with freeze toggles that
-survive the turn tick.
+heals, refreshes and promotes units; finishes workers' terrain jobs; and fills city food and shield
+stores — with freeze toggles that survive the turn tick.
 
 Single-player cheat tool for your own game. It never modifies the game's files, and detaching leaves
 nothing patched.
@@ -95,7 +95,8 @@ rebuilds automatically when units are built or killed and when cities are founde
 (*Refresh list* on the toolbar re-lists **processes**, not game data — you should never need it once
 attached.)
 
-**Units** — full heal, refresh movement, promote to elite, per-unit or all at once.
+**Units** — full heal, refresh movement (once, or held at zero all turn), promote to elite, finish worker
+jobs, per-unit or all at once.
 
 Two fields read backwards from the UI and the grid labels them accordingly: the record stores hit
 points **lost** and movement **spent**, so zero is a fresh, undamaged unit. Maximum hit points are not
@@ -106,6 +107,52 @@ invincible**, and does not claim to: Civ3 resolves an entire battle inside a sin
 round, the kill and the score update — so there is no instant during combat at which a trainer polling
 between frames could intervene. Heal restores a unit that survived; a unit that lost dies anyway.
 Promoting to Elite is the only per-unit durability lever the data model offers.
+
+**Workers** — the grid shows what each worker is building and how much work is in it, and there are two
+ways to speed that up.
+
+**Finish worker jobs** banks enough worker-turns to complete the job every worker of yours is already
+doing, and touches **your units only**. Job progress reads the opposite way to damage and movement on
+the same row: it counts **up** toward the job's cost. It also **pools across the tile** — the game sums
+the progress of every unit standing there doing the same job — so finishing it on one worker of a stack
+finishes it for all of them. Idle workers are skipped: this completes work already under way rather
+than starting it.
+
+**Instant worker jobs** rewrites every terrain job in the loaded ruleset to cost one worker-turn. That
+is **rules data, not a per-unit edit — the AI's workers get exactly the same speed-up**, which is why
+it is a toggle rather than a button: the original costs are captured when you switch it on and put back
+when you switch it off or detach. It is the same objection that rules out buffing `UnitType.Defence`
+for invincibility, made survivable by being reversible.
+
+The timing works in your favour, though. The game **re-reads a job's cost every time a worker puts in a
+turn of work** rather than fixing it when the job starts, so the toggle only affects whoever is working
+while it is on — and the AI's workers work during the AI's turn, which runs after you end yours.
+Switching it off before you end the turn therefore keeps it away from them. Your own worker puts in its
+first turn of work at the moment you give it the order, while the toggle is still on, and re-issuing a
+job *adds* to its progress rather than resetting it. Save with the toggle off.
+
+For an edge that is unambiguously yours alone, prefer **Finish worker jobs** — it writes to your units
+only and needs no timing discipline at all.
+
+**Neither is instant on its own, and the reason is worth knowing.** Civ3 tests whether a job is finished
+*only* while a worker is putting a turn of work into it — and working costs the worker its whole move, so
+that is one check per turn. Banked work therefore lands at the start of your next turn, and **a job
+already due next turn cannot be shortened at all**. Buying turns down to one is the floor, the same way
+banked research bottoms out a few turns short of instant.
+
+**Hold my units' moves at 0** is the standing version of *Refresh all moves*: it re-zeroes spent movement
+on every unit of yours on every poll, so they can keep moving, attacking and working all turn. For
+workers it is also the other half of the mechanism above — with the move handed back you can re-issue a
+worker's order in the same turn, which forces the completion check to run again, and the banked work
+finishes the job **on the spot**. `Job_Value` supplies the work; the movement hold supplies the tick.
+
+**Keep worker jobs banked** does what *Finish worker jobs* does, on every poll. Completing a job clears
+the worker's banked work — the game zeroes `Job_Value` and sets `Job_ID` to -1 for every unit on the tile
+— so nothing carries into the next job and the button would otherwise need clicking once per job. It is
+cheap: a worker already topped up is skipped rather than rewritten.
+
+With both toggles ticked, finishing terrain work is just **order it, then order it again**, and a worker
+can move on and repeat as many times in one turn as you care to click. Only your units are touched.
 
 **Cities** — position, stored food, stored shields, cultural level, with a freeze, plus three
 all-my-cities buttons: **Max shields** (each city finishes what it is building next turn), **Max

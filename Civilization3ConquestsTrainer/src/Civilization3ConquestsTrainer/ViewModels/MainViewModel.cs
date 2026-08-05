@@ -86,7 +86,8 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     /// <summary>Turn / player / map line shown next to the toolbar.</summary>
     public string SessionSummary { get => _sessionSummary; private set => SetField(ref _sessionSummary, value); }
 
-    private string _status = "Start Civilization III: Conquests, load or begin a game, then Attach and Auto-locate.";
+    private string _status = "Start Civilization III: Conquests, load or begin a game, then click Attach — " +
+                             "the trainer finds the game state by itself.";
     public string Status { get => _status; set => SetField(ref _status, value); }
 
     private long _maxTreasuryAmount = GameFacts.MaxTreasuryPreset;
@@ -112,6 +113,113 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         }
     }
 
+    private bool _holdMyUnitMoves;
+
+    /// <summary>
+    /// Re-zeroes spent movement on every one of your units, every poll — the standing version of
+    /// "Refresh all moves", which only fires once.
+    ///
+    /// <para>For workers this is more than convenience. Civ3 spends a worker's entire move when it puts a
+    /// turn of work into a job, and the "is this job finished?" test runs <i>only</i> during that work
+    /// tick (<c>Unit_work_simple_job</c> @ <c>0x4638C0</c>). One tick per turn is therefore one completion
+    /// check per turn, which is why banked work lands next turn rather than immediately. Handing the
+    /// movement back lets the job be re-ordered in the same turn, forcing a second tick — and with the
+    /// work already banked, that tick finishes the job on the spot.</para>
+    /// </summary>
+    public bool HoldMyUnitMoves
+    {
+        get => _holdMyUnitMoves;
+        set
+        {
+            if (value && !WritesAllowed) { ReportBlocked(); OnPropertyChanged(); return; }
+            if (!SetField(ref _holdMyUnitMoves, value)) return;
+            if (!value) { Status = "Movement hold off — your units spend movement normally again."; return; }
+
+            ApplyMovementHold();
+            Status = "Holding your units' spent movement at zero every poll. For a worker this also means " +
+                     "you can re-issue its job in the same turn: that forces the game to re-check whether " +
+                     "the job is done, which is what makes Finish worker jobs land immediately.";
+        }
+    }
+
+    /// <summary>Re-zeroes movement on every unit that is still yours. Called from the poll loop.</summary>
+    private void ApplyMovementHold()
+    {
+        if (!_holdMyUnitMoves || !WritesAllowed) return;
+        foreach (var u in Units) if (u.IsMine) u.HoldMoves();
+    }
+
+    private bool _keepWorkerJobsBanked;
+
+    /// <summary>
+    /// Keeps every working unit of yours topped up with enough banked work to finish its current job, so
+    /// the one-click action does not have to be repeated for each new job.
+    ///
+    /// <para>Finishing a job <b>wipes</b> the unit's <c>Job_Value</c> and <c>Job_ID</c> — the game clears
+    /// both for every unit on the tile — so banked work never carries into the next job, and without this
+    /// each new job needs its own click. With it on, the loop is just "order it, then order it again".</para>
+    ///
+    /// <para>It costs almost nothing per poll: the row only writes when the banked figure differs from
+    /// what the game currently holds, so a worker already topped up is skipped.</para>
+    /// </summary>
+    public bool KeepWorkerJobsBanked
+    {
+        get => _keepWorkerJobsBanked;
+        set
+        {
+            if (value && !WritesAllowed) { ReportBlocked(); OnPropertyChanged(); return; }
+            if (!SetField(ref _keepWorkerJobsBanked, value)) return;
+            if (!value) { Status = "Job banking off — worker jobs progress at their normal rate again."; return; }
+
+            int n = ApplyJobBanking();
+            Status = n == 0
+                ? "Job banking on. None of your workers is mid-job yet — order one, and it will be banked " +
+                  "automatically from the next poll."
+                : $"Job banking on, and applied to {n} working " + (n == 1 ? "unit" : "units") + ". Each job " +
+                  "still completes on a worker's next turn of work, so with the movement hold ticked you can " +
+                  "collect it now by re-issuing the order.";
+        }
+    }
+
+    /// <summary>Re-banks the current job of every working unit that is still yours; returns how many.</summary>
+    private int ApplyJobBanking()
+    {
+        if (!_keepWorkerJobsBanked || !WritesAllowed) return 0;
+        int n = 0;
+        foreach (var u in Units) if (u.IsMine && u.FinishJob()) n++;
+        return n;
+    }
+
+    private bool _instantWorkerJobs;
+
+    /// <summary>
+    /// Rewrites every terrain job's cost in the loaded ruleset to a single worker-turn, and puts the
+    /// original costs back when switched off.
+    ///
+    /// <para><b>This one is not yours alone.</b> The job table belongs to the ruleset, not to a player,
+    /// so every civ's workers speed up — the same objection that rules out buffing
+    /// <c>UnitType.Defence</c> for invincibility. It is a toggle rather than a button for exactly that
+    /// reason: the original costs are captured on the way in and restored on the way out, including when
+    /// the trainer detaches, so nothing is left patched behind you.</para>
+    /// </summary>
+    public bool InstantWorkerJobs
+    {
+        get => _instantWorkerJobs;
+        set
+        {
+            if (value == _instantWorkerJobs) return;
+            if (!(value ? EnableInstantWorkerJobs() : RestoreWorkerJobCosts()))
+            {
+                OnPropertyChanged();                    // snap the checkbox back — the write did not happen
+                return;
+            }
+            SetField(ref _instantWorkerJobs, value);
+        }
+    }
+
+    /// <summary>The job costs as they were before <see cref="InstantWorkerJobs"/> overwrote them.</summary>
+    private int[]? _workerJobCostsBefore;
+
     public ICommand RefreshProcessesCommand { get; }
     public ICommand AttachCommand { get; }
     public ICommand DetachCommand { get; }
@@ -121,6 +229,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     public ICommand HealAllUnitsCommand { get; }
     public ICommand RefreshAllMovesCommand { get; }
     public ICommand EliteAllUnitsCommand { get; }
+    public ICommand FinishWorkerJobsCommand { get; }
     public ICommand MaxCityFoodCommand { get; }
     public ICommand MaxCityShieldsCommand { get; }
     public ICommand MaxCityCultureCommand { get; }
@@ -140,6 +249,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         HealAllUnitsCommand = new RelayCommand(_ => ForMyUnits(u => u.FullHeal()), _ => IsLocated);
         RefreshAllMovesCommand = new RelayCommand(_ => ForMyUnits(u => u.RefreshMoves()), _ => IsLocated);
         EliteAllUnitsCommand = new RelayCommand(_ => ForMyUnits(u => u.MakeElite()), _ => IsLocated);
+        FinishWorkerJobsCommand = new RelayCommand(_ => FinishWorkerJobs(), _ => IsLocated);
         MaxCityFoodCommand = new RelayCommand(_ => MaxCityFood(), _ => IsLocated);
         MaxCityShieldsCommand = new RelayCommand(_ => MaxCityShields(), _ => IsLocated);
         MaxCityCultureCommand = new RelayCommand(_ => MaxCityCulture(), _ => IsLocated);
@@ -210,7 +320,11 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
             OnPropertyChanged(nameof(IsAttached));
             RaiseCommands();
             _poll.Start();
-            Status = $"Attached to {SelectedProcess.Name} (pid {_targetPid}). Click Auto-locate.";
+
+            // Locating is part of attaching, not a second step the user has to know about — the button
+            // exists only to run it again later. This status is a transient: Locate() overwrites it on
+            // both its success and failure paths, and is only visible if it somehow returns early.
+            Status = $"Attached to {SelectedProcess.Name} (pid {_targetPid}) — locating…";
             Locate();
         }
         catch (Exception ex)
@@ -231,6 +345,16 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     /// <summary>Returns the shell to its detached state. Safe to call from any partially-attached state.</summary>
     private void Teardown()
     {
+        // Before anything else, and before _tables is dropped: the job costs are the only thing this
+        // trainer leaves changed in the game between clicks, and Detach promises it leaves nothing.
+        RestoreWorkerJobCosts();
+        if (_instantWorkerJobs) { _instantWorkerJobs = false; OnPropertyChanged(nameof(InstantWorkerJobs)); }
+
+        // The other two leave nothing behind in the game, but they are standing instructions to keep
+        // writing — so a fresh attach should start with none of them armed.
+        if (_holdMyUnitMoves) { _holdMyUnitMoves = false; OnPropertyChanged(nameof(HoldMyUnitMoves)); }
+        if (_keepWorkerJobsBanked) { _keepWorkerJobsBanked = false; OnPropertyChanged(nameof(KeepWorkerJobsBanked)); }
+
         _poll.Stop();
         Scanner.DetachFrom();
         _mem?.Dispose();
@@ -450,6 +574,113 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         Status = n == 0 ? "You have no units in the list — click Re-scan." : $"Applied to {n} of your unit(s).";
     }
 
+    /// <summary>
+    /// Banks enough worker-turns to complete the current job of every worker of yours that has one.
+    ///
+    /// <para>Unlike <see cref="InstantWorkerJobs"/> this touches nothing but your own units, so the AI's
+    /// workers are unaffected. The improvements appear at the turn boundary rather than immediately —
+    /// Civ3 applies accumulated work during the interturn — and workers standing idle are skipped,
+    /// because there is no job on them to finish.</para>
+    /// </summary>
+    private void FinishWorkerJobs()
+    {
+        if (!CanApplyBulk()) return;
+
+        int mine = 0, working = 0, finished = 0;
+        foreach (var u in Units)
+        {
+            if (!u.IsMine) continue;
+            mine++;
+            if (u.IsWorking) working++;
+            if (u.FinishJob()) finished++;
+        }
+
+        if (finished > 0)
+        {
+            // Be exact about when this lands. Civ3 only tests "is this job done?" while a worker is
+            // putting a turn of work in, and that costs the worker its whole move — so one tick per turn
+            // means one check per turn, and a job already due next turn cannot get any shorter than that.
+            Status = $"Banked enough work to finish {finished} worker " + (finished == 1 ? "job" : "jobs") +
+                     ". This lands at the start of your next turn: the game only checks whether a job is " +
+                     "done while a worker is working, and working spends its whole move. To collect it now, " +
+                     "tick \"Hold my units' moves at 0\" and re-issue the worker's order — that forces the " +
+                     "check to run again this turn." +
+                     (working > finished
+                         ? $"  {working - finished} more could not be costed — the ruleset's job table " +
+                           "was not read."
+                         : "");
+            return;
+        }
+
+        // A working unit that could not be finished means the ruleset's job table is missing, not that
+        // the worker is idle — saying "nothing was under way" there would be a wrong diagnosis.
+        Status = working > 0
+            ? "The ruleset's worker-job table could not be read, so there is no cost to bank against. " +
+              "Re-locate, or edit the Job done column by hand."
+            : mine > 0
+                ? $"None of your {mine} unit(s) is mid-job. Set a worker building something first — this " +
+                  "finishes work already under way rather than starting it."
+                : "You have no units in the list — click Re-scan.";
+    }
+
+    // --- worker job costs (ruleset data, shared with every civ) ------------------------------------
+
+    /// <summary>
+    /// Overwrites every job's <c>TurnToComplete</c> with one worker-turn, remembering what was there.
+    /// Returns false without writing anything if the table was not read or a write is refused, so the
+    /// toggle cannot show as on while the game is untouched.
+    /// </summary>
+    private bool EnableInstantWorkerJobs()
+    {
+        if (!CanApplyBulk()) return false;
+        if (_tables.WorkerJobsTable == 0 || _tables.WorkerJobs.Count == 0)
+        {
+            Status = "The ruleset's worker-job table could not be read, so its costs cannot be edited. " +
+                     "Use Finish worker jobs instead — it works per unit and needs no rules data.";
+            return false;
+        }
+
+        var before = new int[_tables.WorkerJobs.Count];
+        for (int i = 0; i < _tables.WorkerJobs.Count; i++)
+        {
+            before[i] = _tables.WorkerJobs[i].TurnToComplete;
+            if (WriteInt32(WorkerJobCostAddress(i), GameFacts.InstantWorkerJobTurns)) continue;
+
+            // Put back whatever did land before giving up, rather than leaving the table half-rewritten.
+            for (int j = 0; j < i; j++) WriteInt32(WorkerJobCostAddress(j), before[j]);
+            Status = "Could not write the worker-job costs — nothing was changed.";
+            return false;
+        }
+
+        _workerJobCostsBefore = before;
+        Status = $"All {before.Length} terrain jobs now cost {GameFacts.InstantWorkerJobTurns} worker-turn " +
+                 "before terrain. This is ruleset data, so the AI's workers are just as fast — switch it " +
+                 "off (or detach) to put the original costs back.";
+        return true;
+    }
+
+    /// <summary>
+    /// Puts the original job costs back. Reports success when there is nothing to restore, so a toggle
+    /// switched off after a detach does not fail on the way to the state it is already in.
+    /// </summary>
+    private bool RestoreWorkerJobCosts()
+    {
+        if (_workerJobCostsBefore is not { } before) return true;
+        if (_tables.WorkerJobsTable == 0) { _workerJobCostsBefore = null; return true; }
+
+        int restored = 0;
+        for (int i = 0; i < before.Length && i < _tables.WorkerJobs.Count; i++)
+            if (WriteInt32(WorkerJobCostAddress(i), before[i])) restored++;
+
+        _workerJobCostsBefore = null;
+        Status = $"Restored the original cost of {restored} terrain " + (restored == 1 ? "job" : "jobs") + ".";
+        return true;
+    }
+
+    private nuint WorkerJobCostAddress(int jobId)
+        => _tables.WorkerJobsTable + (nuint)(jobId * _tables.WorkerJobStride)
+           + (nuint)Civ3Layout.WorkerJobTurnToComplete;
+
     /// <summary>Applies an action to every city that is still yours; returns how many it reached.</summary>
     private int ForMyCities(Action<CityRowViewModel> action)
     {
@@ -543,6 +774,8 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
             foreach (var p in Players) p.ApplyFreeze();
             foreach (var c in Cities) c.ApplyFreeze();
             foreach (var u in Units) u.ApplyFreeze();
+            ApplyJobBanking();
+            ApplyMovementHold();
             return;
         }
 
@@ -553,7 +786,22 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         // the collections these foreach statements are walking.
         bool dropped = false;
         foreach (var c in Cities) { if (!c.Refresh(_tables, loc)) { dropped = true; continue; } c.ApplyFreeze(); }
-        foreach (var u in Units) { if (!u.Refresh(_tables, loc)) { dropped = true; continue; } u.ApplyFreeze(); }
+
+        // The movement hold is applied inside this loop rather than after it, so it reaches only rows
+        // that just re-validated — a unit killed this tick has left a dangling body pointer behind, and
+        // it stays in the collection until the rebuild below.
+        bool holdMoves = _holdMyUnitMoves && WritesAllowed;
+        bool bankJobs = _keepWorkerJobsBanked && WritesAllowed;
+        foreach (var u in Units)
+        {
+            if (!u.Refresh(_tables, loc)) { dropped = true; continue; }
+            u.ApplyFreeze();
+            if (!u.IsMine) continue;
+            // Bank first, hold second: banking is what the next work tick consumes, and the returned
+            // movement is what lets that tick happen this turn rather than the next.
+            if (bankJobs) u.FinishJob();
+            if (holdMoves) u.HoldMoves();
+        }
 
         // Gains show up as a changed container shape; losses show up as a dropped row (a unit dying
         // mid-array nulls its slot without moving LastIndex, so the shape alone would miss it).
@@ -635,6 +883,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
                  {
                      AttachCommand, DetachCommand, AutoLocateCommand, RescanCommand, MaxTreasuryCommand,
                      HealAllUnitsCommand, RefreshAllMovesCommand, EliteAllUnitsCommand,
+                     FinishWorkerJobsCommand,
                      MaxCityFoodCommand, MaxCityShieldsCommand, MaxCityCultureCommand,
                      FinishResearchCommand, MaxAllCommand,
                  })
@@ -643,6 +892,9 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
 
     public void Dispose()
     {
+        // Closing the trainer has to un-patch the ruleset just as Detach does — the game keeps running
+        // after the window shuts, and a jobs table left at 1 would silently outlive the trainer.
+        RestoreWorkerJobCosts();
         _poll.Stop();
         Scanner.Dispose();
         _mem?.Dispose();

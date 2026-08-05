@@ -74,6 +74,41 @@ public sealed class UnitRowViewModel : ObservableObject
         }
     }
 
+    private int _jobId = -1;
+    /// <summary>The <c>Worker_Jobs</c> ordinal this unit is performing, or -1 when it is idle.</summary>
+    public int JobId { get => _jobId; private set => SetField(ref _jobId, value); }
+
+    private string _jobName = "";
+    /// <summary>"Road", "Irrigation", … or empty for a unit that is not working.</summary>
+    public string JobName { get => _jobName; private set => SetField(ref _jobName, value); }
+
+    private int _jobProgress;
+    /// <summary>
+    /// Worker-turns already put into the current job. This counts <i>up</i> toward the job's cost, so a
+    /// larger number is closer to done — the opposite reading from <see cref="Damage"/> and
+    /// <see cref="MovesUsed"/> on the same row.
+    /// </summary>
+    public int JobProgress
+    {
+        get => _jobProgress;
+        set
+        {
+            if (!Reject(value < 0, "Job progress cannot be negative — edit rejected.")) return;
+            if (!SetField(ref _jobProgress, value)) return;
+            _host.WriteInt32(_body + (nuint)Civ3Layout.UnitJobValue, value);
+        }
+    }
+
+    /// <summary>Whether this unit is mid-job, and so has something for "Finish job" to do.</summary>
+    public bool IsWorking => _jobId >= 0;
+
+    /// <summary>
+    /// What <see cref="FinishJob"/> would write: the job's base cost scaled to clear any terrain.
+    /// Cached from the ruleset on each refresh, so the button never has to guess at a cost the loaded
+    /// scenario or mod may have changed.
+    /// </summary>
+    private int _jobWorkToFinish;
+
     private bool _freeze;
 
     /// <summary>
@@ -130,6 +165,22 @@ public sealed class UnitRowViewModel : ObservableObject
         int exp = BitConverter.ToInt32(b, Civ3Layout.UnitExperience);
         if (exp != _experience) { _experience = exp; OnPropertyChanged(nameof(Experience)); }
 
+        int job = BitConverter.ToInt32(b, Civ3Layout.UnitJobId);
+        if (job != _jobId)
+        {
+            JobId = job;
+            JobName = tables.WorkerJobName(job);
+            OnPropertyChanged(nameof(IsWorking));
+        }
+        // Re-read the cost even when the job id is unchanged: "Instant worker jobs" rewrites the
+        // ruleset underneath us, and a stale cost would make Finish job write the old, larger number.
+        _jobWorkToFinish = tables.WorkerJob(job) is { } info
+            ? Civ3Layout.WorkerJobWorkToFinish(info.TurnToComplete)
+            : 0;
+
+        int progress = BitConverter.ToInt32(b, Civ3Layout.UnitJobValue);
+        if (progress != _jobProgress) { _jobProgress = progress; OnPropertyChanged(nameof(JobProgress)); }
+
         return true;
     }
 
@@ -141,6 +192,17 @@ public sealed class UnitRowViewModel : ObservableObject
         _host.WriteInt32(_body + (nuint)Civ3Layout.UnitMoves, 0);
     }
 
+    /// <summary>
+    /// Re-zeroes spent movement and nothing else — the empire-wide movement hold, as distinct from the
+    /// per-row <see cref="Freeze"/>, which also clears damage.
+    ///
+    /// <para>Worth knowing what this unlocks for workers: Civ3 spends a worker's whole move when it puts
+    /// a turn of work into a job, and it only tests whether the job is finished during that same work
+    /// tick. Giving the movement back lets the job be re-ordered, which forces another tick — which is
+    /// what turns <see cref="FinishJob"/> from "done next turn" into "done now".</para>
+    /// </summary>
+    public void HoldMoves() => _host.WriteInt32(_body + (nuint)Civ3Layout.UnitMoves, 0);
+
     /// <summary>Clears all accumulated damage.</summary>
     public void FullHeal() => Damage = 0;
 
@@ -149,4 +211,20 @@ public sealed class UnitRowViewModel : ObservableObject
 
     /// <summary>Promotes to elite, the top of the veteran ladder.</summary>
     public void MakeElite() => Experience = GameFacts.MaxCombatExperience;
+
+    /// <summary>
+    /// Banks enough worker-turns for the current job to complete. Returns false, without writing, for a
+    /// unit that is not working — there is no job to finish, and a poked <c>Job_Value</c> on an idle unit
+    /// would just be a number nothing reads.
+    ///
+    /// <para>The improvement appears at the <b>turn boundary</b>, not on the spot: the game applies
+    /// accumulated work during the interturn. And because progress pools across everyone on the tile,
+    /// doing this to one worker of a stack finishes the job for all of them.</para>
+    /// </summary>
+    public bool FinishJob()
+    {
+        if (!IsWorking || _jobWorkToFinish <= 0) return false;
+        JobProgress = _jobWorkToFinish;
+        return true;
+    }
 }

@@ -181,6 +181,24 @@ public sealed class FakeModule : IMemorySource
     }
 
     /// <summary>
+    /// Plants a worker-job table. Unlike the race and unit-type tables this one carries no <c>ID</c>
+    /// field, so the stride can only be recovered from every record looking like a job — which is what
+    /// planting it at a non-standard stride exercises.
+    /// </summary>
+    public void PlantWorkerJobs(uint tableRva, int jobCount, int stride, params int[] costs)
+    {
+        PutInt32(Civ3Layout.RvaBicData + (uint)Civ3Layout.BicWorkerJobCount, jobCount);
+        PutUInt32(Civ3Layout.RvaBicData + (uint)Civ3Layout.BicWorkerJobs, (uint)At(tableRva));
+        for (int i = 0; i < jobCount; i++)
+        {
+            uint j = tableRva + (uint)(i * stride);
+            PutInt32(j + (uint)Civ3Layout.WorkerJobTurnToComplete, i < costs.Length ? costs[i] : 6 + i);
+            foreach (var (b, k) in System.Text.Encoding.ASCII.GetBytes($"Job{i}").Select((b, k) => (b, k)))
+                _image[j + Civ3Layout.WorkerJobName + k] = b;
+        }
+    }
+
+    /// <summary>
     /// Plants the compiler's array-walk idiom in .text so the signature chain can re-derive the
     /// leader array: <c>add ebp, stride</c> immediately followed by <c>cmp ebp, one-past-end</c>.
     /// </summary>

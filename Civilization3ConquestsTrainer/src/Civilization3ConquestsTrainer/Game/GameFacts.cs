@@ -110,6 +110,40 @@ public static class GameFacts
     /// </summary>
     public const int FinishResearchBulbs = 1_000_000;
 
+    // --- worker jobs -----------------------------------------------------------------------------
+
+    /// <summary>
+    /// Loose upper bound on a job's <c>TurnToComplete</c>, used to reject a garbage record rather than
+    /// to express a rule. The epic game's most expensive job is Clear Damage at 24; a mod is free to
+    /// charge far more, so this only has to be low enough that random memory fails it.
+    /// </summary>
+    public const int MaxWorkerJobTurnToComplete = 10_000;
+
+    /// <summary>
+    /// What the real cost of a job can exceed its <c>TurnToComplete</c> by.
+    ///
+    /// <para>Civ3 multiplies the base cost by a factor it derives from the tile — mining a mountain
+    /// costs more than mining grassland — and that factor is <b>not decoded here</b>: the trainer sees
+    /// the multiply happen at <c>0x5D557D</c> but not what feeds it. Terrain movement cost tops out at 3
+    /// in the epic rules, so 4 clears it with room to spare while keeping "finish this job" a number of
+    /// worker-turns rather than an arbitrary large one. If a mod ever charged more, the job would
+    /// shorten rather than finish, which is the harmless direction to be wrong in.</para>
+    /// </summary>
+    public const int WorkerJobTerrainFactorCeiling = 4;
+
+    /// <summary>
+    /// What "Instant worker jobs" writes into every job's <c>TurnToComplete</c>. One worker-turn is the
+    /// floor: the cost is still multiplied by the terrain factor, and the game still applies the work at
+    /// the turn boundary, so this makes jobs finish next turn rather than on the spot.
+    ///
+    /// <para>Unlike every other action here this is <b>rules data, shared with the AI</b> — the job table
+    /// belongs to the loaded ruleset, not to a player, so every civ's workers speed up together. That is
+    /// the same objection that rules out buffing <c>UnitType.Defence</c> for invincibility, which is why
+    /// this is an explicit toggle that restores the original costs when it is switched off or the
+    /// trainer detaches, rather than a one-way button.</para>
+    /// </summary>
+    public const int InstantWorkerJobTurns = 1;
+
     /// <summary>Poll/freeze interval. Civ3 recomputes economy and unit state at turn boundaries.</summary>
     public const int PollIntervalMs = 500;
 }

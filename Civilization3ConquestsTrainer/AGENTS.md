@@ -25,7 +25,9 @@ Three projects in `Civilization3ConquestsTrainer.sln`: the WPF app, its harness,
       `ValidateCity`, `ValidateMap`, `IsPlausibleSliderSet`, the gold codec) the harness exercises.
     - `GameLocator.cs` — chain A (module base + RVAs) → chain B (re-derive the array from the game's
       own code) → validate. Returns a `Civ3Location` or null with `LastError` set.
-    - `GameTables.cs` — civilizations and unit types read out of the loaded `BIC`. **Do not replace
+    - `GameTables.cs` — civilizations, unit types and worker jobs read out of the loaded `BIC`. The job
+      table is the one the trainer *writes*, and the only one with no `ID` column — so its stride is
+      proved by `ValidateWorkerJob` holding for every record rather than by `Table[i].ID == i`. **Do not replace
       this with a curated table**: Conquests ships nine scenarios and the community ships thousands
       of mods, each substituting its own civs and units, so a baked table would be right only for the
       unmodified epic game and would silently mislabel everything else.
@@ -40,7 +42,7 @@ Three projects in `Civilization3ConquestsTrainer.sln`: the WPF app, its harness,
     (`IScanHost`, `ScanValue`, `ScanResultViewModel`, `FrozenValueViewModel`) matches the repo's other
     value-scanner trainers.
 - `test/FormatCheck/` — headless harness (console `Exe`, `net8.0-windows` + `UseWPF` because it
-  references the WPF app for the view-model types). **308 checks**, no game and no copyrighted files
+  references the WPF app for the view-model types). **369 checks**, no game and no copyrighted files
   needed.
 
 It **has a `GameLocator`** and **no save editor**. The exe is native, unpacked, fixed-base and
@@ -63,6 +65,12 @@ namespaces, XML `<summary>` docs on public types/members, `sealed` classes by de
 offsets, and `// --- section ---` divider comments. No linter or formatter config is committed; match
 the surrounding file. Follow the read-validate-write pattern — every row rejects an out-of-range value
 before poking RAM — so a mistyped edit cannot corrupt a neighbouring field.
+
+Tooltips on the toggles are **instructions, not hints**: what the control does, when to switch it on,
+when to switch it off, what to expect. `MainWindow.xaml` therefore carries an implicit `ToolTip` style
+that wraps at 460px, plus `ToolTipService.ShowDuration` of 60 s on the `Button` and `CheckBox` styles —
+without both, a WPF tooltip is a single unwrapped line that vanishes after five seconds. Keep new
+multi-line tooltips in that shape and separate paragraphs with `&#10;&#10;`.
 
 ## Testing Guidelines
 
@@ -113,11 +121,54 @@ agreeing — with the food and shield stores additionally round-tripped. `cultur
 ruleset's own culture-level table and a huge value would index a long way past it. Do not raise it to
 something that merely looks impressive.
 
+**Worker job progress counts up, pools across a tile, and has two levers with very different blast
+radii.** `Unit_Body.Job_Value` (`+0x38`) is worker-turns *done*, not left — the opposite reading from
+`Damage` and `Moves` on the same record. This is not inferred: `get_worker_remaining_turns_to_complete`
+(`0x5D5520`) computes `Worker_Job.TurnToComplete × a terrain factor` and then subtracts `Job_Value` at
+`0x5D5640`, summing it over **every unit on the tile with a matching `Job_ID`** — which is why finishing
+the job on one worker of a stack finishes it for all of them. The same routine reads the job table at
+`BIC + 0x3E1C` (field `+0x44`, stride `0x74`), so those offsets are the game's own rather than derived;
+see `docs/ReverseEngineering.md` §4.7. **"Finish worker jobs" writes `Job_Value` and touches only your
+units. "Instant worker jobs" rewrites the ruleset's job costs and therefore speeds up the AI too** — the
+same objection that rules out buffing `UnitType.Defence`, which is why it is a reversible toggle that
+captures the original costs and restores them on switch-off, on detach and on exit. Do not turn it into a
+one-way button, and do not remove the restore from `Teardown`: `Detach` promises nothing is left patched.
+The terrain factor is **not decoded** — `GameFacts.WorkerJobTerrainFactorCeiling` (4) covers it, and
+being wrong there shortens a job rather than failing to finish it. Do not write `Job_ID`: starting a job
+also sets unit state, tile overlays and the animation, so a poked id describes work the game never began.
+
+**"Finish worker jobs" cannot be instant on its own, and the UI must not claim it is.** The completion
+test — `cmp pooled_work, cost` / `jl` at `0x463B2E`, clearing `Job_Value` to 0 and `Job_ID` to -1 on
+success — lives *inside* `Unit_work_simple_job`, so it runs only while a worker is putting a turn of work
+in, and that spends the unit's whole move. One tick per turn is one completion check per turn: banked work
+lands next turn, and **a job already due next turn cannot be shortened**. This was mis-stated once as
+"appears when you end the turn, because Civ3 applies worker output at the turn boundary" — true-sounding
+but the wrong mechanism, and it hid the floor. The escape is `HoldMyUnitMoves`: returning the move lets
+the job be re-issued in the same turn, which buys a second tick and finishes it on the spot. Treat the two
+features as one mechanism — `Job_Value` supplies the work, the movement hold supplies the tick — and do
+not document either without the other. Completion also *wipes* `Job_Value`/`Job_ID`, so banked work never
+carries into the next job; `KeepWorkerJobsBanked` exists because of that wipe, not as a convenience. All
+three of these are **standing writes** and `Teardown` clears them, so a fresh attach starts unarmed;
+`FinishJob` must stay write-free when the figure is already banked, since the poll loop calls it per unit
+per tick, and `FormatCheck` pins that.
+
+**The job cost is re-read at every work tick, and that is what the toggle's usage advice rests on.**
+`Unit_work_simple_job` (`0x4638C0`) reads `BIC.WorkerJobs` fresh each time a worker puts in a turn, does
+`Job_Value += rate`, and spends the unit's move — it does not cache the cost when the job starts. So the
+toggle takes effect on the next tick and stops the moment it is restored, AI workers (which tick during
+the AI's turn, after the human ends theirs) are not reached by a toggle switched off first, and re-issuing
+a job *adds* progress rather than resetting it. The tooltip and the References note both say this; keep
+them in step with §4.7 if any of it is ever re-tested. What is still unobserved is where the
+*continuation* tick lands for an already-working human unit — do not let the docs imply it is known.
+
 **Banking research points shortens research without finishing it.** `Research_Bulbs` is confirmed
 writable and "Finish research" now banks 1,000,000, but a live game still took a few more turns at
 30,000 — an amount that already cleared any epic-game advance cost, so the shortfall is not points.
 The likely cause is a floor on how few turns an advance may take. Do not "fix" this by inflating the
-preset further; the leads that would actually settle it are in `docs/ReverseEngineering.md` §8.2.
+preset further. The mapping done for worker jobs turned up a strong candidate — `General.ResearchTime_Min`
+at `BIC + 0x3E08`, reading 4 in a live epic game — but the causal test (write 1, bank points, see whether
+the advance lands next turn) has **not** been run, so nothing in the UI mentions it. See
+`docs/ReverseEngineering.md` §8.2.
 
 **Food and shields are separate buttons, and the combined "max" action fills shields only.** A full
 granary makes a city grow every turn, growth outruns happiness, and the city riots — so food is opt-in

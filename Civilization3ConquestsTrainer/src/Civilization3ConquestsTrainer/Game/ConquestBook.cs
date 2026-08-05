@@ -107,12 +107,61 @@ public static class ConquestBook
 
         new("Movement is spent, not remaining",
             "The same inversion applies to movement: the field counts points already used this turn, so " +
-            "\"Refresh moves\" writes zero."),
+            "\"Refresh moves\" writes zero. Movement is stored in thirds, so a unit that has spent one " +
+            "whole move reads 3 — the same scale the game uses to make roads cost a third of a point."),
+
+        new("Worker progress counts up, and pools across a tile",
+            "Job progress is the one unit field that reads the way you would expect: it counts worker-turns " +
+            "already done, upward toward the job's cost, so a bigger number is closer to finished. The cost " +
+            "is the loaded ruleset's figure for that job — Road 6, Irrigation 8, Mine 12 in the epic game — " +
+            "multiplied by how awkward the tile is. The game adds up the progress of every unit standing on " +
+            "the tile doing the same job, which is why several workers finish something together, and why " +
+            "\"Finish worker jobs\" only has to write to one worker of a stack.\n\n" +
+            "Banking work does not finish a job on the spot, and it is worth knowing why. The game tests " +
+            "whether a job is complete only while a worker is actually putting a turn of work into it, and " +
+            "that costs the worker its entire move — one tick per turn, so one check per turn. Banked work " +
+            "therefore lands at the start of your next turn, and a job that was already due next turn " +
+            "cannot get any shorter. To collect it immediately, tick \"Hold my units' moves at 0\" and " +
+            "re-issue the worker's order: the returned movement buys a second tick this turn, and the check " +
+            "runs again with the work already there.\n\n" +
+            "Completing a job also clears the worker's banked work — the game zeroes the progress and the " +
+            "job id on every unit standing there — so nothing carries into the next job. That is what " +
+            "\"Keep worker jobs banked\" is for: it re-banks automatically on every poll, so with both " +
+            "toggles on the whole loop is \"order it, order it again\", as many times in a turn as you like."),
+
+        new("\"Instant worker jobs\" speeds up the AI too — but only while it is switched on",
+            "That toggle rewrites the cost of every terrain job in the loaded ruleset, and a ruleset belongs " +
+            "to the game rather than to a player — so every civ's workers get the same speed-up. It is the " +
+            "same reason this trainer will not buff a unit type's defence to fake invincibility. It is safe " +
+            "to use anyway because it is reversible: the original costs are remembered when you switch it on " +
+            "and written back when you switch it off, detach, or close the trainer.\n\n" +
+            "The timing matters, and it is better than it sounds. The game does not decide a job's cost when " +
+            "the job starts — it re-reads the table every time a worker puts in a turn of work. AI workers do " +
+            "that during the AI's turn, which runs after you end yours, so a toggle that is off at the moment " +
+            "you end the turn does not reach them. Your own worker puts in a turn of work at the moment you " +
+            "give it the order, which is while the toggle is still on; re-issuing a job adds to its progress " +
+            "rather than resetting it, so telling a working unit to do the same job again is safe.\n\n" +
+            "For an edge that is unambiguously yours alone, use \"Finish worker jobs\" instead: it writes to " +
+            "your own units only, and needs no timing discipline at all. Save with the toggle off — Civ3 " +
+            "saves carry a rules section, and no one has checked whether an edited cost rides along in it."),
 
         new("Sliders are tens of percent",
             "Luxury, science and tax are stored as 0–10 and must total 10. Your government also caps the " +
             "maximum any one slider can reach — Despotism allows less than Democracy — so the game may clamp " +
             "an edit that this trainer accepted."),
+
+        new("The AI really does have thirty units on turn five",
+            "On the higher difficulties the AI civilizations are handed a large free army before the game " +
+            "even starts, and the Players tab reports it honestly. The loaded ruleset's own difficulty " +
+            "table says what each level grants: Regent and below give nothing, Monarch gives 2 defensive " +
+            "and 1 offensive unit, and Sid — the top level — gives every AI civ 12 defensive units, 6 " +
+            "offensive ones, 2 extra settlers and 4 extra workers, plus 24 free unit support and a cost " +
+            "factor of 4 against your 10. You get none of it. So an opening of three units against " +
+            "twenty-eight is not a misread: it is the handicap you chose.\n\n" +
+            "This was checked rather than assumed. Counting units per civ out of the game's own unit " +
+            "container and comparing against each leader's separately stored unit count agreed exactly " +
+            "for all thirteen civs — two unrelated structures in memory, so agreement is not " +
+            "self-confirming."),
 
         new("Multiplayer is read-only",
             "Writes are suppressed when the game reports a PBEM or offline-multiplayer session, because " +

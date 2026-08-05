@@ -155,7 +155,7 @@ Fields the trainer uses (offsets from the leader base):
 | `+0xA0` | `GovernmentType` | Inferred |
 | `+0xF4` | `Era` | Confirmed |
 | `+0xF8` | `Research_Bulbs` | Confirmed writable; see §8.2 on why banking points shortens research without finishing it |
-| `+0x18C` / `+0x194` | `Unit_Count` / `Cities_Count` | Confirmed (unit count agreed with the container) |
+| `+0x18C` / `+0x194` | `Unit_Count` / `Cities_Count` | Confirmed — re-checked later by tallying the whole unit container per civ: 13 of 13 agreed |
 | `+0x1A4` / `+0x1A8` / `+0x1AC` | luxury / science / gold sliders | Confirmed |
 | `+0x181C` | embedded `Culture` (`'CULT'` at `+0x1824`, level `+0x1838`, total `+0x183C`, income `+0x1840`, `CivID` `+0x1844`) | Confirmed |
 
@@ -191,9 +191,15 @@ and every unit's `RaceID` matching its owner's):
 | `+0x28` | `Combat_Experience` | conscript → elite |
 | `+0x30` | **`Damage`** | hit points **lost**, not remaining |
 | `+0x34` | **`Moves`** | movement **spent** this turn, not left |
+| `+0x38` | **`Job_Value`** | worker-turns **done**, counting **up** toward the job's cost — see §4.7 |
+| `+0x3C` | `Job_ID` | `enum Worker_Jobs`, or `-1` when idle |
 
 Maximum hit points are **not a field** — the game computes them from the unit type plus the veteran
 level (`Unit_get_max_hp` @ `0x5CD180`). "Full heal" therefore means writing zero damage.
+
+Movement is stored in **thirds**, not whole points: `General.RoadsMovementRate` is 3, and a worker that
+has spent its single move reads `Moves = 3`. Confirmed live — every AI unit that had already moved read
+3 while the human's units, at the start of their own turn, read 0.
 
 ### 4.4 `City_Body` — and the one real gap
 
@@ -287,6 +293,196 @@ garbage through a stale constant. Live, this yielded all 32 civilizations
 (`Rome — Caesar`, `Egypt — Cleopatra`, … `Maya — Smoke-Jaguar`) and 141 unit types with correct
 attack/defence/movement/cost.
 
+Two more tables were mapped while answering "why does the AI have 30 units on turn 5?", and are read by
+the probe rather than the trainer:
+
+| Offset in BIC | Field |
+| --- | --- |
+| `+0x88C` / `+0xBB8` | `DifficultyLevelCount` / `Difficulty_Level*` (stride `0x7C`, `Name +0x04`) |
+
+`Difficulty_Level` continues `Defencive_Land_Units +0x4C`, `Offencive_Type_Units +0x50`,
+`Start_Units_1 +0x54`, `Start_Units_2 +0x58`, `Additional_Free_Support +0x5C`, `Cost_Factor +0x68`. The
+pointer sits inside the block the `field_BCC` anchor closes, and reading it live produced the eight epic
+difficulty names in order — Chieftain … Sid — with a monotonic bonus ladder, which is a strong enough
+self-check for a probe-only table:
+
+```
+       name        defensive  offensive  startA  startB  extraSupport  AIcostFactor
+  2    Regent              0          0       0       0             0            10
+  3    Monarch             2          1       0       0             4             9
+  6    Deity               8          4       1       2            16             6
+  7    Sid                12          6       2       4            24             4
+```
+
+That settles the question: at Sid every AI civ opens with 18 free military units plus 2 extra settlers and
+4 extra workers, so 28 units on turn 5 against the human's 3 is the handicap working as designed, not a
+misread. Verified independently by tallying `Unit_Body.CivID` across the unit container against each
+leader's own `Unit_Count` (`Leader+0x18C`) — **13 of 13 civs agreed exactly**, the same two-structures test
+used for `Cities_Count` in §4.4.
+
+A third table joins them, and it is the one the trainer **writes**:
+
+| Offset in BIC | Field |
+| --- | --- |
+| `+0x8B8` | `WorkerJobCount` — 13 in the epic game |
+| `+0x3E1C` | `Worker_Job*` (stride `0x74`): `Name +0x04`, `TurnToComplete +0x44`, `Order +0x54` |
+
+`Worker_Job` is the **only** one of these tables with **no `ID` field**, so the `Table[i].ID == i` proof
+that pins the others is unavailable. `Civ3Layout.ValidateWorkerJob` substitutes for it: a printable,
+non-empty name and a cost inside a sane bound, required of *every* record rather than a sample. Thirteen
+consecutive records satisfying that at a fixed spacing is not something arbitrary memory offers.
+
+---
+
+## 4.7 Worker jobs — how the cost is computed, and where the trainer can intervene
+
+This one was settled from the game's own code rather than inferred, so it is worth writing down in full.
+`get_worker_remaining_turns_to_complete` @ `0x5D5520` computes, for a unit and a job id:
+
+```
+005D553E   mov  ecx, 0x9E9B6C           ; Map — and 0x9E9B6C = p_bic_data + 0x3E64, the confirmed BicMap
+005D555A   lea  ecx, [edx+edx*4+0x14]   ; Map.WorkerJobs[job_id].ID, remapping the job to a table row
+005D5571   mov  esi, [0x9E9B24]         ; BIC.WorkerJobs      <- 0x9E9B24 - 0x9E5D08 = 0x3E1C
+005D5577   mov  ebx, [esi + ecx*4 + 0x44]  ; Worker_Job[n].TurnToComplete, at stride 0x74
+005D557D   imul ebx, eax                ; x a factor derived from the tile being worked
+...
+005D562B   lea  esi, [eax-0x1C]         ; Unit = Unit_Body - 0x1C
+005D5636   mov  ebp, [esi+0x58]         ; Unit_Body + 0x3C = Job_ID
+005D563B   jne  ...                     ;   ... skip units doing a different job
+005D563D   mov  ebp, [esi+0x54]         ; Unit_Body + 0x38 = Job_Value
+005D5640   sub  ebx, ebp                ; remaining = cost - work done
+```
+
+Five things fall out of those twenty instructions, all of them **[Confirmed]** and none of them
+previously known here:
+
+1. **`Job_Value` counts up.** It is *subtracted* from the total cost, so it is work done, not work left.
+   Raising it finishes a job; zeroing it starts the work over.
+2. **The table offsets are the game's own.** `BIC + 0x3E1C`, field `+0x44`, stride `0x74` are read out of
+   the instruction stream, not derived — the same class of evidence as the `add ebp,0x20E4` array walk
+   that pins the leader stride. (The arithmetic over the C3X header agrees independently, and so does the
+   `BicMap` anchor `0x48` further along.)
+3. **Cost = `TurnToComplete` × a terrain factor.** The multiply at `0x5D557D` takes its right-hand side
+   from a lookup on the tile the worker is standing on. That factor is **not decoded here** — which is
+   why "finish job" writes the base cost times a ceiling of 4 rather than reading the real threshold.
+4. **Progress pools across the tile.** The loop walks every unit standing there and subtracts the
+   `Job_Value` of each one whose `Job_ID` matches. This is why stacked workers finish a job together, and
+   why writing the field on any one of them is enough. Observed live: two workers on the same tile with
+   the same job both reading `Job_Value = 2`.
+5. **`body − 0x1C` is confirmed** by `lea esi,[eax-0x1C]`, as are `Units.Items` at `p_units+4`,
+   `LastIndex` at `+0x10`, the 8-byte item stride and the body pointer at `+4` — all read straight out
+   of the same routine's container walk.
+
+The rate a unit works at comes from `0x5C1D10`, which reads `leaders[unit.CivID].Government` at
+`Leader+0xA0` (`mov ecx,[eax+0xA75738]` with `eax = CivID × 0x20E4`; `0xA75738 − 0xA75698 = 0xA0`) and
+indexes `BIC.Governments` at `+0x3CD0` with a stride of `0x1E8`, loading a **float** — the despotism work
+penalty. It also reads `BIC.Races` at `+0x3CC8` with stride `0x974`, both of which the trainer already
+had as `[Confirmed]`. `Leader.GovernmentType` was `[Inferred]` before this and is now confirmed.
+
+Live values for the epic ruleset, read through the shipped `GameTables`:
+
+```
+ 0 Mine 12    1 Irrigation 8    2 Fortress 16    3 Road 6      4 Railroad 12
+ 5 Plant Forest 18   6 Clear Forest 4   7 Clear Wetlands 16   8 Clear Damage 24
+ 9 Airfield 1  10 Radar Tower 1  11 Outpost 1  12 Barricade 16
+```
+
+A worker contributes about two of those per turn, which is what makes a road on open ground the familiar
+three turns and irrigation four. All thirteen names read back in `enum Worker_Jobs` order, and
+`WorkerJobCount` reads 13 — two independent agreements with the community header.
+
+**What the trainer does with it.** Two levers, deliberately different in blast radius:
+
+- **Per unit** — write `Job_Value`. Touches one unit of one civ; the AI is unaffected. This is what
+  *Finish worker jobs* does, and it declines on an idle unit rather than poking a field nothing reads.
+- **Per ruleset** — write `TurnToComplete = 1` across the table. Simple and total, but the job table
+  belongs to the *ruleset*, so **every civ's workers speed up** — the same objection that rules out
+  buffing `UnitType.Defence` for invincibility (§6). It is therefore a **toggle** that captures the
+  original costs on the way in and restores them when switched off, on detach, and on exit. Round-tripped
+  live: all 13 costs → 1 → back to `12 8 16 6 12 18 4 16 24 1 1 1 16`, names intact.
+
+Neither is instant on its own — see the completion test below, which is what decides when a banked job
+actually lands.
+
+### When the cost is read — which is what makes the toggle usable
+
+`Unit_work_simple_job` @ `0x4638C0` is the routine that puts *one turn of work* into a job, and it settles
+the question the toggle raises:
+
+```
+004639E7   mov  edx, [0x9E9B24]          ; BIC.WorkerJobs — read fresh on every tick
+004639ED   mov  ecx, [edx+ecx*4+0x44]    ; TurnToComplete
+004639F1   imul ecx, eax                 ; x terrain factor — the cost, computed now
+00463A02   mov  esi, [edi+0x54]          ; existing Job_Value
+00463A08   call 0x5C1D10                 ; this unit's work rate
+00463A0D   add  eax, esi
+00463A11   mov  [edi+0x54], eax          ; Job_Value += rate
+00463A14   mov  [edi+0x58], ebp          ; Job_ID = job
+00463A1C   mov  [edi+0x50], eax          ; and the unit's movement is spent
+```
+
+- **The cost is not cached when a job starts.** It is recomputed from the table at every work tick, so
+  changing `TurnToComplete` mid-job takes effect on the next tick — and stops taking effect the moment the
+  table is restored. A toggle is therefore a meaningful unit of control, not a one-way door.
+- **Re-issuing a job accumulates rather than resets** — the write is `Job_Value + rate`, not `rate`. So
+  telling a working unit to do the same job again is safe and adds a tick.
+- **The unit's move is spent by the same routine**, which is what makes a worker's first tick land at the
+  moment the order is given — during the player's own turn.
+
+### The completion test, and why banking work is not instant
+
+Further into the same routine is the test that actually finishes a job:
+
+```
+00463ADC   mov  eax, [eax+0x54]      ; each co-located unit's Job_Value …
+00463AE3   add  edi, eax             ; … summed
+00463B26   mov  ecx, [esp+0x38]      ; pooled work
+00463B2A   mov  eax, [esp+0x28]      ; the cost computed at 0x4639F1
+00463B2E   cmp  ecx, eax
+00463B30   jl   0x464015             ; work < cost -> not finished; bail
+...                                  ; otherwise, for every unit on the tile doing this job:
+00463BBD   mov  [ecx+0x54], edi      ;   Job_Value = 0
+00463BC0   mov  dword [ecx+0x58], -1 ;   Job_ID = -1      <- the job is done
+```
+
+**The completion test only runs inside a work tick.** Writing `Job_Value` does not finish a job by itself;
+it makes the *next* tick finish it. And since a tick costs the worker its entire move
+(`mov [edi+0x50], eax` at `0x463A1C`), a worker normally gets exactly one tick per turn — so banked work
+lands at the start of the next turn, and **a job already due next turn cannot be shortened at all**. That
+is the floor, and it is the same shape as the research floor in §8.2: the trainer can buy turns down to
+one, not to zero.
+
+Confirmed live end-to-end: a human worker building a road, given `Job_Value = 24` by the trainer, made the
+game's own status line read *"will be done in **-6** turns"* — the estimate function consuming the written
+value exactly as the disassembly predicts, while the job itself waited for the next tick.
+
+**Which is why the movement hold matters.** Zeroing `Moves` returns the worker's move, the job can be
+re-issued in the same turn, and that second tick runs the completion test again — with the work already
+banked, it finishes on the spot. The two features are one mechanism: `Job_Value` supplies the work, the
+movement hold supplies the tick.
+
+**And why banking has to be standing rather than one-shot.** The completion path above sets `Job_Value = 0`
+and `Job_ID = -1`, so a finished worker keeps nothing: the next job starts from `rate` and needs banking of
+its own. A one-click action therefore has to be repeated once per job, which is what the *Keep worker jobs
+banked* toggle removes — it re-banks on every poll, and skips a unit whose figure is already right, so the
+cost is a read the poll loop was doing anyway. With both toggles on, the loop for the player is "order it,
+order it again", repeatable as many times in a turn as they care to click, and the worker can relocate
+between jobs because its movement keeps coming back.
+
+The practical consequence, and the reason the UI now says so: **AI workers tick during the AI's turn, which
+runs after the human ends theirs.** A toggle switched off before ending the turn does not reach them.
+What has *not* been pinned down is where the *continuation* tick lands for a unit that is already working
+— if that happens in the interturn rather than during the player's turn, switching off early would deny
+the player the benefit as well. That is a one-game observation to make, not a decompile.
+
+Scanning `.text` for the table pointer finds **60+ references**, well beyond the two routines above —
+several in what look like AI evaluation paths. So while the toggle is on it changes what the AI *plans*,
+not only how fast it digs.
+
+What is **not** attempted: writing `Job_ID` to start or change a job. Beginning a job is more than
+setting a number — the game also sets unit state, the tile's overlays (`Map.WorkerJobs[n]` carries
+set/unset overlay masks) and the animation — so a poked job id would describe work the game never began.
+
 ---
 
 ## 5. The locator
@@ -353,7 +549,15 @@ scan normally.
 - the `Leader` stride and every `Leader` field the trainer surfaces
 - the gold codec, including a full write round-trip (`10 → 12345 → 10`, key untouched)
 - `WriteProcessMemory` reaching the game at all (scratch field `-1 → 24301 → -1`)
-- the container shape, and every `Unit_Body` field the trainer surfaces
+- the container shape, and every `Unit_Body` field the trainer surfaces — including `Job_Value` and
+  `Job_ID`, and the `body − 0x1C` header offset, all read out of the game's own instruction stream (§4.7)
+- the worker-job table: `BIC + 0x3E1C`, `TurnToComplete + 0x44`, stride `0x74`, count at `BIC + 0x8B8`
+  — from the game's code, plus a live write round-trip of all 13 costs, restored exactly
+- `Leader.GovernmentType` (`+0xA0`) and `BIC.Governments` (`+0x3CD0`), both read by the worker-rate
+  routine at `0x5C1D10`; `GovernmentType` was previously Inferred
+- the `BIC.General` block (embedded at `+0x3CDC`, size `0x138`), by five independent cross-checks against
+  known epic-game rules: `FoodPerCitizen` 2, `RoadsMovementRate` 3, `MaximumSize_Town` 6,
+  `MaximumSize_City` 12, `GoldenAgeTurns` 20
 - `Map` width/height/tile-count/seed, and the `'TILE'` tag offset
 - the `BIC` table pointers, counts and both strides, plus `Race` and `UnitType` fields
 - the `City_Body` prefix — `ID`, `X`/`Y`, `CivID` (tallied against `Leader.Cities_Count` for 13 civs),
@@ -363,7 +567,10 @@ scan normally.
 **Inferred** — derived from the community header and internally consistent, but never round-tripped
 through the game's own display:
 
-- `Leader` `CapitalID`, `Golden_Age_End`, `GovernmentType`, `Tiles_Discovered`, research id/turns
+- `Leader` `CapitalID`, `Golden_Age_End`, `Tiles_Discovered`, research id/turns
+- `General.ResearchTime_Min` / `ResearchTime_Max` (`BIC + 0x3E08` / `+0x3E04`, reading 4 and 50) — the
+  *offsets* are as solid as the rest of the General block above, but that this field is what floors
+  research has not been tested. See §8.2.
 - `City_Body.cultural_level` — surfaced, and written by the Cities tab's *Max culture* button, but
   still Inferred; and every City field past the anchored prefix (not surfaced at all)
 - all four tile visibility masks
@@ -436,12 +643,17 @@ uncompressed save, but that path is untested here).
    Observed live: banking 30,000 **shortened** the research but the advance still took a few more
    turns, and raising the amount is not expected to change that — 30,000 already cleared any epic-game
    cost, so the remaining turns are not a shortfall of points. The likely explanation is a floor on how
-   few turns an advance may take, which points cannot buy past. Two things would settle it, and both
-   are unattempted: decompiling the interturn research step (`perform_interturn` @ `0x4FF290` reaches
-   it) to see what the completion test actually compares; and probing `Research_Turns` (`Leader+0x100`,
-   Inferred, not surfaced) — if that counts turns *spent* on the current advance, writing it is the
-   lever that finish-research is missing. Neither has been tried, and neither should be surfaced in the
-   UI before it is.
+   few turns an advance may take, which points cannot buy past.
+
+   **That floor now has a name and an address.** The worker-job work (§4.7) required mapping
+   `BIC.General`, and it contains `ResearchTime_Min` at `BIC + 0x3E08` and `ResearchTime_Max` at
+   `+0x3E04` — reading **4** and **50** in a live epic game, which is exactly the shape of the observed
+   behaviour ("a few more turns" rather than instant). The offsets sit inside a block confirmed five ways
+   over (§6), so what is missing is only the causal test: **write 1 there, bank the points, and see
+   whether the advance lands next turn.** That is one probe run, and it has not been done — so nothing in
+   the UI mentions it yet, and `FinishResearchBulbs` is unchanged. The other leads stand if it fails:
+   decompiling the interturn research step (`perform_interturn` @ `0x4FF290` reaches it), and probing
+   `Research_Turns` (`Leader+0x100`, Inferred, not surfaced).
 3. **Tile visibility** — four candidate masks, none confirmed on screen. Decompiling
    `Leader_reveal_tile` @ `0x567100` would say which must be set together.
 4. **Tech storage** — see §6.

@@ -85,6 +85,12 @@ Check("Culture.cultural_level lands at Leader+0x1838",
 Equal("Unit_Body.Damage", Civ3Layout.UnitDamage, 0x30);
 Equal("Unit_Body.Moves", Civ3Layout.UnitMoves, 0x34);
 Equal("Unit_Body.Combat_Experience", Civ3Layout.UnitExperience, 0x28);
+Equal("Unit_Body.Job_Value", Civ3Layout.UnitJobValue, 0x38);
+Equal("Unit_Body.Job_ID", Civ3Layout.UnitJobId, 0x3C);
+Check("the job pair follows Moves with no gap",
+    Civ3Layout.UnitJobValue == Civ3Layout.UnitMoves + 4 && Civ3Layout.UnitJobId == Civ3Layout.UnitJobValue + 4);
+Check("a unit probe reaches the job fields",
+    Civ3Layout.UnitJobId + 4 <= Civ3Layout.UnitRecordProbeBytes);
 Equal("City_Body.StoredFood", Civ3Layout.CityStoredFood, 0x24);
 Equal("City_Body.StoredProduction", Civ3Layout.CityStoredProduction, 0x28);
 Check("nothing past the anchor-bracketed City prefix is exposed",
@@ -96,6 +102,20 @@ Check("nothing past the anchor-bracketed City prefix is exposed",
 Equal("Map inside BIC", Civ3Layout.BicMap, 0x3E64);
 Equal("Race stride", Civ3Layout.RaceStride, 0x974);
 Equal("UnitType stride", Civ3Layout.UnitTypeStride, 0x138);
+
+// The worker-job table's address is written as the difference of the two absolute addresses the game's
+// own code uses — `mov esi,[0x9E9B24]` inside get_worker_remaining_turns_to_complete, against
+// p_bic_data at 0x9E5D08 — so a mistyped offset cannot silently point the table somewhere else.
+const uint BicDataVa = 0x9E5D08;
+Equal("BIC.WorkerJobs", (uint)Civ3Layout.BicWorkerJobs, 0x9E9B24 - BicDataVa);
+Equal("BIC.WorkerJobCount", Civ3Layout.BicWorkerJobCount, 0x8B8);
+Equal("Worker_Job stride", Civ3Layout.WorkerJobStride, 0x74);
+Equal("Worker_Job.TurnToComplete", Civ3Layout.WorkerJobTurnToComplete, 0x44);
+Check("the job table sits between the two confirmed BIC anchors it was derived from",
+    Civ3Layout.BicUnitTypes < Civ3Layout.BicWorkerJobs && Civ3Layout.BicWorkerJobs < Civ3Layout.BicMap);
+Check("a job probe reaches the cost field",
+    Civ3Layout.WorkerJobTurnToComplete + 4 <= Civ3Layout.WorkerJobRecordProbeBytes
+    && Civ3Layout.WorkerJobRecordProbeBytes <= Civ3Layout.WorkerJobStride);
 
 Equal("'LEAD' tag", Civ3Layout.TagLead, 0x4441454Cu);
 Equal("'CITY' tag", Civ3Layout.TagCity, 0x59544943u);
@@ -236,6 +256,44 @@ Check("a well-formed city validates", Civ3Layout.ValidateCity(city, 0, 130, 130)
 Check("a city validated against the wrong slot is rejected", !Civ3Layout.ValidateCity(city, 1, 130, 130));
 Check("a city outside the map is rejected", !Civ3Layout.ValidateCity(city, 0, 50, 50));
 Check("a short city buffer is rejected", !Civ3Layout.ValidateCity(city.AsSpan(0, 8), 0, 130, 130));
+
+// Worker_Job is the one BIC table with no ID field, so ValidateWorkerJob is doing the work that
+// `Table[i].ID == i` does everywhere else. It has to be strict enough that arbitrary memory fails it.
+var job = new byte[Civ3Layout.WorkerJobRecordProbeBytes];
+System.Text.Encoding.ASCII.GetBytes("Road").CopyTo(job.AsSpan(Civ3Layout.WorkerJobName));
+BitConverter.TryWriteBytes(job.AsSpan(Civ3Layout.WorkerJobTurnToComplete, 4), 6);
+Check("a well-formed worker job validates", Civ3Layout.ValidateWorkerJob(job));
+Check("a short job buffer is rejected", !Civ3Layout.ValidateWorkerJob(job.AsSpan(0, 8)));
+
+BitConverter.TryWriteBytes(job.AsSpan(Civ3Layout.WorkerJobTurnToComplete, 4), -1);
+Check("a negative job cost is rejected", !Civ3Layout.ValidateWorkerJob(job));
+BitConverter.TryWriteBytes(job.AsSpan(Civ3Layout.WorkerJobTurnToComplete, 4),
+    GameFacts.MaxWorkerJobTurnToComplete + 1);
+Check("an absurd job cost is rejected", !Civ3Layout.ValidateWorkerJob(job));
+BitConverter.TryWriteBytes(job.AsSpan(Civ3Layout.WorkerJobTurnToComplete, 4), 0);
+Check("a free job is allowed — a mod may ship one", Civ3Layout.ValidateWorkerJob(job));
+
+job[Civ3Layout.WorkerJobName] = 0;
+Check("an empty job name is rejected", !Civ3Layout.ValidateWorkerJob(job));
+job[Civ3Layout.WorkerJobName] = (byte)'R';
+job[Civ3Layout.WorkerJobName + 2] = 0x01;
+Check("a name with a control byte in it is rejected", !Civ3Layout.ValidateWorkerJob(job));
+var unterminated = new byte[Civ3Layout.WorkerJobRecordProbeBytes];
+unterminated.AsSpan(Civ3Layout.WorkerJobName, 32).Fill((byte)'A');
+Check("a name with no terminator is rejected", !Civ3Layout.ValidateWorkerJob(unterminated));
+Check("an all-zero record is rejected", !Civ3Layout.ValidateWorkerJob(new byte[Civ3Layout.WorkerJobRecordProbeBytes]));
+
+// What "Finish job" banks: the ruleset's base cost, scaled to clear the terrain factor the trainer
+// does not decode. It has to exceed the base cost, and stay a plausible count of worker-turns.
+Check("finishing a job banks more than its base cost",
+    Civ3Layout.WorkerJobWorkToFinish(6) > 6 && Civ3Layout.WorkerJobWorkToFinish(24) > 24);
+Equal("and by the documented factor", Civ3Layout.WorkerJobWorkToFinish(6), 6 * GameFacts.WorkerJobTerrainFactorCeiling);
+Check("a zero-cost job still banks something", Civ3Layout.WorkerJobWorkToFinish(0) > 0);
+Check("an absurd cost cannot overflow the work written",
+    Civ3Layout.WorkerJobWorkToFinish(int.MaxValue) > 0);
+Check("the terrain ceiling clears the epic rules' worst terrain",
+    GameFacts.WorkerJobTerrainFactorCeiling >= 3);
+Equal("instant jobs cost one worker-turn, not zero", GameFacts.InstantWorkerJobTurns, 1);
 
 // =================================================================================================
 Group("PE header parsing");
@@ -493,6 +551,30 @@ var noTablesLoc = new GameLocator(noTables).Locate();
 var emptyTables = noTablesLoc != null ? GameTables.Read(noTables, noTablesLoc) : GameTables.Empty;
 Equal("an absent races table degrades to empty rather than garbage", emptyTables.Races.Count, 0);
 Equal("and labels fall back", emptyTables.RaceName(3), "Race 3");
+Equal("an absent worker-job table degrades to empty", emptyTables.WorkerJobs.Count, 0);
+Equal("and yields no address to write through", emptyTables.WorkerJobsTable, (nuint)0);
+
+// The worker-job table has no ID column, so its stride is recovered purely from every record passing
+// ValidateWorkerJob. Planting it at a non-standard stride is what proves that substitute actually works.
+foreach (int plantedStride in new[] { Civ3Layout.WorkerJobStride, 0x80 })
+{
+    var jobModule = new FakeModule(0x400000, 0x700000);
+    jobModule.WritePeHeader(GameFacts.KnownTimeDateStamp);
+    jobModule.PlantGame(Civ3Layout.RvaLeaders);
+    jobModule.PlantWorkerJobs(0x2C0000, jobCount: 13, stride: plantedStride, 12, 8, 16, 6);
+    var jobLoc = new GameLocator(jobModule).Locate();
+    var jobTables = jobLoc != null ? GameTables.Read(jobModule, jobLoc) : GameTables.Empty;
+
+    Equal($"worker jobs recovered at stride 0x{plantedStride:X}", jobTables.WorkerJobs.Count, 13);
+    if (jobTables.WorkerJobs.Count != 13) continue;
+    Equal($"job 0 name at stride 0x{plantedStride:X}", jobTables.WorkerJobs[0].Name, "Job0");
+    Equal($"job 3 cost at stride 0x{plantedStride:X}", jobTables.WorkerJobs[3].TurnToComplete, 6);
+    Equal($"the recovered stride is reported at 0x{plantedStride:X}", jobTables.WorkerJobStride, plantedStride);
+    Equal($"and the table address at stride 0x{plantedStride:X}", jobTables.WorkerJobsTable, jobModule.At(0x2C0000));
+    Equal("an idle unit's job has no name", jobTables.WorkerJobName(-1), "");
+    Check("and no job record", jobTables.WorkerJob(-1) == null);
+    Check("a job id past the table has no record", jobTables.WorkerJob(99) == null);
+}
 
 // =================================================================================================
 Group("Scan value helpers");
@@ -637,6 +719,84 @@ unitRow.MakeElite();
 Equal("promote-to-elite reaches the top of the ladder", unitRow.Experience, 3);
 Check("and actually writes it",
     unitHost.Writes.Any(w => w.Address == body + (nuint)Civ3Layout.UnitExperience && w.Value == 3));
+
+// A worker mid-job, driven through the same Refresh the poll loop uses — so the row picks the job name
+// and its cost out of the loaded ruleset rather than being handed them, which is what makes "Finish
+// job" bank the right number under a scenario or mod that priced its jobs differently.
+var jobsModule = new FakeModule(0x400000, 0x700000);
+jobsModule.WritePeHeader(GameFacts.KnownTimeDateStamp);
+jobsModule.PlantGame(Civ3Layout.RvaLeaders);
+jobsModule.PlantWorkerJobs(0x2C0000, jobCount: 13, stride: Civ3Layout.WorkerJobStride, 12, 8, 16, 6);
+var jobsLoc = new GameLocator(jobsModule).Locate();
+var jobsTables = jobsLoc != null ? GameTables.Read(jobsModule, jobsLoc) : GameTables.Empty;
+Check("the worker-job fixture located", jobsLoc != null && jobsTables.WorkerJobs.Count == 13);
+
+if (jobsLoc != null)
+{
+    var workerHost = new FakeGameHost();
+    nuint workerBody = 0x70000;
+    workerHost.Seed(workerBody + (nuint)Civ3Layout.UnitCivId, 1);
+    workerHost.Seed(workerBody + (nuint)Civ3Layout.UnitX, 46);
+    workerHost.Seed(workerBody + (nuint)Civ3Layout.UnitY, 26);
+    workerHost.Seed(workerBody + (nuint)Civ3Layout.UnitExperience, 1);
+    workerHost.Seed(workerBody + (nuint)Civ3Layout.UnitJobId, 3);          // "Job3", costing 6
+    workerHost.Seed(workerBody + (nuint)Civ3Layout.UnitJobValue, 2);
+
+    var workerRow = new UnitRowViewModel(workerHost, workerBody, 0);
+    Check("a worker row refreshes", workerRow.Refresh(jobsTables, jobsLoc));
+    Equal("the job is named out of the ruleset", workerRow.JobName, "Job3");
+    Equal("job progress is read as work done", workerRow.JobProgress, 2);
+    Check("and the row knows it is working", workerRow.IsWorking);
+
+    workerHost.Writes.Clear();
+    Check("finish job reports that it acted", workerRow.FinishJob());
+    Check("and banks that job's own cost, scaled for terrain",
+        workerHost.Writes.Any(w => w.Address == workerBody + (nuint)Civ3Layout.UnitJobValue
+                                   && w.Value == Civ3Layout.WorkerJobWorkToFinish(6)));
+
+    // "Keep worker jobs banked" calls this on every poll, so re-banking an already-banked job has to be
+    // free — otherwise the toggle would write to every working unit twice a second for no reason.
+    workerHost.Writes.Clear();
+    Check("re-banking an already-banked job still reports success", workerRow.FinishJob());
+    Equal("but issues no write", workerHost.Writes.Count, 0);
+
+    workerHost.Writes.Clear();
+    workerRow.JobProgress = -1;
+    Equal("negative job progress is refused", workerHost.Writes.Count, 0);
+
+    // The movement hold writes movement and nothing else — it is not the per-row freeze, which also
+    // clears damage. A worker that got its move back can be re-ordered onto the same job in the same
+    // turn, which is what forces Civ3 to re-run its "is this job done?" test without waiting a turn.
+    workerHost.Writes.Clear();
+    workerRow.HoldMoves();
+    Check("the movement hold zeroes spent movement",
+        workerHost.Writes.Any(w => w.Address == workerBody + (nuint)Civ3Layout.UnitMoves && w.Value == 0));
+    Check("and touches nothing else",
+        workerHost.Writes.All(w => w.Address == workerBody + (nuint)Civ3Layout.UnitMoves));
+
+    workerHost.WritesAllowed = false;
+    workerHost.Writes.Clear();
+    workerRow.HoldMoves();
+    Equal("the movement hold is refused when writes are blocked", workerHost.Writes.Count, 0);
+    workerHost.WritesAllowed = true;
+
+    // An idle unit reads Job_ID as -1, and there is no job on it to finish. Poking Job_Value anyway
+    // would write a number nothing reads, so the action has to decline rather than claim success.
+    var idleHost = new FakeGameHost();
+    nuint idleBody = 0x78000;
+    idleHost.Seed(idleBody + (nuint)Civ3Layout.UnitCivId, 1);
+    idleHost.Seed(idleBody + (nuint)Civ3Layout.UnitX, 46);
+    idleHost.Seed(idleBody + (nuint)Civ3Layout.UnitY, 26);
+    idleHost.Seed(idleBody + (nuint)Civ3Layout.UnitJobId, -1);
+
+    var idleRow = new UnitRowViewModel(idleHost, idleBody, 0);
+    Check("an idle unit row refreshes", idleRow.Refresh(jobsTables, jobsLoc));
+    Check("an idle unit is not working", !idleRow.IsWorking);
+    Equal("and shows no job", idleRow.JobName, "");
+    idleHost.Writes.Clear();
+    Check("finish job declines on an idle unit", !idleRow.FinishJob());
+    Equal("and no write reaches the game", idleHost.Writes.Count, 0);
+}
 
 // "Finish research" banks points rather than granting a tech: Civ3 compares the accumulated points
 // against the advance's cost at the turn boundary. The value has to clear any real tech cost — modded

@@ -91,6 +91,16 @@ Worker turns are the currency nobody counts. Rules of thumb:
 - Two workers per city by the classical era is not excessive.
 - Capture enemy workers rather than killing them; a captured worker is a full worker.
 - Industrious civs get more out of every worker, which is why the trait outperforms its reputation.
+- **Stack them.** The game adds up the work every unit on the tile is putting into the same job, so six
+  workers on one tile finish six times sooner. Splitting them across six tiles finishes nothing for six
+  turns; that is the same total work, arriving much later.
+- **Despotism halves your work rate**, which the game applies through your government rather than your
+  units — one more reason the early government change pays for itself twice over.
+
+The costs behind all of that, in worker-turns before terrain: Road 6, Irrigation 8, Mine 12, Railroad 12,
+Fortress 16, Clear Wetlands 16, Plant Forest 18, Clear Damage 24. A worker contributes roughly two per
+turn, which is where the familiar "a road takes three turns" comes from. Rough terrain multiplies the
+figure — mining a mountain is not mining grassland.
 
 ---
 

@@ -5,9 +5,28 @@
         Icon="Assets/app.ico"
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
+        <!-- Several tooltips here carry real instructions — when to switch a toggle on, when to switch
+             it off — rather than a one-line hint. A default WPF tooltip is a single unwrapped line that
+             vanishes after five seconds, which makes that unreadable, so tooltips wrap at a sane width
+             and stay up long enough to finish reading. ShowDuration is an attached property set on the
+             owning control, not on the tooltip, hence the setters in the Button and CheckBox styles. -->
+        <Style TargetType="ToolTip">
+            <Setter Property="MaxWidth" Value="460"/>
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style TargetType="Button">
             <Setter Property="Margin" Value="2"/>
             <Setter Property="Padding" Value="8,3"/>
+            <Setter Property="ToolTipService.ShowDuration" Value="60000"/>
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="ToolTipService.ShowDuration" Value="60000"/>
         </Style>
         <Style TargetType="TextBox">
             <Setter Property="Margin" Value="2"/>
@@ -42,7 +61,7 @@
                 <Button Content="Detach" Command="{Binding DetachCommand}"/>
                 <Separator Margin="6,0"/>
                 <Button Content="Auto-locate (no scan)" FontWeight="Bold" Command="{Binding AutoLocateCommand}"
-                        ToolTip="Adds the recovered offsets to the module base and proves the result against all 32 leader slots."/>
+                        ToolTip="Runs the locator: adds the recovered offsets to the module base and proves the result against all 32 leader slots before trusting any of it. No value scanning at any point.&#10;&#10;YOU DO NOT NORMALLY NEED THIS BUTTON. Locating is part of attaching — it runs by itself the moment you click Attach, which is why the tabs are populated straight away.&#10;&#10;PRESS IT WHEN: you attached while the game was still at the main menu and have since started or loaded a game; or you have loaded a different game or save without detaching, so the civ you are playing, the map size or the ruleset has changed; or a locate failed and you want to try again."/>
                 <Button Content="Re-scan now" Command="{Binding RescanCommand}"
                         ToolTip="Rebuild the city and unit lists immediately. Normally unnecessary: the trainer notices units and cities appearing and disappearing on its own."/>
                 <CheckBox Content="My civ only" IsChecked="{Binding MineOnly}" VerticalAlignment="Center" Margin="10,0,0,0"/>
@@ -151,12 +170,25 @@
             <TabItem Header="Units">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Style="{StaticResource Toolbar}">
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="Full heal all" Command="{Binding HealAllUnitsCommand}"/>
-                            <Button Content="Refresh all moves" Command="{Binding RefreshAllMovesCommand}"/>
-                            <Button Content="Promote all to elite" Command="{Binding EliteAllUnitsCommand}"/>
-                            <TextBlock Style="{StaticResource Note}" VerticalAlignment="Center"
-                                       Text="Damage is hit points LOST and Moves is points SPENT — zero is a fresh, undamaged unit. Freeze heals a unit between battles; it cannot stop one from being killed, because Civ3 resolves a whole battle inside a single call. See References."/>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Full heal all" Command="{Binding HealAllUnitsCommand}"/>
+                                <Button Content="Refresh all moves" Command="{Binding RefreshAllMovesCommand}"/>
+                                <Button Content="Promote all to elite" Command="{Binding EliteAllUnitsCommand}"/>
+                                <Button Content="Finish worker jobs (mine)" Command="{Binding FinishWorkerJobsCommand}"
+                                        ToolTip="Banks enough worker-turns to finish the job every worker of yours is already doing. Your units only — the AI's workers are never touched.&#10;&#10;WHEN TO CLICK IT: after your workers are already building something. Idle workers are skipped, so give the order first. You need it once per job, because finishing a job wipes the banked work — or tick 'Keep worker jobs banked' and never click it again.&#10;&#10;WHAT TO EXPECT: on its own this lands at the START OF YOUR NEXT TURN, not immediately. Civ3 only checks whether a job is finished while a worker is actually putting a turn of work in, and that costs the worker its whole move — one check per turn. A job already due next turn therefore cannot get any shorter.&#10;&#10;TO COLLECT IT NOW: tick 'Hold my units' moves at 0', then press the worker's job key again. The returned movement buys a second check this turn."/>
+                                <CheckBox Content="Hold my units' moves at 0" VerticalAlignment="Center" Margin="8,0,0,0"
+                                          IsChecked="{Binding HoldMyUnitMoves}"
+                                          ToolTip="Re-zeroes spent movement on every unit of yours twice a second, for as long as it is ticked — the standing version of 'Refresh all moves'. Your units can move, attack and work all turn without running out.&#10;&#10;TURN IT ON: at the start of any turn you want unlimited movement, and whenever you are doing terrain work.&#10;&#10;TURN IT OFF: whenever you want the game's normal movement limits back. There is no deadline and nothing to undo — it writes only to your own units, and unticking it simply stops.&#10;&#10;WHY WORKERS NEED IT: working spends a worker's entire move, and the 'is this job done?' check only runs while a worker is working. Giving the move back lets you re-issue the order in the same turn, which forces that check to run again — and that is what makes 'Finish worker jobs' complete on the spot instead of next turn."/>
+                                <CheckBox Content="Keep worker jobs banked" VerticalAlignment="Center" Margin="8,0,0,0"
+                                          IsChecked="{Binding KeepWorkerJobsBanked}"
+                                          ToolTip="Does what the 'Finish worker jobs' button does, automatically, twice a second — so you never have to click it again.&#10;&#10;WHY IT EXISTS: completing a job clears the worker's banked work (the game zeroes the progress and the job id on every unit standing there), so nothing carries into the next job. Without this, the button has to be clicked once for every single job.&#10;&#10;TURN IT ON: together with 'Hold my units' moves at 0', at the start of a turn where you plan to do terrain work.&#10;&#10;TURN IT OFF: when you want workers building at the normal rate again. Nothing to undo — it writes only to your own units.&#10;&#10;HOW TO USE: order the job, then order it again — it finishes at once. Move the worker on and repeat as often as you like in the same turn.&#10;&#10;It costs nothing while idle: a worker already topped up is skipped rather than rewritten."/>
+                                <CheckBox Content="Instant worker jobs (all civs)" VerticalAlignment="Center" Margin="8,0,0,0"
+                                          IsChecked="{Binding InstantWorkerJobs}"
+                                          ToolTip="Rewrites every terrain job in the loaded ruleset to cost one worker-turn.&#10;&#10;THIS ONE IS NOT YOURS ALONE. The ruleset belongs to the game rather than to a player, so every civ's workers speed up — and the AI has far more workers than you do. Prefer 'Finish worker jobs' with the two toggles to its left: same result for you, none of it for the AI.&#10;&#10;TURN IT ON: at the start of your own turn.&#10;&#10;TURN IT OFF: before you end your turn. The game re-reads a job's cost every time a worker puts a turn of work in, and the AI's workers do that during the AI's turn — which runs after you end yours. Switching it off first therefore keeps the whole benefit away from them.&#10;&#10;SAFETY: the original costs are captured when you tick it and written back when you untick it, detach, or close the trainer, so nothing is left patched. Save your game with it OFF — Civ3 saves carry a rules section, and whether an edited cost rides along in it has not been checked."/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource Note}"
+                                       Text="Damage is hit points LOST and Moves is points SPENT — zero is a fresh, undamaged unit. Job progress reads the other way: it counts UP toward the job's cost, and it pools across every worker on the tile, so finishing it on one worker of a stack finishes it for all of them. Either way the improvement appears when you end the turn, because Civ3 applies worker output at the turn boundary. Freeze heals a unit between battles; it cannot stop one from being killed, because Civ3 resolves a whole battle inside a single call. See References."/>
                         </StackPanel>
                     </Border>
                     <DataGrid ItemsSource="{Binding Units}" AutoGenerateColumns="False"
@@ -170,6 +202,8 @@
                             <DataGridTextColumn Header="Damage" Binding="{Binding Damage, UpdateSourceTrigger=LostFocus}" Width="70"/>
                             <DataGridTextColumn Header="Moves used" Binding="{Binding MovesUsed, UpdateSourceTrigger=LostFocus}" Width="86"/>
                             <DataGridTextColumn Header="Veteran" Binding="{Binding Experience, UpdateSourceTrigger=LostFocus}" Width="66"/>
+                            <DataGridTextColumn Header="Job" Binding="{Binding JobName}" IsReadOnly="True" Width="100"/>
+                            <DataGridTextColumn Header="Job done" Binding="{Binding JobProgress, UpdateSourceTrigger=LostFocus}" Width="70"/>
                             <DataGridCheckBoxColumn Header="Heal" Binding="{Binding Freeze}" Width="60"/>
                         </DataGrid.Columns>
                     </DataGrid>
