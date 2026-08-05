@@ -110,6 +110,15 @@
     Grimrock's gameplay is written in Lua, so the trainer locates the game's
     LuaJIT virtual machine (about 6 ms) and reads the party out of it by name --
     there is nothing to scan for, because everything has a name.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer TheQuest
+    Builds and launches The Quest trainer. Another native Win32 target, so no
+    DOSBox: start TheQuest.exe, load or begin a game, then Attach. The trainer
+    reads the module's own engine pointer to reach the character record, and
+    falls back to sweeping the heap for the per-level experience table every
+    character carries -- no value searching either way. 'TheQuest' is enough to
+    pick it; note that a bare 'Quest' also matches QuestForGlory1Trainer.
 #>
 [CmdletBinding()]
 param(

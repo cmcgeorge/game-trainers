@@ -1,0 +1,52 @@
+<Application x:Class="TheQuestTrainer.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+
+        <SolidColorBrush x:Key="Parchment"   Color="#FFF3E7CE" />
+        <SolidColorBrush x:Key="Ink"         Color="#FF2B2118" />
+        <SolidColorBrush x:Key="Rule"        Color="#FFB9A57C" />
+        <SolidColorBrush x:Key="Muted"       Color="#FF6B5B45" />
+        <SolidColorBrush x:Key="Accent"      Color="#FF7A2E1E" />
+        <SolidColorBrush x:Key="PanelFill"   Color="#FFFAF3E3" />
+
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Ink}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="Heading" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{StaticResource Accent}" />
+            <Setter Property="Margin" Value="0,10,0,4" />
+        </Style>
+
+        <Style x:Key="Caption" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Muted}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="MinWidth" Value="72" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="MinWidth" Value="76" />
+        </Style>
+
+        <Style TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Padding" Value="8" />
+            <Setter Property="BorderBrush" Value="{StaticResource Rule}" />
+            <Setter Property="Background" Value="{StaticResource PanelFill}" />
+        </Style>
+
+    </Application.Resources>
+</Application>
