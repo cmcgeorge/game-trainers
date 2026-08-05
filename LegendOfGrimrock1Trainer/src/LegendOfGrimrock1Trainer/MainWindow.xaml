@@ -1,0 +1,326 @@
+<Window x:Class="LegendOfGrimrock1Trainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Legend of Grimrock — Trainer" Height="820" Width="1160"
+        Icon="Assets/app.ico"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <!-- Several tooltips carry real instructions rather than a one-line hint, and a default WPF
+             tooltip is a single unwrapped line that vanishes after five seconds. Wrap them at a sane
+             width and keep them up long enough to finish reading. ShowDuration is an attached property
+             on the owning control, not on the tooltip, hence the setters below. -->
+        <Style TargetType="ToolTip">
+            <Setter Property="MaxWidth" Value="480"/>
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+                    </DataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="8,3"/>
+            <Setter Property="ToolTipService.ShowDuration" Value="60000"/>
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="ToolTipService.ShowDuration" Value="60000"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="2"/>
+            <Setter Property="Padding" Value="2,1"/>
+            <Setter Property="ToolTipService.ShowDuration" Value="60000"/>
+        </Style>
+        <Style x:Key="Toolbar" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.ControlBrushKey}}"/>
+            <Setter Property="Padding" Value="6,4"/>
+        </Style>
+        <Style x:Key="Note" TargetType="TextBlock">
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="4,2"/>
+            <Setter Property="Foreground" Value="#555"/>
+        </Style>
+        <Style x:Key="Head" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Margin" Value="4,10,4,3"/>
+        </Style>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="6,0,3,0"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- process / attach -->
+        <Border DockPanel.Dock="Top" Style="{StaticResource Toolbar}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Process:" Style="{StaticResource Label}" Margin="0,0,4,0"/>
+                <ComboBox Width="300" VerticalAlignment="Center"
+                          ItemsSource="{Binding Processes}" DisplayMemberPath="Display"
+                          SelectedItem="{Binding SelectedProcess}"/>
+                <Button Content="Refresh list" Command="{Binding RefreshProcessesCommand}"
+                        ToolTip="Re-list running processes. This does not refresh game data — that happens on its own, four times a second."/>
+                <Button Content="Attach" FontWeight="Bold" Command="{Binding AttachCommand}"
+                        ToolTip="Open the game process and locate its Lua VM. Locating is part of attaching: there is no scan for you to run and no value for you to search for."/>
+                <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                <Separator Margin="6,0"/>
+                <Button Content="Re-locate" Command="{Binding RelocateCommand}"
+                        ToolTip="Run the locator again without detaching.&#10;&#10;YOU ALMOST NEVER NEED THIS. Locating happens when you attach, and the party is re-read four times a second after that — including the moment a dungeon finishes loading, so attaching at the main menu and then starting a game needs no further action.&#10;&#10;PRESS IT WHEN: the status line says no Lua VM was found and you want to try again; or the trainer is reporting numbers you no longer believe and you want the location and the build fingerprint re-checked from scratch."/>
+                <CheckBox Content="Allow writes" IsChecked="{Binding WritesAllowed}" Margin="12,0,0,0"
+                          ToolTip="Master switch. Turn it off to use the trainer as a read-only inspector: every edit, button and freeze is refused while it is clear."/>
+            </StackPanel>
+        </Border>
+
+        <!-- session summary -->
+        <Border DockPanel.Dock="Top" Padding="8,3" Background="#F4F4F4">
+            <StackPanel>
+                <TextBlock Text="{Binding SessionSummary}" FontWeight="SemiBold"/>
+                <TextBlock Text="{Binding LocatorDetail}" Foreground="#666" FontSize="11" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- status -->
+        <Border DockPanel.Dock="Bottom" Style="{StaticResource Toolbar}">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap"/>
+        </Border>
+
+        <TabControl Margin="6">
+
+            <!-- ============ Party ============ -->
+            <TabItem Header="Party">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Style="{StaticResource Toolbar}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Heal + restore energy" FontWeight="Bold"
+                                        Command="{Binding RestorePartyCommand}"
+                                        ToolTip="Sets health and energy to each living champion's own maximum. It writes the max the game already holds rather than an arbitrary number, so nothing overflows the character sheet."/>
+                                <Button Content="Feed" Command="{Binding FeedPartyCommand}"
+                                        ToolTip="Fills every living champion's food bar to 1000."/>
+                                <Button Content="Cure" Command="{Binding CurePartyCommand}"
+                                        ToolTip="Clears every harmful condition: poison, disease, paralysis, blindness, curse, slow and starvation.&#10;&#10;Burdened and Overloaded are cleared too, but the game recomputes them from carried weight every frame, so they come straight back if the champion really is carrying too much."/>
+                                <Button Content="Bless" Command="{Binding BlessPartyCommand}"
+                                        ToolTip="Sets every beneficial condition — Haste, Rage, Invisibility, Detect Monsters and all four elemental shields — on each living champion for the duration on the right."/>
+                                <TextBlock Text="for" Style="{StaticResource Label}"/>
+                                <TextBox Width="60" Text="{Binding BlessSeconds, UpdateSourceTrigger=LostFocus, StringFormat=0}"/>
+                                <TextBlock Text="s" Style="{StaticResource Label}" Margin="0,0,6,0"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <Button Content="Max every stat to" Command="{Binding MaxPartyCommand}"
+                                        ToolTip="Raises every stat that is below the target — health, energy, the four ability scores, protection, evasion and the four resistances — to it, for every living champion. Stats already above the target are left alone."/>
+                                <TextBox Width="60" Text="{Binding MaxStatTarget, UpdateSourceTrigger=LostFocus, StringFormat=0}"/>
+                                <Separator Margin="10,0"/>
+                                <Button Content="Give skill points:" Command="{Binding GiveSkillPointsCommand}"
+                                        ToolTip="Sets each living champion's unspent skill points to this number, and lights the character sheet's Level Up badge to match. Spend them on the sheet as usual — the game applies every milestone bonus itself."/>
+                                <TextBox Width="60" Text="{Binding SkillPointGrant, UpdateSourceTrigger=LostFocus}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <TabControl Margin="0,6,0,0" ItemsSource="{Binding Champions}"
+                                SelectedIndex="{Binding SelectedChampion}">
+                        <TabControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding TabHeader}"/>
+                            </DataTemplate>
+                        </TabControl.ItemTemplate>
+                        <TabControl.ContentTemplate>
+                            <DataTemplate>
+                                <Grid Margin="6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                    </Grid.RowDefinitions>
+
+                                    <!-- identity + level -->
+                                    <Border Grid.Row="0" Grid.ColumnSpan="2" Padding="4,2" Margin="0,0,0,6">
+                                        <StackPanel>
+                                            <TextBlock>
+                                                <Run Text="{Binding Name, Mode=OneWay}" FontWeight="Bold"/>
+                                                <Run Text=" — "/>
+                                                <Run Text="{Binding Description, Mode=OneWay}"/>
+                                            </TextBlock>
+                                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                                <TextBlock Text="Level:" Style="{StaticResource Label}" Margin="0,0,3,0"/>
+                                                <TextBox Width="50" Text="{Binding Level, UpdateSourceTrigger=LostFocus}"
+                                                         ToolTip="Writes the level on the champion's class instance. Grimrock does not re-derive health, energy or skill points from this — level up through the character sheet if you want those, or use the stat rows below."/>
+                                                <TextBlock Text="XP:" Style="{StaticResource Label}"/>
+                                                <TextBox Width="90" Text="{Binding Experience, UpdateSourceTrigger=LostFocus, StringFormat=0}"
+                                                         ToolTip="Accumulated experience. The game checks it against the next-level threshold on the next experience gain, so it levels up on the next kill rather than instantly."/>
+                                                <TextBlock Style="{StaticResource Label}">
+                                                    <Run Text="/ next at "/><Run Text="{Binding NextLevel, Mode=OneWay, StringFormat=0}"/>
+                                                </TextBlock>
+                                                <TextBlock Text="Food:" Style="{StaticResource Label}"/>
+                                                <TextBox Width="60" Text="{Binding Food, UpdateSourceTrigger=LostFocus, StringFormat=0}"/>
+                                                <TextBlock Text="Skill points:" Style="{StaticResource Label}"/>
+                                                <TextBox Width="50" Text="{Binding SkillPoints, UpdateSourceTrigger=LostFocus}"/>
+                                            </StackPanel>
+                                            <TextBlock Style="{StaticResource Note}">
+                                                <Run Text="Traits and talents: "/><Run Text="{Binding Talents, Mode=OneWay}"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- stats -->
+                                    <DockPanel Grid.Row="1" Grid.Column="0" Margin="0,0,4,0">
+                                        <TextBlock DockPanel.Dock="Top" Text="Stats" Style="{StaticResource Head}"/>
+                                        <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Note}"
+                                                   Text="Health and Energy are bars: editing one raises its maximum to fit, but never lowers it, so dropping your current health cannot throw away the maximum you earned. Every other stat is a score, which Grimrock keeps as the same number in both fields, so those move together. Freeze holds a stat at the value it was ticked at and re-writes it four times a second."/>
+                                        <DataGrid ItemsSource="{Binding Stats}" AutoGenerateColumns="False"
+                                                  CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column"
+                                                  GridLinesVisibility="Horizontal">
+                                            <DataGrid.Columns>
+                                                <DataGridTextColumn Header="Stat" Binding="{Binding UiName}" IsReadOnly="True" Width="*"/>
+                                                <DataGridTextColumn Header="Value" Binding="{Binding Value, StringFormat=0}" Width="70"/>
+                                                <DataGridTextColumn Header="Max" Binding="{Binding Max, StringFormat=0}" IsReadOnly="True" Width="70"/>
+                                                <DataGridCheckBoxColumn Header="Freeze" Binding="{Binding Frozen, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
+                                            </DataGrid.Columns>
+                                        </DataGrid>
+                                    </DockPanel>
+
+                                    <!-- skills + conditions -->
+                                    <Grid Grid.Row="1" Grid.Column="1" Margin="4,0,0,0">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+
+                                        <DockPanel Grid.Row="0">
+                                            <TextBlock DockPanel.Dock="Top" Text="Skills" Style="{StaticResource Head}"/>
+                                            <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Note}"
+                                                       Text="Only skills the champion has already trained appear here — the array is the champion's own. Raising a level does not replay the milestone bonuses the game grants when you spend a point on the character sheet, so for a clean build hand out skill points instead and spend them in game."/>
+                                            <DataGrid ItemsSource="{Binding Skills}" AutoGenerateColumns="False"
+                                                      CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column"
+                                                      GridLinesVisibility="Horizontal">
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Header="Skill" Binding="{Binding UiName}" IsReadOnly="True" Width="*"/>
+                                                    <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="70"/>
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+                                        </DockPanel>
+
+                                        <DockPanel Grid.Row="1">
+                                            <TextBlock DockPanel.Dock="Top" Text="Conditions" Style="{StaticResource Head}"/>
+                                            <DataGrid ItemsSource="{Binding Conditions}" AutoGenerateColumns="False"
+                                                      CanUserAddRows="False" CanUserDeleteRows="False" HeadersVisibility="Column"
+                                                      GridLinesVisibility="Horizontal">
+                                                <DataGrid.Columns>
+                                                    <DataGridTextColumn Header="Condition" Binding="{Binding UiName}" IsReadOnly="True" Width="*"/>
+                                                    <DataGridTextColumn Header="Kind" Binding="{Binding KindLabel}" IsReadOnly="True" Width="70"/>
+                                                    <DataGridCheckBoxColumn Header="On" Binding="{Binding Active, UpdateSourceTrigger=PropertyChanged}" Width="45"/>
+                                                    <DataGridTextColumn Header="Seconds" Binding="{Binding Timer, StringFormat=0}" Width="70"/>
+                                                </DataGrid.Columns>
+                                            </DataGrid>
+                                        </DockPanel>
+                                    </Grid>
+                                </Grid>
+                            </DataTemplate>
+                        </TabControl.ContentTemplate>
+                    </TabControl>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ============ Dungeon ============ -->
+            <TabItem Header="Dungeon">
+                <DockPanel Margin="6">
+                    <Border DockPanel.Dock="Top" Style="{StaticResource Toolbar}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Move the party to tile" Style="{StaticResource Label}" Margin="0,0,3,0"/>
+                                <TextBlock Text="X:" Style="{StaticResource Label}"/>
+                                <TextBox Width="50" Text="{Binding TeleportX, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Text="Y:" Style="{StaticResource Label}"/>
+                                <TextBox Width="50" Text="{Binding TeleportY, UpdateSourceTrigger=LostFocus}"/>
+                                <Button Content="Go" Command="{Binding TeleportCommand}"
+                                        ToolTip="Moves the party on the level it is already standing on. The destination is checked against the map's own cell bits first, so a wall or an obstacle is refused rather than walked into.&#10;&#10;The occupancy bit the game sets on the tile under the party moves with it, so nothing is left behind for monsters to path around.&#10;&#10;Travel between levels is deliberately not offered: a level change also tears down and rebuilds the map, and writing the level number alone would leave the party pointing at a map it is no longer on. Use the stairs."/>
+                                <Separator Margin="10,0"/>
+                                <TextBlock Text="Face:" Style="{StaticResource Label}"/>
+                                <Button Content="N" Command="{Binding FaceCommand}" CommandParameter="0" Width="34"/>
+                                <Button Content="E" Command="{Binding FaceCommand}" CommandParameter="1" Width="34"/>
+                                <Button Content="S" Command="{Binding FaceCommand}" CommandParameter="2" Width="34"/>
+                                <Button Content="W" Command="{Binding FaceCommand}" CommandParameter="3" Width="34"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <Button Content="Reveal this level's map" Command="{Binding RevealLevelCommand}"
+                                        ToolTip="Fills in the automap for the level the party is on: every tile that is not solid rock is marked as seen, and each of its four sides is marked as a wall only where the neighbouring tile actually is one.&#10;&#10;Only those five automap bits are written. Each tile is read first and its geometry, occupancy and trigger bits are preserved, so revealing the map cannot dissolve a wall or trip a pressure plate. It does not reveal secret doors that the game has not yet turned into walls you can see."/>
+                                <TextBlock Style="{StaticResource Note}" VerticalAlignment="Center"
+                                           Text="The trainer never opens or closes a door, spawns an item, or kills a monster — those all need the game's own Lua functions to be called, which is out of scope for a read/write trainer."/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <DockPanel Grid.Column="0" Margin="0,0,4,0">
+                            <TextBlock DockPanel.Dock="Top" Text="Dungeon levels" Style="{StaticResource Head}"/>
+                            <DataGrid ItemsSource="{Binding Maps}" AutoGenerateColumns="False" IsReadOnly="True"
+                                      CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="#" Binding="{Binding Level}" Width="30"/>
+                                    <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*"/>
+                                    <DataGridTextColumn Header="Size" Binding="{Binding Size}" Width="80"/>
+                                    <DataGridCheckBoxColumn Header="Visited" Binding="{Binding Visited}" Width="60"/>
+                                    <DataGridCheckBoxColumn Header="Party" Binding="{Binding IsCurrent}" Width="50"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+
+                        <DockPanel Grid.Column="1" Margin="4,0,0,0">
+                            <TextBlock DockPanel.Dock="Top" Text="Run statistics" Style="{StaticResource Head}"/>
+                            <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Note}"
+                                       Text="Read straight from the game's own statistics table — the same numbers the end-of-game screen shows."/>
+                            <DataGrid ItemsSource="{Binding Statistics}" AutoGenerateColumns="False" IsReadOnly="True"
+                                      CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Statistic" Binding="{Binding UiName}" Width="*"/>
+                                    <DataGridTextColumn Header="Value" Binding="{Binding Value, StringFormat=0.##}" Width="100"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ============ Reference ============ -->
+            <TabItem Header="Reference">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8">
+                    <StackPanel>
+                        <TextBlock Text="How this trainer finds anything" Style="{StaticResource Head}"/>
+                        <TextBlock Style="{StaticResource Note}"
+                                   Text="Legend of Grimrock is a C++ engine wrapped around a LuaJIT 2.0 virtual machine, and its whole gameplay model lives in ordinary Lua tables: the party, its four champions, their stats, conditions, skills and the dungeon's maps. There is nothing to scan for, because everything has a name."/>
+                        <TextBlock Style="{StaticResource Note}"
+                                   Text="Attaching runs two chains. The first reads the module's one static lua_State pointer. If that word is missing, stale, or the build moved it, the second sweeps committed memory for LuaJIT's own GG_State shape — a thread object whose global-state link points exactly one lua_State past itself, which is true of the main thread and of nothing else. Whichever answers, the result is only believed once its environment proves to be a real globals table: _G must point back at itself, _VERSION must read &quot;Lua 5.1&quot;, and Grimrock's own engine classes must all be present."/>
+
+                        <TextBlock Text="Spells and rune combinations" Style="{StaticResource Head}"/>
+                        <TextBlock Style="{StaticResource Note}"
+                                   Text="Transcribed from the game's own dungeon.spells table. Rune letters read across the 3x3 board: A B C on the top row, D E F in the middle, G H I on the bottom. A champion needs the listed level in the listed skill, and needs to have found the scroll, before the combination will cast."/>
+                        <DataGrid x:Name="SpellGrid" AutoGenerateColumns="False" IsReadOnly="True" Margin="4"
+                                  CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Spell" Binding="{Binding UiName}" Width="*"/>
+                                <DataGridTextColumn Header="Skill" Binding="{Binding Skill}" Width="120"/>
+                                <DataGridTextColumn Header="Skill level" Binding="{Binding SkillLevel}" Width="80"/>
+                                <DataGridTextColumn Header="Runes" Binding="{Binding Runes}" Width="80"/>
+                                <DataGridTextColumn Header="Energy" Binding="{Binding ManaCost}" Width="70"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <TextBlock Text="What is deliberately not here" Style="{StaticResource Head}"/>
+                        <TextBlock Style="{StaticResource Note}"
+                                   Text="Spawning items, learning spells outright, opening doors, killing monsters and travelling between dungeon levels all need the game's own Lua functions to run inside the game's own thread. A trainer that only reads and writes memory cannot call them safely, so none of them is offered rather than offered and unreliable."/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

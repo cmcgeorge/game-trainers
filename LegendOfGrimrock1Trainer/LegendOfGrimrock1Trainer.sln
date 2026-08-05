@@ -1,0 +1,42 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{7A19C0F6-2C4E-4E19-9D3B-2E3B4A6C1D01}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LegendOfGrimrock1Trainer", "src\LegendOfGrimrock1Trainer\LegendOfGrimrock1Trainer.csproj", "{1B5E6C42-9A77-4B0E-9C6F-3F51A0C7D902}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameTrainers.Common", "..\GameTrainers.Common\GameTrainers.Common.csproj", "{2E3282E3-66EA-43E1-BF10-5572A75AF278}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{9C3D5A18-77B1-4A62-A0E5-8D2C4F3B7E03}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FormatCheck", "test\FormatCheck\FormatCheck.csproj", "{4D8F1B27-6E30-4C55-9A11-77C2E9D6B104}"
+EndProject
+Global
+    GlobalSection(SolutionConfigurationPlatforms) = preSolution
+        Debug|Any CPU = Debug|Any CPU
+        Release|Any CPU = Release|Any CPU
+    EndGlobalSection
+    GlobalSection(SolutionProperties) = preSolution
+        HideSolutionNode = FALSE
+    EndGlobalSection
+    GlobalSection(ProjectConfigurationPlatforms) = postSolution
+        {1B5E6C42-9A77-4B0E-9C6F-3F51A0C7D902}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {1B5E6C42-9A77-4B0E-9C6F-3F51A0C7D902}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {1B5E6C42-9A77-4B0E-9C6F-3F51A0C7D902}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {1B5E6C42-9A77-4B0E-9C6F-3F51A0C7D902}.Release|Any CPU.Build.0 = Release|Any CPU
+        {2E3282E3-66EA-43E1-BF10-5572A75AF278}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {2E3282E3-66EA-43E1-BF10-5572A75AF278}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {2E3282E3-66EA-43E1-BF10-5572A75AF278}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {2E3282E3-66EA-43E1-BF10-5572A75AF278}.Release|Any CPU.Build.0 = Release|Any CPU
+        {4D8F1B27-6E30-4C55-9A11-77C2E9D6B104}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {4D8F1B27-6E30-4C55-9A11-77C2E9D6B104}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {4D8F1B27-6E30-4C55-9A11-77C2E9D6B104}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {4D8F1B27-6E30-4C55-9A11-77C2E9D6B104}.Release|Any CPU.Build.0 = Release|Any CPU
+    EndGlobalSection
+    GlobalSection(NestedProjects) = preSolution
+        {1B5E6C42-9A77-4B0E-9C6F-3F51A0C7D902} = {7A19C0F6-2C4E-4E19-9D3B-2E3B4A6C1D01}
+        {4D8F1B27-6E30-4C55-9A11-77C2E9D6B104} = {9C3D5A18-77B1-4A62-A0E5-8D2C4F3B7E03}
+    EndGlobalSection
+EndGlobal

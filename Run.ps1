@@ -102,6 +102,14 @@
     data in a few milliseconds with no value searching. Note that Civ3 obfuscates
     your treasury across two fields, so a Cheat-Engine-style exact scan for your
     gold cannot work -- the auto-locate decodes it instead.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer Grimrock
+    Builds and launches the Legend of Grimrock trainer. Another native Win32
+    target, so no DOSBox: start grimrock.exe, load or begin a game, then Attach.
+    Grimrock's gameplay is written in Lua, so the trainer locates the game's
+    LuaJIT virtual machine (about 6 ms) and reads the party out of it by name --
+    there is nothing to scan for, because everything has a name.
 #>
 [CmdletBinding()]
 param(
