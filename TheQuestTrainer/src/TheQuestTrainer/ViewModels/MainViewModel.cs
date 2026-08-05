@@ -43,6 +43,12 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     private bool _isReadOnly;
     private ProcessEntry? _selectedProcess;
 
+    private IReadOnlyList<ItemType> _catalog = Array.Empty<ItemType>();
+    private ItemRowViewModel? _selectedItem;
+    private ItemType? _selectedCatalogEntry;
+    private string _catalogFilter = "";
+    private string _inventoryNote = "";
+
     private string _characterName = "";
     private string _portraitId = "";
     private string _raceName = "";
@@ -62,6 +68,8 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     {
         Attributes = new ObservableCollection<AttributeRowViewModel>();
         Skills = new ObservableCollection<SkillRowViewModel>();
+        Items = new ObservableCollection<ItemRowViewModel>();
+        CatalogView = new ObservableCollection<ItemType>();
         Processes = new ObservableCollection<ProcessEntry>();
         Reference = new ObservableCollection<ReferenceRow>();
 
@@ -71,11 +79,17 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         MaxSkillsCommand = new RelayCommand(MaxSkills, () => IsAttached && !IsReadOnly);
         LevelUpCommand = new RelayCommand(LevelUp, () => IsAttached && !IsReadOnly);
         ClearCrimeCommand = new RelayCommand(ClearCrime, () => IsAttached && !IsReadOnly);
+        RestoreItemCommand = new RelayCommand(RestoreSelectedItem, () => CanEdit && SelectedItem is { CanRestore: true });
+        RestoreAllItemsCommand = new RelayCommand(RestoreAllItems, () => CanEdit && Items.Count > 0);
+        ReplaceItemCommand = new RelayCommand(ReplaceSelectedItem,
+            () => CanEdit && SelectedItem is { IsEquipped: false } && SelectedCatalogEntry is not null);
+        ScanCatalogCommand = new RelayCommand(ScanCatalog, () => IsAttached);
 
         // Built up front rather than on attach, so the window shows what it can edit before it is
         // pointed at anything. The rows carry no game state until the first refresh fills them.
         EnsureRows();
         BuildReference();
+        UpdateInventoryNote();
         RefreshProcesses();
 
         _timer = new DispatcherTimer { Interval = Tick };
@@ -90,6 +104,12 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
 
     /// <summary>The twenty skills, in the game's id order.</summary>
     public ObservableCollection<SkillRowViewModel> Skills { get; }
+
+    /// <summary>The character's carried items, in the game's own order.</summary>
+    public ObservableCollection<ItemRowViewModel> Items { get; }
+
+    /// <summary>The item types offered by the replacement picker, filtered by <see cref="CatalogFilter"/>.</summary>
+    public ObservableCollection<ItemType> CatalogView { get; }
 
     /// <summary>Attachable processes, best match first.</summary>
     public ObservableCollection<ProcessEntry> Processes { get; }
@@ -114,6 +134,18 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
 
     /// <summary>Sets crime to zero.</summary>
     public RelayCommand ClearCrimeCommand { get; }
+
+    /// <summary>Repairs, recharges or refills the selected item.</summary>
+    public RelayCommand RestoreItemCommand { get; }
+
+    /// <summary>Does the same to every carried item that has something to restore.</summary>
+    public RelayCommand RestoreAllItemsCommand { get; }
+
+    /// <summary>Turns the selected item into the selected catalog entry.</summary>
+    public RelayCommand ReplaceItemCommand { get; }
+
+    /// <summary>Sweeps the game's heap for item types again.</summary>
+    public RelayCommand ScanCatalogCommand { get; }
 
     // ---- session state ---------------------------------------------------------------------
 
@@ -312,6 +344,171 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         }
     }
 
+    // ---- inventory ----------------------------------------------------------------------------
+
+    /// <summary>The item the Inventory tab is acting on.</summary>
+    public ItemRowViewModel? SelectedItem
+    {
+        get => _selectedItem;
+        set
+        {
+            if (!SetField(ref _selectedItem, value)) return;
+            RaiseItemCommandStates();
+        }
+    }
+
+    /// <summary>The catalog entry "Replace" would stamp onto <see cref="SelectedItem"/>.</summary>
+    public ItemType? SelectedCatalogEntry
+    {
+        get => _selectedCatalogEntry;
+        set
+        {
+            if (!SetField(ref _selectedCatalogEntry, value)) return;
+            ReplaceItemCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    /// <summary>Substring the picker is narrowed by; matched against both the name and the internal id.</summary>
+    public string CatalogFilter
+    {
+        get => _catalogFilter;
+        set
+        {
+            if (!SetField(ref _catalogFilter, value)) return;
+            ApplyCatalogFilter();
+        }
+    }
+
+    /// <summary>Line under the item list: how much is carried, and how big the catalog is.</summary>
+    public string InventoryNote { get => _inventoryNote; private set => SetField(ref _inventoryNote, value); }
+
+    /// <summary>
+    /// Sweeps the game's heap for item types.
+    ///
+    /// Run once on attach and then only on request. It costs about a third of a second, which is far
+    /// too much for the 250 ms refresh, and the answer barely moves: types are loaded with the game's
+    /// data, so the only thing that changes the catalog mid-session is the game loading an area from
+    /// an expansion it had not touched yet.
+    /// </summary>
+    public void ScanCatalog()
+    {
+        if (_source is null || _record == 0) { Report("Attach first."); return; }
+
+        _catalog = ItemCatalog.Sweep(_source, _record - QuestLayout.RecordInEngine);
+        ApplyCatalogFilter();
+        UpdateInventoryNote();
+        Report($"Found {_catalog.Count:N0} item type(s) in the loaded game.");
+    }
+
+    /// <summary>
+    /// Rebuilds <see cref="CatalogView"/> from the filter, ordered by category and then by name so
+    /// an unfiltered thousand-entry list is still something a person can read.
+    /// </summary>
+    private void ApplyCatalogFilter()
+    {
+        var previous = SelectedCatalogEntry;
+        string needle = _catalogFilter.Trim();
+
+        var matches = _catalog
+            .Where(t => needle.Length == 0
+                     || t.Name.Contains(needle, StringComparison.OrdinalIgnoreCase)
+                     || t.Id.Contains(needle, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(t => t.Category)
+            .ThenBy(t => t.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(t => t.Id, StringComparer.Ordinal);
+
+        CatalogView.Clear();
+        foreach (var type in matches) CatalogView.Add(type);
+
+        // Keep the selection if it survived the filter, so typing to narrow the list does not
+        // silently disarm the Replace button.
+        SelectedCatalogEntry = previous is not null && CatalogView.Contains(previous) ? previous : null;
+    }
+
+    /// <summary>
+    /// Brings <see cref="Items"/> into line with a fresh read.
+    ///
+    /// Rows are matched to items by address, not by position: the vector closes up when the player
+    /// drops or sells something, so position 3 is a different item afterwards. When the addresses
+    /// still line up — overwhelmingly the common case — the rows are updated in place and the grid's
+    /// selection and scroll position survive.
+    /// </summary>
+    private void UpdateItems(InventorySnapshot inventory, bool initial)
+    {
+        bool sameShape = Items.Count == inventory.Items.Count;
+        if (sameShape)
+        {
+            for (int i = 0; i < Items.Count; i++)
+                if (Items[i].Address != inventory.Items[i].Address) { sameShape = false; break; }
+        }
+
+        if (sameShape)
+        {
+            for (int i = 0; i < Items.Count; i++) Items[i].Update(inventory.Items[i], initial);
+            UpdateInventoryNote();
+            // Restoring an item to full is exactly the case that leaves the button enabled with
+            // nothing left to do, so the commands are re-queried even when no row came or went.
+            RaiseItemCommandStates();
+            return;
+        }
+
+        uint? selected = SelectedItem?.Address;
+        var existing = Items.ToDictionary(r => r.Address);
+
+        Items.Clear();
+        foreach (var item in inventory.Items)
+        {
+            if (existing.TryGetValue(item.Address, out var row)) row.Update(item, initial: true);
+            else row = new ItemRowViewModel(this, item);
+            Items.Add(row);
+        }
+
+        SelectedItem = selected is { } address ? Items.FirstOrDefault(r => r.Address == address) : null;
+        UpdateInventoryNote();
+        RaiseItemCommandStates();
+    }
+
+    private void UpdateInventoryNote()
+    {
+        int count = Items.Count;
+        string catalog = _catalog.Count == 0
+            ? "Catalog not scanned yet."
+            : $"{_catalog.Count:N0} item type(s) available to place.";
+        InventoryNote = $"{count} item(s) carried. {catalog}";
+    }
+
+    private void RestoreSelectedItem()
+    {
+        if (SelectedItem is not { } row) { Report("Pick an item first."); return; }
+        row.Restore();
+        Refresh(initial: true);
+    }
+
+    private void RestoreAllItems()
+    {
+        if (_actions is null) { Report("Attach first."); return; }
+        Report(_actions.RestoreAllItems(_record).Message);
+        Refresh(initial: true);
+    }
+
+    private void ReplaceSelectedItem()
+    {
+        if (_actions is null) { Report("Attach first."); return; }
+        if (SelectedItem is not { } row) { Report("Pick an item to replace."); return; }
+        if (SelectedCatalogEntry is not { } type) { Report("Pick what to replace it with."); return; }
+
+        Report(_actions.ReplaceItem(_record, row.Address, type).Message);
+        Refresh(initial: true);
+    }
+
+    private void RaiseItemCommandStates()
+    {
+        RestoreItemCommand.RaiseCanExecuteChanged();
+        RestoreAllItemsCommand.RaiseCanExecuteChanged();
+        ReplaceItemCommand.RaiseCanExecuteChanged();
+        ScanCatalogCommand.RaiseCanExecuteChanged();
+    }
+
     // ---- freezes ------------------------------------------------------------------------------
 
     /// <summary>Holds health at whatever it was when the box was ticked.</summary>
@@ -473,6 +670,13 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         OnPropertyChanged(nameof(RecordAddress));
         Status = $"Attached to {entry.Name} ({entry.Id}). {located.Detail}";
         Refresh(initial: true);
+
+        // The catalog sweep costs about a third of a second and is what makes the Inventory tab's
+        // picker useful, so it is paid once here rather than on the refresh. A failure is not fatal:
+        // everything else on that tab works without it.
+        _catalog = ItemCatalog.Sweep(_source, _record - QuestLayout.RecordInEngine);
+        ApplyCatalogFilter();
+        UpdateInventoryNote();
     }
 
     private string DescribeBuild(ModuleLocation module)
@@ -500,6 +704,15 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         _image = null;
         _record = 0;
         _rowsBuilt = false;
+
+        // The item rows and the catalog both name addresses in a process that is no longer open, so
+        // they go rather than linger as a list that looks live and would refuse every write.
+        Items.Clear();
+        CatalogView.Clear();
+        _catalog = Array.Empty<ItemType>();
+        SelectedItem = null;
+        SelectedCatalogEntry = null;
+        UpdateInventoryNote();
 
         if (IsAttached) Status = "Detached.";
         IsAttached = false;
@@ -597,6 +810,13 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
             row.Update(snapshot.Skills[row.Id], snapshot.StartingSkills[row.Id], cap, available, initial || !_rowsBuilt);
         }
 
+        // The inventory is read separately from the record: it is a vector of heap pointers rather
+        // than fields inside the snapshot, and a pack that cannot be read is a reason to show no
+        // items, not a reason to end the session.
+        var inventory = InventoryReader.Read(_source, _record);
+        if (inventory is not null) UpdateItems(inventory, initial || !_rowsBuilt);
+        else if (Items.Count > 0) { Items.Clear(); SelectedItem = null; UpdateInventoryNote(); }
+
         _rowsBuilt = true;
     }
 
@@ -669,6 +889,14 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     /// <inheritdoc/>
     public ActionResult WriteSkill(int id, int value) =>
         _actions is null ? ActionResult.Failure("Attach first.") : _actions.SetSkill(_record, id, value);
+
+    /// <inheritdoc/>
+    public ActionResult WriteItemMeter(uint item, int value) =>
+        _actions is null ? ActionResult.Failure("Attach first.") : _actions.SetItemMeter(_record, item, value);
+
+    /// <inheritdoc/>
+    public ActionResult RestoreItem(uint item) =>
+        _actions is null ? ActionResult.Failure("Attach first.") : _actions.RestoreItem(_record, item);
 
     /// <inheritdoc/>
     public void Report(string message)
@@ -748,6 +976,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         MaxSkillsCommand.RaiseCanExecuteChanged();
         LevelUpCommand.RaiseCanExecuteChanged();
         ClearCrimeCommand.RaiseCanExecuteChanged();
+        RaiseItemCommandStates();
     }
 
     private void BuildReference()

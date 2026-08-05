@@ -206,6 +206,152 @@ public sealed class TrainerActions
         return ActionResult.Success($"Level {level}; next level at {nextThreshold:N0} experience.", level);
     }
 
+    // ---- items ------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Fills one item's meter — repairs worn gear, recharges a wand, refills a quiver.
+    ///
+    /// This is the game's own "repair" and "recharge" outcome without the hammer, the skill check or
+    /// the shop: both of those end by writing the same word this does.
+    /// </summary>
+    public ActionResult RestoreItem(uint record, uint item)
+    {
+        if (!FindItem(record, item, out var carried, out string why)) return ActionResult.Failure(why);
+
+        if (carried.MeterMax <= 0)
+            return ActionResult.Failure($"“{carried.Type.Name}” has nothing to restore.");
+
+        return WriteMeter(record, carried, carried.MeterMax);
+    }
+
+    /// <summary>
+    /// Fills the meter of every carried item that has one.
+    ///
+    /// The inventory is read once and then walked, but each write still re-validates: restoring
+    /// thirty items is thirty chances for the player to sell one, and a stale pointer here would be
+    /// a write into a freed heap block.
+    /// </summary>
+    public ActionResult RestoreAllItems(uint record)
+    {
+        var inventory = InventoryReader.Read(_source, record);
+        if (inventory is null) return ActionResult.Failure("Could not read the inventory.");
+
+        int restored = 0;
+        foreach (var item in inventory.Items)
+        {
+            if (!item.CanRestore) continue;
+            var result = RestoreItem(record, item.Address);
+            if (!result.Ok) return result;
+            restored++;
+        }
+
+        return restored == 0
+            ? ActionResult.Success("Everything is already at full condition and charge.")
+            : ActionResult.Success($"Restored {restored} item(s) to full.");
+    }
+
+    /// <summary>Sets one item's meter explicitly, for a value the "restore" buttons will not produce.</summary>
+    public ActionResult SetItemMeter(uint record, uint item, int value)
+    {
+        if (!FindItem(record, item, out var carried, out string why)) return ActionResult.Failure(why);
+        return WriteMeter(record, carried, value);
+    }
+
+    /// <summary>
+    /// Turns a carried item into a different one by pointing it at another item type, then fills the
+    /// new item's meter so it arrives in mint condition.
+    ///
+    /// This is how the trainer "gives" an item. It cannot add one: an item is a heap allocation, and
+    /// the trainer has no safe way to make the game allocate. Re-pointing an item it already owns
+    /// costs one dword and reuses an object the game will free correctly, because the only thing
+    /// that distinguishes a Loaf of Bread from a King's Longsword is which shared type the item
+    /// points at.
+    ///
+    /// <b>An equipped item is refused.</b> The equipment slots hold raw pointers, so retyping in
+    /// place would leave, say, the helm slot holding a longsword — a state the game has no reason to
+    /// cope with, and the one part of this that was not confirmed against a live session. Unequipping
+    /// in the game first costs the player one click.
+    /// </summary>
+    public ActionResult ReplaceItem(uint record, uint item, ItemType type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+
+        if (!FindItem(record, item, out var carried, out string why)) return ActionResult.Failure(why);
+
+        if (carried.IsEquipped)
+            return ActionResult.Failure(
+                $"“{carried.Type.Name}” is equipped — unequip it in the game first, then replace it.");
+
+        if (!ItemCatalog.CanReplaceWith(type, out string reason)) return ActionResult.Failure(reason);
+
+        // Re-validate the replacement type itself. It came from a sweep that may be minutes old, and
+        // a type object that no longer reads back as one means the game unloaded the module it
+        // belonged to — an expansion area left behind, say.
+        if (ItemTypeReader.Read(_source, type.Address, record - QuestLayout.RecordInEngine) is null)
+            return ActionResult.Failure($"“{type.Name}” is no longer loaded — rescan the catalog.");
+
+        if (!Ready(record, out why)) return ActionResult.Failure(why);
+
+        if (!_source.Write(carried.Address + ItemLayout.ItemType, BitConverter.GetBytes(type.Address)))
+            return ActionResult.Failure($"Could not write the new item type for “{carried.Type.Name}”.");
+
+        // The meter that came with the old item means nothing to the new one — 2,853 of a Fur Boot's
+        // 3,000 is a broken longsword. Read the new maximum through the type that is now in place.
+        int max = InventoryReader.MeterMax(_source, type, 0);
+        if (max > 0 && !_source.Write(carried.Address + ItemLayout.ItemCondition, BitConverter.GetBytes((ushort)Math.Min(max, GameFacts.MaxItemMeter))))
+            return ActionResult.Failure($"“{type.Name}” was placed but its condition could not be set.");
+
+        return ActionResult.Success($"“{carried.Type.Name}” is now “{type.Name}”.", max);
+    }
+
+    /// <summary>
+    /// Re-reads the inventory and finds <paramref name="item"/> in it, so a write only ever goes to
+    /// a pointer the game still holds.
+    ///
+    /// Searching by address rather than by index is the point. Items are heap objects the game frees
+    /// when the player drops, sells, eats or breaks one, and the vector closes up behind them, so an
+    /// index captured when the row was drawn can name a different item — or none — a tick later.
+    /// </summary>
+    private bool FindItem(uint record, uint item, out CarriedItem carried, out string why)
+    {
+        carried = null!;
+
+        if (ReadOnly) { why = "Read-only mode is on; nothing was written."; return false; }
+
+        var inventory = InventoryReader.Read(_source, record);
+        if (inventory is null) { why = "Could not read the inventory."; return false; }
+
+        foreach (var candidate in inventory.Items)
+        {
+            if (candidate.Address != item) continue;
+            carried = candidate;
+            why = "";
+            return true;
+        }
+
+        why = "That item is no longer in the character's pack — press Refresh.";
+        return false;
+    }
+
+    /// <summary>Clamps and writes an item's meter word.</summary>
+    private ActionResult WriteMeter(uint record, CarriedItem item, int value)
+    {
+        if (!Ready(record, out string why)) return ActionResult.Failure(why);
+
+        int clamped = Math.Clamp(value, 0, GameFacts.MaxItemMeter);
+        if (!_source.Write(item.Address + ItemLayout.ItemCondition, BitConverter.GetBytes((ushort)clamped)))
+            return ActionResult.Failure($"Could not write to “{item.Type.Name}”.");
+
+        string what = item.Type.Meter switch
+        {
+            ItemMeter.Charges => "charges",
+            ItemMeter.Units => "units",
+            _ => "condition",
+        };
+        return ActionResult.Success(
+            Describe($"“{item.Type.Name}” {what}", value, clamped, 0, GameFacts.MaxItemMeter), clamped);
+    }
+
     // ---- plumbing -------------------------------------------------------------------------
 
     /// <summary>

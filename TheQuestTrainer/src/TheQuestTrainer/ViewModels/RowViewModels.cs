@@ -165,6 +165,113 @@ public sealed class SkillRowViewModel : GameRowViewModel
     }
 }
 
+/// <summary>
+/// One carried item.
+///
+/// Unlike the attribute and skill rows, this one is bound to a heap object the game owns and frees.
+/// It therefore holds the item's <see cref="Address"/> and passes that to every write, and it can be
+/// told by <see cref="Update"/> that the item underneath it has changed into something else — the
+/// player repaired it, drank it, or the trainer retyped it.
+/// </summary>
+public sealed class ItemRowViewModel : GameRowViewModel
+{
+    private int _meter;
+    private CarriedItem _item;
+
+    /// <summary>Address of the item object. Stable for as long as the game holds the item.</summary>
+    public uint Address => _item.Address;
+
+    /// <summary>Binds the row to a carried item.</summary>
+    public ItemRowViewModel(IGameHost host, CarriedItem item)
+        : base(host, item?.Type.Name ?? "", item?.Type.Id ?? "")
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        _item = item;
+        _meter = item.Meter;
+    }
+
+    /// <summary>The item's name, which is really its type's.</summary>
+    public string Name => _item.Type.Name;
+
+    /// <summary>"Heavy armor · Helm", the way the game's own item panel heads it.</summary>
+    public string Kind => _item.Type.CategoryLabel;
+
+    /// <summary>Weight as the game prints it.</summary>
+    public string Weight => _item.Type.WeightLabel;
+
+    /// <summary>Damage range for a weapon, empty for anything else.</summary>
+    public string Damage => _item.Type.DamageMax > 0 ? $"{_item.Type.DamageMin}-{_item.Type.DamageMax}" : "";
+
+    /// <summary>The meter in words — a wear band, a charge fraction or a unit count.</summary>
+    public string MeterLabel => _item.MeterLabel;
+
+    /// <summary>Whether this item has a meter at all, i.e. whether the editor should be enabled.</summary>
+    public bool HasMeter => _item.MeterMax > 0 || _item.Type.Meter != ItemMeter.None;
+
+    /// <summary>Whether restoring would change anything.</summary>
+    public bool CanRestore => _item.CanRestore;
+
+    /// <summary>Whether the item is worn or wielded.</summary>
+    public bool IsEquipped => _item.IsEquipped;
+
+    /// <summary>"Equipped" or nothing — the trainer shows equipment but does not move it.</summary>
+    public string EquippedLabel => _item.IsEquipped ? "Equipped" : "";
+
+    /// <summary>
+    /// The item's one mutable word. Setting it writes through and reverts if the write is refused.
+    /// </summary>
+    public int Meter
+    {
+        get => _meter;
+        set
+        {
+            int previous = _meter;
+            if (!SetField(ref _meter, value)) return;
+            var result = Host.WriteItemMeter(Address, value);
+            if (!result.Ok) Reject(ref _meter, previous, nameof(Meter), result);
+            else Settle(ref _meter, result, nameof(Meter));
+        }
+    }
+
+    /// <summary>Fills the meter, then shows what landed.</summary>
+    public void Restore()
+    {
+        var result = Host.RestoreItem(Address);
+        if (result.Ok) Settle(ref _meter, result, nameof(Meter));
+        else Host.Report(result.Message);
+    }
+
+    /// <summary>
+    /// Takes the game's values without writing them back. The whole <see cref="CarriedItem"/> is
+    /// replaced rather than just the number, because the type can change underneath a row — that is
+    /// exactly what "replace this item" does — and then the name, kind and weight are all stale too.
+    /// </summary>
+    public void Update(CarriedItem item, bool initial)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        bool retyped = item.Type.Address != _item.Type.Address;
+        _item = item;
+
+        if (retyped)
+        {
+            OnPropertyChanged(nameof(Name));
+            OnPropertyChanged(nameof(Kind));
+            OnPropertyChanged(nameof(Weight));
+            OnPropertyChanged(nameof(Damage));
+        }
+
+        OnPropertyChanged(nameof(MeterLabel));
+        OnPropertyChanged(nameof(HasMeter));
+        OnPropertyChanged(nameof(CanRestore));
+        OnPropertyChanged(nameof(IsEquipped));
+        OnPropertyChanged(nameof(EquippedLabel));
+
+        if (!initial && Host.EditorHasFocus) return;
+        SetField(ref _meter, item.Meter, nameof(Meter));
+    }
+}
+
 /// <summary>A read-only label/value pair for the Reference tab.</summary>
 /// <param name="Name">Left column.</param>
 /// <param name="Value">Middle column.</param>

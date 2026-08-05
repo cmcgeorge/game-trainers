@@ -29,6 +29,19 @@ public interface IGameHost
     /// <summary>Writes a base skill.</summary>
     ActionResult WriteSkill(int id, int value);
 
+    /// <summary>
+    /// Writes the one mutable word of the carried item at <paramref name="item"/> — its condition,
+    /// its wand charges or its ammunition count, depending on what kind of item it is.
+    ///
+    /// The item is named by <i>address</i> rather than by its position in the pack, because the pack
+    /// closes up when the player drops or sells something and a position captured when the row was
+    /// drawn can name a different item a tick later.
+    /// </summary>
+    ActionResult WriteItemMeter(uint item, int value);
+
+    /// <summary>Fills that word to its maximum: repairs, recharges or refills the item.</summary>
+    ActionResult RestoreItem(uint item);
+
     /// <summary>Shows a line in the status bar.</summary>
     void Report(string message);
 }

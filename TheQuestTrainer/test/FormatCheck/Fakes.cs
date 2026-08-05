@@ -197,6 +197,23 @@ public sealed class RecordBuilder
     /// <summary>Sets the creation-time value of skill <paramref name="id"/>.</summary>
     public RecordBuilder StartingSkill(int id, int v) => Word((int)QuestLayout.StartingSkills + id * 2, v);
 
+    /// <summary>Points the carried-items vector at <paramref name="begin"/>..<paramref name="end"/>.</summary>
+    public RecordBuilder Inventory(uint begin, uint end, uint capacity = 0)
+    {
+        Dword((int)ItemLayout.InventoryBegin, begin);
+        Dword((int)ItemLayout.InventoryEnd, end);
+        Dword((int)ItemLayout.InventoryCapacity, capacity == 0 ? end : capacity);
+        return this;
+    }
+
+    /// <summary>Puts <paramref name="item"/> in body slot <paramref name="slot"/> of weapon set <paramref name="set"/>.</summary>
+    public RecordBuilder Equip(int set, int slot, uint item)
+    {
+        uint at = ItemLayout.EquipmentSlot(0, set, slot);
+        Dword((int)at, item);
+        return this;
+    }
+
     /// <summary>Turns the record into the game's pristine new-character prototype.</summary>
     public RecordBuilder AsPrototype()
     {
@@ -254,6 +271,169 @@ public sealed class RecordBuilder
         }
         return table;
     }
+}
+
+/// <summary>
+/// Lays item types, their strings and item objects into a fake heap, so the inventory reader, the
+/// catalog sweep and every item edit can be exercised without a game.
+///
+/// The geometry mirrors the real thing where it matters: types stride by their own size plus a heap
+/// header, exactly as the game's do, and the id and name are C strings in a separate block reached
+/// by pointer rather than characters inside the type. That second part is what makes the sweep's
+/// string checks real — a fixture with the names inline would let a broken reader pass.
+/// </summary>
+public sealed class ItemHeap
+{
+    /// <summary>Where item types are laid out.</summary>
+    public const uint TypeBase = 0x0500_0000;
+
+    /// <summary>Where the ids and names live.</summary>
+    public const uint TextBase = 0x0508_0000;
+
+    /// <summary>Where item objects are laid out.</summary>
+    public const uint ItemBase = 0x0510_0000;
+
+    /// <summary>Where enchantment vectors and their entries live.</summary>
+    public const uint EnchantBase = 0x0518_0000;
+
+    /// <summary>Where the carried-items pointer array lives.</summary>
+    public const uint VectorBase = 0x0520_0000;
+
+    /// <summary>Stride between types: the object plus the eight-byte heap header the real game has.</summary>
+    public const int TypeStride = ItemLayout.TypeBytes + 8;
+
+    /// <summary>Stride between items: sixteen bytes of allocation plus the same header.</summary>
+    public const int ItemStride = 24;
+
+    private readonly FakeMemory _mem;
+    private readonly uint _engine;
+    private readonly uint _vtable;
+    private readonly byte[] _types = new byte[0x4000];
+    private readonly byte[] _text = new byte[0x4000];
+    private readonly byte[] _items = new byte[0x1000];
+    private readonly byte[] _enchants = new byte[0x400];
+    private readonly byte[] _vector = new byte[0x400];
+    private int _typeCount, _itemCount, _textUsed, _enchantUsed;
+
+    /// <summary>Maps the five heap blocks into <paramref name="mem"/>.</summary>
+    public ItemHeap(FakeMemory mem, uint engine, uint vtable)
+    {
+        ArgumentNullException.ThrowIfNull(mem);
+        _mem = mem;
+        _engine = engine;
+        _vtable = vtable;
+        mem.Map(TypeBase, _types);
+        mem.Map(TextBase, _text);
+        mem.Map(ItemBase, _items);
+        mem.Map(EnchantBase, _enchants);
+        mem.Map(VectorBase, _vector);
+    }
+
+    /// <summary>Item types added so far, in the order they were added.</summary>
+    public List<uint> Types { get; } = new();
+
+    /// <summary>Item objects added so far.</summary>
+    public List<uint> Items { get; } = new();
+
+    /// <summary>
+    /// Adds an object that would pass every cheap test for an item type — the engine back-pointer,
+    /// a real category, readable ASCII strings — but whose vtable does not point into the game
+    /// module. This is the false positive the sweep's vtable check exists for, and planting one is
+    /// what stops "the sweep finds only real types" from passing for the wrong reason.
+    /// </summary>
+    public uint AddDecoy(string name, uint vtable = 0x7FFF_0000)
+    {
+        uint address = AddType($"decoy_{name}", name, category: 1, subtype: 2, vtable: vtable);
+        Types.Remove(address);
+        return address;
+    }
+
+    /// <summary>Adds an item type and returns its address.</summary>
+    public uint AddType(string id, string name, int category, int subtype,
+                        int weight = 100, int maxCondition = 0, int damageMin = 0, int damageMax = 0,
+                        uint enchantments = 0, bool lightWeapon = false, int enchantStorage = 0,
+                        uint vtable = 0)
+    {
+        int at = _typeCount++ * TypeStride;
+        uint address = TypeBase + (uint)at;
+
+        BitConverter.GetBytes(_engine).CopyTo(_types, at + (int)ItemLayout.TypeEngine);
+        BitConverter.GetBytes(vtable == 0 ? _vtable : vtable).CopyTo(_types, at + (int)ItemLayout.TypeVTable);
+        BitConverter.GetBytes(AddText(id)).CopyTo(_types, at + (int)ItemLayout.TypeId);
+        BitConverter.GetBytes(AddText($"bres_{id}")).CopyTo(_types, at + (int)ItemLayout.TypeResourceId);
+        BitConverter.GetBytes(AddText(name)).CopyTo(_types, at + (int)ItemLayout.TypeName);
+        BitConverter.GetBytes(enchantments).CopyTo(_types, at + (int)ItemLayout.TypeEnchantments);
+        BitConverter.GetBytes((ushort)weight).CopyTo(_types, at + (int)ItemLayout.TypeWeight);
+        BitConverter.GetBytes((ushort)damageMin).CopyTo(_types, at + (int)ItemLayout.TypeDamageMin);
+        BitConverter.GetBytes((ushort)damageMax).CopyTo(_types, at + (int)ItemLayout.TypeDamageMax);
+        BitConverter.GetBytes((ushort)enchantStorage).CopyTo(_types, at + (int)ItemLayout.TypeEnchantStorage);
+        BitConverter.GetBytes((ushort)maxCondition).CopyTo(_types, at + (int)ItemLayout.TypeMaxCondition);
+        _types[at + (int)ItemLayout.TypeCategory] = (byte)category;
+        _types[at + (int)ItemLayout.TypeSubtype] = (byte)subtype;
+        _types[at + (int)ItemLayout.TypeFlags] = lightWeapon ? ItemLayout.FlagLightWeapon : (byte)0;
+
+        Types.Add(address);
+        return address;
+    }
+
+    /// <summary>Adds an item object pointing at <paramref name="type"/>, and returns its address.</summary>
+    public uint AddItem(uint type, int meter = 0, uint enchantments = 0)
+    {
+        int at = _itemCount++ * ItemStride;
+        uint address = ItemBase + (uint)at;
+        BitConverter.GetBytes(type).CopyTo(_items, at + (int)ItemLayout.ItemType);
+        BitConverter.GetBytes(enchantments).CopyTo(_items, at + (int)ItemLayout.ItemEnchantments);
+        BitConverter.GetBytes((ushort)meter).CopyTo(_items, at + (int)ItemLayout.ItemCondition);
+        Items.Add(address);
+        return address;
+    }
+
+    /// <summary>
+    /// Adds a one-entry enchantment vector whose entry carries <paramref name="maxCharges"/> at
+    /// <c>+4</c>, which is where the game's own "recharge the wand" code reads a full charge count.
+    /// Returns the address of the vector, which is what an item or a type points at.
+    /// </summary>
+    public uint AddChargeEnchantment(int maxCharges)
+    {
+        int entryAt = _enchantUsed; _enchantUsed += 16;
+        int vectorAt = _enchantUsed; _enchantUsed += 16;
+        int arrayAt = _enchantUsed; _enchantUsed += 16;
+
+        BitConverter.GetBytes((ushort)maxCharges).CopyTo(_enchants, entryAt + 4);
+
+        // The vector is the usual begin/end pair, and its single element points at the entry.
+        BitConverter.GetBytes(EnchantBase + (uint)entryAt).CopyTo(_enchants, arrayAt);
+        BitConverter.GetBytes(EnchantBase + (uint)arrayAt).CopyTo(_enchants, vectorAt);
+        BitConverter.GetBytes(EnchantBase + (uint)arrayAt + 4).CopyTo(_enchants, vectorAt + 4);
+        return EnchantBase + (uint)vectorAt;
+    }
+
+    /// <summary>Writes the carried-items pointer array and returns its begin and end.</summary>
+    public (uint Begin, uint End) Vector(params uint[] items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+        Array.Clear(_vector);
+        for (int i = 0; i < items.Length; i++)
+            BitConverter.GetBytes(items[i]).CopyTo(_vector, i * 4);
+        return (VectorBase, VectorBase + (uint)items.Length * 4);
+    }
+
+    /// <summary>Copies a NUL-terminated string into the text block and returns its address.</summary>
+    private uint AddText(string value)
+    {
+        var bytes = Encoding.ASCII.GetBytes(value);
+        uint address = TextBase + (uint)_textUsed;
+        bytes.CopyTo(_text, _textUsed);
+        _textUsed += bytes.Length + 1;
+        return address;
+    }
+
+    /// <summary>Rewrites an existing type's category, for a check that wants an invalid one.</summary>
+    public void SetCategory(uint type, int category) =>
+        _mem.Write(type + ItemLayout.TypeCategory, new[] { (byte)category });
+
+    /// <summary>Rewrites an existing type's engine back-pointer, so it stops validating.</summary>
+    public void SetEngine(uint type, uint engine) => _mem.PokeUInt32(type + ItemLayout.TypeEngine, engine);
 }
 
 /// <summary>Assembles a whole fake process: a mapped image, an engine object and its records.</summary>
@@ -322,6 +502,45 @@ public static class FakeGame
 
         return mem;
     }
+
+    /// <summary>
+    /// A fake game whose character carries a pack covering every shape the reader has to cope with:
+    /// something that wears out, something already at full condition, something with no meter at
+    /// all, a wand whose charges come from an enchantment, and a stack of ammunition. One item is
+    /// equipped in each weapon set, because an item in the inactive set is still equipped.
+    /// </summary>
+    public static (FakeMemory Memory, ItemHeap Heap) BuildGameWithItems()
+    {
+        var mem = BuildGame();
+        var heap = new ItemHeap(mem, EngineAddress, ModuleBase + VTableRva);
+
+        uint charges = heap.AddChargeEnchantment(WandCharges);
+
+        uint sword = heap.AddType("base_weap_longsword", "Longsword", 1, 2, weight: 1000, maxCondition: 10000, damageMin: 6, damageMax: 17);
+        uint helm = heap.AddType("base_helm_helm", "Helm", 2, 4, weight: 200, maxCondition: 2500);
+        uint bread = heap.AddType("base_com_bread", "Bread", 14, 1, weight: 30);
+        uint wand = heap.AddType("base_wndfire", "Fire", 9, 4, weight: 20, enchantments: charges);
+        uint quiver = heap.AddType("base_weap_quiver", "Arrows", 1, 11, weight: 50);
+
+        uint swordItem = heap.AddItem(sword, meter: 4000);
+        uint helmItem = heap.AddItem(helm, meter: 2500);
+        heap.AddItem(bread);
+        heap.AddItem(wand, meter: 3);
+        heap.AddItem(quiver, meter: 7);
+
+        var (begin, end) = heap.Vector(heap.Items.ToArray());
+        mem.PokeUInt32(LiveRecord + ItemLayout.InventoryBegin, begin);
+        mem.PokeUInt32(LiveRecord + ItemLayout.InventoryEnd, end);
+        mem.PokeUInt32(LiveRecord + ItemLayout.InventoryCapacity, end);
+
+        mem.PokeUInt32(ItemLayout.EquipmentSlot(LiveRecord, 0, 1), helmItem);
+        mem.PokeUInt32(ItemLayout.EquipmentSlot(LiveRecord, 1, 4), swordItem);
+
+        return (mem, heap);
+    }
+
+    /// <summary>Full charge count of the fixture's wand.</summary>
+    public const int WandCharges = 12;
 
     /// <summary>Parses the fake image's header the same way the trainer does at run time.</summary>
     public static PeImage Image(FakeMemory mem)

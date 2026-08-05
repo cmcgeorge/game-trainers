@@ -72,6 +72,15 @@ public static class GameFacts
     public const int MaxPoints = 9999;
 
     /// <summary>
+    /// Ceiling for an item's one mutable word — condition, wand charges or a quiver's count.
+    ///
+    /// The field is an unsigned word and the game reads it as one, so this is the field's own limit
+    /// rather than a trainer policy. The shipped item types top out at a maximum condition of
+    /// 40,000, comfortably inside it.
+    /// </summary>
+    public const int MaxItemMeter = ushort.MaxValue;
+
+    /// <summary>
     /// The game's own rule, shown on the skills screen: a skill's base value may not exceed twice
     /// the base value of its governing attribute. The trainer uses it for "Max skills" rather than
     /// enforcing it on every edit — the game does not re-clamp a value written from outside, and a

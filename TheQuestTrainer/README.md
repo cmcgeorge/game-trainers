@@ -72,6 +72,32 @@ ceiling — twice the base value of its governing attribute — without lowering
 it, and leaves the two race-locked schools alone (Undead Magic for non-Rasvim, Healing Magic for
 Rasvim).
 
+### Inventory tab
+
+Everything the character is carrying: name, kind, weight, damage, condition or charges, and whether
+it is worn. Three things you can do with it.
+
+**Restore** — and **Restore all** — fills an item's one mutable word to the ceiling the game itself
+would use: repairs worn weapons and armour, recharges wands from their own enchantment, and refills
+quivers. It is the outcome of the game's repair hammer and recharge shop without the hammer, the
+skill check or the fee.
+
+**Replace with…** points an item at any of the ~1,080 item types the loaded game knows about, in mint
+condition. This is how the trainer gives you things — and the reason it is phrased as *replace*
+rather than *add* is worth knowing: an item is a heap allocation, and the trainer has no safe way to
+make the game allocate one. What it can do is change what an item you already carry *is*, because the
+only difference between a Loaf of Bread and a King's Longsword is which shared type the item points
+at. Bring some bread. The picker filters on the displayed name or the game's internal id
+(`base_weap_longsword`), and the list is swept out of the game's own heap on attach, so it includes
+whatever the expansions have loaded.
+
+**The Value column** sets that word outright, when neither "full" nor "empty" is what you wanted.
+
+An **equipped item cannot be replaced** — unequip it in the game first. The equipment slots hold raw
+pointers and the game rebuilds the model and the paperdoll from them, so retyping in place would
+leave a body slot holding something the game never put there. For the same reason the trainer shows
+what is worn but never moves it; equipping is one click in the game's own inventory screen.
+
 ### Reference tab
 
 Attributes, skills and their governing attributes, race ids, the reputation ladder and the wardrobe
@@ -94,8 +120,13 @@ touching anything.
 
 ## What it deliberately does not do
 
-- **Inventory and equipment.** Not traced. Damage, armour and the outfit score all come from items,
-  so leaving items alone also means the trainer never contradicts what the status screen computes.
+- **Moving equipment.** Which body slot takes which kind of item was not established, and equipping
+  by writing a raw pointer would bypass the model and paperdoll updates the game does around it. The
+  Inventory tab shows what is worn; the game's own inventory screen is where you change it.
+- **Adding an item outright.** An item is a heap allocation. Replacing one is a pointer write and
+  safe; making the game allocate a new one is not.
+- **Item enchantments.** Read only as far as a wand's charge ceiling. Damage, armour and the outfit
+  score are all still the game's own arithmetic over what you carry.
 - **Maximum health and maximum mana.** They are not stored — the engine derives them from Endurance,
   Intelligence and level every frame. Raise the attribute, or freeze the current value.
 - **Resistances, damage and armour.** Derived, same reason.
@@ -157,12 +188,17 @@ src/TheQuestTrainer/
     StdString.cs          the 32-bit MSVC std::string, and why it is the best validator here
     CharacterLocator.cs   two chains + validation
     CharacterReader.cs    the record as one typed snapshot
+    ItemLayout.cs         the pack, the equipment slots, the item and the item type
+    ItemTables.cs         the game's own item categories, sub-types and wear bands
+    ItemType.cs           the shared type, and the four checks that identify one
+    ItemCatalog.cs        every item type in the loaded game, swept out of the heap
+    InventoryReader.cs    the pack as one typed snapshot
     TrainerActions.cs     every edit, as read-validate-write
     FreezeWriter.cs       latched freezes, testable without a dispatcher
   Memory/IMemorySource.cs the process slice the locator needs, so it can be faked
   ViewModels/             MainViewModel (session + IGameHost), rows, ProcessPicker
-  MainWindow.xaml         Character / Skills / Reference tabs
-test/FormatCheck/         223 checks over synthetic records; needs no game
+  MainWindow.xaml         Character / Skills / Inventory / Reference tabs
+test/FormatCheck/         363 checks over synthetic records and a synthetic heap; needs no game
 ```
 
 References `GameTrainers.Common` for both `Memory` (`ProcessMemory`, `NativeMethods`) and `Mvvm`
@@ -176,17 +212,24 @@ References `GameTrainers.Common` for both `Memory` (`ProcessMemory`, `NativeMeth
 .\Run.ps1 -Test -NoRun
 ```
 
-223 checks against a synthetic 32-bit address space with the same section geometry as the real
+363 checks against a synthetic 32-bit address space with the same section geometry as the real
 image. It covers the cases a live game cannot be asked to produce: a module relocated away from its
 preferred base, a stale static slot, an empty slot, a build whose `.data` does not cover the slot, a
 record whose vtable points at writable memory, the new-character prototype sitting next to the live
 record, two live-looking records at once, an unreadable page in the middle of the heap, and a
 `std::string` whose heap buffer has gone away.
 
+The inventory half gets its own synthetic heap: item types with their strings reached by pointer, a
+pack covering every shape the reader has to handle (worn gear, gear already at full, an item with no
+meter, a wand whose charges come from an enchantment, a stack of ammunition), an item equipped in
+each of the two weapon sets, a vector broken in each of the four ways it can be, an item whose type
+stopped validating, and a decoy heap block that looks like an item type in everything but its vtable.
+
 It was also checked against a live session (v1.9.10, character *Gerth the Derth*): both chains found
 the same record, every field matched the game's own screens, and every write path — gold, health,
-mana, crime, fame, a skill, an attribute, points, and the three-field level write — was set to a test
-value, read back, and restored. `docs/ReverseEngineering.md` §11 has the log.
+mana, crime, fame, a skill, an attribute, points, the three-field level write, and the item repair,
+recharge and replace paths — was set to a test value, read back, and restored.
+`docs/ReverseEngineering.md` §11 and §15.7 have the logs.
 
 ---
 

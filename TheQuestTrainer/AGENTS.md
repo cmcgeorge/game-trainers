@@ -26,12 +26,17 @@ src/TheQuestTrainer/
     StdString.cs          32-bit MSVC std::string reader — the strongest validator here
     CharacterLocator.cs   two chains + validation
     CharacterReader.cs    the record as one typed snapshot
+    ItemLayout.cs         the pack, the equipment slots, the item and the item type
+    ItemTables.cs         the game's own item categories, sub-types, meters and wear bands
+    ItemType.cs           the shared type + the four checks that identify one
+    ItemCatalog.cs        every item type in the loaded game, swept out of the heap
+    InventoryReader.cs    the pack as one typed snapshot
     TrainerActions.cs     every edit, as read-validate-write
     FreezeWriter.cs       latched freezes, no dispatcher needed
   Memory/IMemorySource.cs the process slice the locator needs, so it can be faked
   ViewModels/             MainViewModel (session + IGameHost), rows, ProcessPicker
-  MainWindow.xaml         Character / Skills / Reference tabs
-test/FormatCheck/         223 checks over synthetic records; needs no game
+  MainWindow.xaml         Character / Skills / Inventory / Reference tabs
+test/FormatCheck/         363 checks over synthetic records and a synthetic heap; needs no game
 ```
 
 References `GameTrainers.Common` for both `Memory` and `Mvvm`, via csproj `<Using>` items.
@@ -96,6 +101,35 @@ not only the "not attached" case.
 add racial and equipment modifiers. Every piece of UI copy that mentions a number says so. If you
 add a field, work out which side of that line it is on before you label it.
 
+**An item is a pointer to a type, and that is why the trainer can give you things.** Per-item state
+is one word; the name, weight, damage and every ceiling belong to a shared `SItemType` the item
+points at. So `ReplaceItem` writes a dword and the player has a King's Longsword. Do not try to
+*add* an item — that means allocating in the game's heap, and there is no safe way to do it from
+outside. `docs/ReverseEngineering.md` §15 has the whole graph.
+
+**An item write is addressed by address, and re-finds the item first.** `TrainerActions.FindItem`
+re-reads the pack and searches it for the pointer before every item edit. Items are heap objects the
+game frees when the player drops, sells, eats or breaks one, and the vector closes up behind them —
+so an index captured when a row was drawn names a *different item* a tick later, and a raw address
+can name a freed block. This is the item-shaped version of the "nothing is written to an address
+that has not just re-validated" rule, and the harness pins it with a check that writes to an item
+that is not in the pack and expects a refusal. Do not add a path that writes to an item address
+without going through it.
+
+**Equipped state is read, never written.** There is no flag on an item: an item is equipped when its
+pointer appears in one of two fourteen-slot arrays at `record + 0x334` and `+0x36C`. Which slot takes
+which kind of item was never established, so the trainer displays equipment and stops there — and
+`ReplaceItem` refuses an equipped item outright, because retyping in place would leave a body slot
+holding something the game never put there. If you map the slot numbering, that is the thing to fix
+first.
+
+**The item-type catalog is a heap sweep, not an address.** `ItemCatalog` finds all ~1,080 types by
+searching for the engine back-pointer every type carries and then validating what follows it. It
+costs about 270 ms, so it runs once on attach and on the explicit Rescan button — never on the 250 ms
+refresh. The four validation checks in `ItemTypeReader` are what make a sweep safe; the harness
+plants a decoy heap block that differs from a real type only in its vtable so none of them can
+quietly stop mattering.
+
 **Max health and max mana do not exist.** The engine derives them every frame from Endurance,
 Intelligence and level. There is nothing to write and no offset to find — this was confirmed, not
 assumed (a session showing `72/72` and `125/165` contains neither maximum). Do not add a "set max
@@ -117,9 +151,10 @@ hints, and refuses to auto-select a hint-only match.
 
 Do not add these without a very good reason, and update the README and the UI copy if you do:
 
-- **Inventory and equipment editing.** The item graph was not traced. Damage, armour and the outfit
-  score all derive from it, so leaving it alone is also what keeps the trainer from contradicting the
-  status screen.
+- **Equipping and unequipping.** See the rule above: the slot numbering is unmapped, and a raw
+  pointer write would bypass the model and paperdoll updates the game does around it.
+- **Adding an item.** Allocation. Replace one instead.
+- **Editing enchantments.** Traced only as far as a wand's charge ceiling.
 - **Teleporting.** The map/coordinate fields were not located, and the game already ships Mark and
   Recall.
 - **Save editing.** `docs/ReverseEngineering.md` §10 decodes the container and the character record's
@@ -130,7 +165,7 @@ Do not add these without a very good reason, and update the README and the UI co
 ## Testing
 
 ```powershell
-.\Run.ps1 -Test -NoRun          # 223 checks, no game, no copyrighted files
+.\Run.ps1 -Test -NoRun          # 363 checks, no game, no copyrighted files
 ```
 
 `test/FormatCheck/Fakes.cs` builds a synthetic 32-bit address space with the same three-section
@@ -138,6 +173,11 @@ geometry as the real image, an engine object, a live record and the prototype be
 interesting cases are already there to copy from: a relocated module, a stale slot, an empty slot, a
 build whose `.data` does not cover the slot, a vtable pointing at writable memory, two live-looking
 records, an unreadable page, and a `std::string` whose heap buffer has gone away.
+
+`ItemHeap` in the same file lays out item types, their strings and item objects at the same strides
+the real heap uses, and `FakeGame.BuildGameWithItems` assembles a pack covering every shape the
+reader has to handle. Keep the strings reached by *pointer* rather than inlined into the type — that
+is what makes the sweep's string checks real.
 
 Extend the fixture rather than weakening a check.
 

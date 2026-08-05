@@ -251,6 +251,73 @@
                 </DockPanel>
             </TabItem>
 
+            <!-- ======================= Inventory ======================= -->
+            <TabItem Header="Inventory">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+                        <Button Content="Restore all" Command="{Binding RestoreAllItemsCommand}" MinWidth="100"
+                                ToolTip="Repairs every worn item, recharges every wand and refills every quiver." />
+                        <Button Content="Restore" Command="{Binding RestoreItemCommand}" MinWidth="80" Margin="6,0,0,0"
+                                ToolTip="Does the same to the selected item only." />
+                        <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center" MaxWidth="640" Margin="8,0,0,0"
+                                   Text="An item's name, weight and damage all belong to its shared type; the only thing the trainer writes on an item itself is the one word holding its condition, its wand charges or its ammunition count." />
+                    </StackPanel>
+
+                    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                               Text="The trainer shows what is equipped but does not move it — the equipment slots hold raw pointers and the game rebuilds what it draws from them, so equipping is left to the game's own inventory screen. Replacing works on an item you are not wearing." />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="360" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="320" />
+                        </Grid.ColumnDefinitions>
+
+                        <DockPanel Grid.Column="0">
+                            <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Caption}" Margin="0,6,0,0"
+                                       Text="{Binding InventoryNote}" />
+                            <DataGrid ItemsSource="{Binding Items}" SelectedItem="{Binding SelectedItem}"
+                                      AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                                      HeadersVisibility="Column" GridLinesVisibility="Horizontal" SelectionMode="Single"
+                                      Background="{StaticResource PanelFill}" RowBackground="{StaticResource PanelFill}"
+                                      AlternatingRowBackground="{StaticResource Parchment}"
+                                      IsEnabled="{Binding IsAttached}">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Item" Binding="{Binding Name}" IsReadOnly="True" Width="170" />
+                                    <DataGridTextColumn Header="Kind" Binding="{Binding Kind}" IsReadOnly="True" Width="150" />
+                                    <DataGridTextColumn Header="Wgt" Binding="{Binding Weight}" IsReadOnly="True" Width="50" />
+                                    <DataGridTextColumn Header="Dmg" Binding="{Binding Damage}" IsReadOnly="True" Width="60" />
+                                    <DataGridTextColumn Header="Value" Width="70"
+                                                        Binding="{Binding Meter, UpdateSourceTrigger=LostFocus}" />
+                                    <DataGridTextColumn Header="Condition / charges" Binding="{Binding MeterLabel}" IsReadOnly="True" Width="*" />
+                                    <DataGridTextColumn Header="Worn" Binding="{Binding EquippedLabel}" IsReadOnly="True" Width="70" />
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </DockPanel>
+
+                        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent" />
+
+                        <GroupBox Grid.Column="2" Header="Replace with">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                           Text="Points the selected item at another of the game's item types. The trainer cannot add an item — that would mean allocating in the game's heap — so this turns something you already carry into something else, in mint condition." />
+                                <TextBox DockPanel.Dock="Top" Text="{Binding CatalogFilter, UpdateSourceTrigger=PropertyChanged}"
+                                         Margin="0,0,0,6" ToolTip="Filters by name or by the game's internal id." />
+                                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                                    <Button Content="Replace" Command="{Binding ReplaceItemCommand}" MinWidth="90" />
+                                    <Button Content="Rescan" Command="{Binding ScanCatalogCommand}" MinWidth="70" Margin="6,0,0,0"
+                                            ToolTip="Sweeps the game's heap for item types again. Worth doing after the game loads an area it had not visited." />
+                                </StackPanel>
+                                <ListBox ItemsSource="{Binding CatalogView}" SelectedItem="{Binding SelectedCatalogEntry}"
+                                         DisplayMemberPath="PickerLabel" Background="{StaticResource PanelFill}"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                         VirtualizingPanel.IsVirtualizing="True" />
+                            </DockPanel>
+                        </GroupBox>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
             <!-- ======================= Reference ======================= -->
             <TabItem Header="Reference">
                 <DataGrid ItemsSource="{Binding Reference}" AutoGenerateColumns="False" CanUserAddRows="False"

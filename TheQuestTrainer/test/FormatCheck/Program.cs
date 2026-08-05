@@ -29,6 +29,12 @@ internal static class Program
         ActionChecks();
         LevelChecks();
         FreezeChecks();
+        ItemLayoutChecks();
+        ItemTableChecks();
+        ItemTypeChecks();
+        CatalogChecks();
+        InventoryChecks();
+        ItemActionChecks();
         PickerChecks();
 
         Console.WriteLine();
@@ -632,6 +638,374 @@ internal static class Program
         actions.SetCrime(record, 0);
     }
 
+    private static void ItemLayoutChecks()
+    {
+        Section("item layout");
+
+        Check("the carried-items vector sits at +0x320", ItemLayout.InventoryBegin == 0x320);
+        Check("its three pointers are contiguous",
+            ItemLayout.InventoryEnd == 0x324 && ItemLayout.InventoryCapacity == 0x328);
+
+        // The two equipment arrays and the weapon-set byte tile exactly, which is how the game's
+        // own "is this item equipped" loop indexes them.
+        Check("the first equipment array starts at +0x334", ItemLayout.EquipmentSlots == 0x334);
+        Check("the second follows it", ItemLayout.EquipmentSlotsSet2 == 0x36C);
+        Check("the active-set byte follows the second", ItemLayout.ActiveWeaponSet == 0x3A4);
+        Check("both arrays are fourteen slots wide",
+            ItemLayout.EquipmentSlotsSet2 - ItemLayout.EquipmentSlots == ItemLayout.EquipmentSlotCount * 4);
+        Check("the equipment arrays end before fame", ItemLayout.ActiveWeaponSet + 4 <= QuestLayout.Fame);
+        Check("the inventory vector does not overlap the equipment arrays",
+            ItemLayout.InventoryCapacity + 4 <= ItemLayout.EquipmentSlots);
+
+        Check("an item is a type pointer, an enchantment pointer and a word",
+            ItemLayout.ItemType == 0 && ItemLayout.ItemEnchantments == 4 && ItemLayout.ItemCondition == 8);
+        Check("the reader only claims the bytes the game touches", ItemLayout.ItemBytes == 12);
+
+        Check("a type starts with the engine back-pointer and its vtable",
+            ItemLayout.TypeEngine == 0 && ItemLayout.TypeVTable == 4);
+        Check("its three strings sit at +0x08, +0x10 and +0x14",
+            ItemLayout.TypeId == 0x08 && ItemLayout.TypeResourceId == 0x10 && ItemLayout.TypeName == 0x14);
+        Check("weight, damage and the two ceilings are where the item panel reads them",
+            ItemLayout.TypeWeight == 0x32 && ItemLayout.TypeDamageMin == 0x36 &&
+            ItemLayout.TypeDamageMax == 0x38 && ItemLayout.TypeEnchantStorage == 0x3C &&
+            ItemLayout.TypeMaxCondition == 0x3E);
+        Check("category, sub-type, alignment and flags are four consecutive bytes",
+            ItemLayout.TypeCategory == 0x45 && ItemLayout.TypeSubtype == 0x46 &&
+            ItemLayout.TypeAlignment == 0x47 && ItemLayout.TypeFlags == 0x48);
+        Check("every type field fits inside the object", ItemLayout.TypeFlags < ItemLayout.TypeBytes);
+
+        Check("item slots stride by four", ItemLayout.ItemSlot(0x1000, 3) == 0x100C);
+        Check("equipment slots address the first set", ItemLayout.EquipmentSlot(0x1000, 0, 2) == 0x1000 + 0x334 + 8);
+        Check("and the second", ItemLayout.EquipmentSlot(0x1000, 1, 2) == 0x1000 + 0x36C + 8);
+    }
+
+    private static void ItemTableChecks()
+    {
+        Section("item tables");
+
+        Check("category names are the game's own",
+            ItemTables.CategoryName(1) == "Weapon" && ItemTables.CategoryName(2) == "Heavy armor" &&
+            ItemTables.CategoryName(3) == "Light armor" && ItemTables.CategoryName(9) == "Magic" &&
+            ItemTables.CategoryName(14) == "Comestible");
+        Check("an unknown category still says something", ItemTables.CategoryName(99).Contains("99"));
+
+        Check("sub-type names are the game's own",
+            ItemTables.SubtypeName(1, 2) == "long sword" && ItemTables.SubtypeName(2, 4) == "Helm" &&
+            ItemTables.SubtypeName(9, 4) == "Wand" && ItemTables.SubtypeName(14, 2) == "Water");
+        Check("the game's own placeholder reads as nothing", ItemTables.SubtypeName(2, 0) == "");
+        Check("an out-of-range sub-type reads as nothing", ItemTables.SubtypeName(2, 40) == "");
+
+        Check("a weapon is labelled light or heavy, as the item panel does",
+            ItemTables.Describe(1, 2, lightWeapon: true) == "Light weapon · long sword" &&
+            ItemTables.Describe(1, 2, lightWeapon: false) == "Heavy weapon · long sword");
+        Check("anything else takes its category name",
+            ItemTables.Describe(2, 4, false) == "Heavy armor · Helm");
+        Check("a category with no sub-type name shows just the category",
+            ItemTables.Describe(15, 0, false) == "Gem");
+        Check("a sub-type that only repeats its category is dropped",
+            ItemTables.Describe(10, 1, false) == "Money" && ItemTables.Describe(8, 1, false) == "Potion" &&
+            ItemTables.Describe(5, 1, false) == "Book");
+        Check("but a sub-type that adds something is kept",
+            ItemTables.Describe(14, 1, false) == "Comestible · Food");
+
+        // The meter's meaning follows the game's own item panel exactly, including that ammunition
+        // sub-types of category 1 count units instead of wearing out.
+        Check("a weapon wears out", ItemTables.MeterFor(1, 2) == ItemMeter.Condition);
+        Check("but a quiver counts units", ItemTables.MeterFor(1, 11) == ItemMeter.Units);
+        Check("as does a throwing weapon and a bolt quiver",
+            ItemTables.MeterFor(1, 8) == ItemMeter.Units && ItemTables.MeterFor(1, 13) == ItemMeter.Units);
+        Check("a bow does not", ItemTables.MeterFor(1, 9) == ItemMeter.Condition);
+        Check("armour wears out",
+            ItemTables.MeterFor(2, 4) == ItemMeter.Condition && ItemTables.MeterFor(3, 6) == ItemMeter.Condition);
+        Check("a wand holds charges", ItemTables.MeterFor(9, 4) == ItemMeter.Charges);
+        Check("a scroll holds nothing", ItemTables.MeterFor(9, 1) == ItemMeter.None);
+        Check("a lockpick wears out but a key does not",
+            ItemTables.MeterFor(11, 2) == ItemMeter.Condition && ItemTables.MeterFor(11, 1) == ItemMeter.None);
+        Check("repair hammers and alchemy gear wear out",
+            ItemTables.MeterFor(12, 1) == ItemMeter.Condition && ItemTables.MeterFor(6, 1) == ItemMeter.Condition);
+        Check("a book has no meter", ItemTables.MeterFor(5, 1) == ItemMeter.None);
+
+        // The game's ladder, boundary by boundary.
+        Check("under a tenth is broken", ItemTables.ConditionBand(9, 100) == "broken");
+        Check("a tenth is poor", ItemTables.ConditionBand(10, 100) == "poor");
+        Check("under thirty per cent is still poor", ItemTables.ConditionBand(29, 100) == "poor");
+        Check("thirty per cent is average", ItemTables.ConditionBand(30, 100) == "average");
+        Check("under seventy is still average", ItemTables.ConditionBand(69, 100) == "average");
+        Check("seventy per cent is good", ItemTables.ConditionBand(70, 100) == "good");
+        Check("ninety-nine per cent is still good", ItemTables.ConditionBand(99, 100) == "good");
+        Check("only a full hundred is perfect", ItemTables.ConditionBand(100, 100) == "perfect");
+        Check("a type with no maximum has no band", ItemTables.ConditionBand(5, 0) == "");
+    }
+
+    private static void ItemTypeChecks()
+    {
+        Section("item types");
+
+        var (mem, heap) = FakeGame.BuildGameWithItems();
+        uint engine = FakeGame.EngineAddress;
+
+        var sword = ItemTypeReader.Read(mem, heap.Types[0], engine);
+        Check("a type reads back", sword is not null);
+        Check("its name and id are the strings it points at",
+            sword?.Name == "Longsword" && sword?.Id == "base_weap_longsword");
+        Check("its category and sub-type decode", sword?.Category == 1 && sword?.Subtype == 2);
+        Check("its weight, damage and ceiling decode",
+            sword?.Weight == 1000 && sword?.DamageMin == 6 && sword?.DamageMax == 17 && sword?.MaxCondition == 10000);
+        Check("weight is printed the way the game prints it", sword?.WeightLabel == "10.0");
+        Check("its category label reads as the item panel writes it", sword?.CategoryLabel == "Heavy weapon · long sword");
+        Check("the picker label carries both", sword?.PickerLabel.StartsWith("Longsword") == true);
+
+        // Each validation rule, defeated one at a time.
+        Check("a null address is not a type", ItemTypeReader.Read(mem, 0, engine) is null);
+        Check("an unaligned address is not a type", ItemTypeReader.Read(mem, heap.Types[0] + 1, engine) is null);
+        Check("an unmapped address is not a type", ItemTypeReader.Read(mem, 0x7000_0000, engine) is null);
+        Check("a type belonging to another engine is rejected",
+            ItemTypeReader.Read(mem, heap.Types[0], engine + 0x10) is null);
+
+        var scratch = FakeGame.BuildGameWithItems();
+        scratch.Heap.SetEngine(scratch.Heap.Types[1], 0xDEAD_BEEF);
+        Check("so is one whose back-pointer was overwritten",
+            ItemTypeReader.Read(scratch.Memory, scratch.Heap.Types[1], engine) is null);
+
+        scratch = FakeGame.BuildGameWithItems();
+        scratch.Memory.PokeUInt32(scratch.Heap.Types[1] + ItemLayout.TypeVTable, 0x7FFF_0000);
+        Check("a vtable outside the game module is rejected",
+            ItemTypeReader.Read(scratch.Memory, scratch.Heap.Types[1], engine) is null);
+
+        scratch = FakeGame.BuildGameWithItems();
+        scratch.Heap.SetCategory(scratch.Heap.Types[1], 0);
+        Check("category 0 is not an item", ItemTypeReader.Read(scratch.Memory, scratch.Heap.Types[1], engine) is null);
+        scratch.Heap.SetCategory(scratch.Heap.Types[1], ItemTables.MaxCategory + 1);
+        Check("nor is a category past the game's last",
+            ItemTypeReader.Read(scratch.Memory, scratch.Heap.Types[1], engine) is null);
+
+        scratch = FakeGame.BuildGameWithItems();
+        scratch.Memory.PokeUInt32(scratch.Heap.Types[1] + ItemLayout.TypeName, 0);
+        Check("a type with no name is rejected",
+            ItemTypeReader.Read(scratch.Memory, scratch.Heap.Types[1], engine) is null);
+
+        // The string check is what separates a type from an arbitrary run of heap bytes, so its
+        // boundaries are pinned rather than assumed.
+        Check("a control character is not a name", ItemTypeReader.ReadText(mem, TextAt(mem, new string(new[] { 'a', (char)0x01, 'b' }))) is null);
+        Check("a high byte is not a name either", ItemTypeReader.ReadText(mem, TextAt(mem, "café")) is null);
+        Check("an empty string is not a name", ItemTypeReader.ReadText(mem, TextAt(mem, "")) is null);
+        Check("plain ASCII is", ItemTypeReader.ReadText(mem, TextAt(mem, "Longsword")) == "Longsword");
+        Check("a null pointer reads nothing", ItemTypeReader.ReadText(mem, 0) is null);
+    }
+
+    private static void CatalogChecks()
+    {
+        Section("item catalog");
+
+        var (mem, heap) = FakeGame.BuildGameWithItems();
+
+        // A heap block that carries the engine back-pointer, a real category and readable strings,
+        // and differs from a real type only in its vtable. Without it, "the sweep finds only real
+        // types" would pass on the strength of the category check alone and prove nothing.
+        uint decoy = heap.AddDecoy("Longsword");
+
+        var found = ItemCatalog.Sweep(mem, FakeGame.EngineAddress);
+
+        Check("the sweep finds every planted type", found.Count == heap.Types.Count);
+        Check("and finds them all by address",
+            heap.Types.TrueForAll(t => found.Any(f => f.Address == t)));
+        Check("names come back with them", found.Any(f => f.Name == "Longsword") && found.Any(f => f.Name == "Bread"));
+
+        Check("a heap block that only looks like a type is skipped", found.All(f => f.Address != decoy));
+
+        // The module's own .data slot holds the engine pointer too — the false positive a real
+        // session actually contains.
+        Check("the static engine slot is not mistaken for a type",
+            found.All(f => f.Address != FakeGame.ModuleBase + QuestLayout.EngineSlotRva));
+
+        Check("a sweep for the wrong engine finds nothing",
+            ItemCatalog.Sweep(mem, FakeGame.EngineAddress + 0x1000).Count == 0);
+        Check("a sweep with no engine finds nothing", ItemCatalog.Sweep(mem, 0).Count == 0);
+
+        var sword = found.First(f => f.Name == "Longsword");
+        Check("a normal type may be placed", ItemCatalog.CanReplaceWith(sword, out _));
+
+        // A type that shows a condition but has no maximum would make the game's own item panel
+        // divide by zero. No shipped type is like that; the check is what keeps it that way.
+        var broken = sword with { MaxCondition = 0 };
+        Check("a condition type with no maximum may not be placed", !ItemCatalog.CanReplaceWith(broken, out string why));
+        Check("and the refusal says why", why.Contains("divide by zero"));
+
+        var bread = found.First(f => f.Name == "Bread");
+        Check("a type with no meter at all is fine", ItemCatalog.CanReplaceWith(bread with { MaxCondition = 0 }, out _));
+    }
+
+    private static void InventoryChecks()
+    {
+        Section("inventory");
+
+        var (mem, heap) = FakeGame.BuildGameWithItems();
+        uint record = FakeGame.LiveRecord;
+
+        var pack = InventoryReader.Read(mem, record);
+        Check("the pack reads back", pack is not null);
+        Check("with every carried item", pack?.Items.Count == 5);
+        Check("the engine address comes with it", pack?.Engine == FakeGame.EngineAddress);
+        Check("items keep the game's order",
+            pack!.Items[0].Type.Name == "Longsword" && pack.Items[2].Type.Name == "Bread");
+        Check("each row knows its own address", pack.Items[0].Address == heap.Items[0]);
+
+        Check("total weight is summed from the types", pack.TotalWeight == 1000 + 200 + 30 + 20 + 50);
+        Check("and printed the way the game prints it", pack.TotalWeightLabel == "13.0");
+
+        var sword = pack.Items[0];
+        Check("a worn weapon reports its condition", sword.Meter == 4000 && sword.MeterMax == 10000);
+        Check("and can be restored", sword.CanRestore);
+        Check("its label uses the game's wear band", sword.MeterLabel.StartsWith("average"));
+
+        var helm = pack.Items[1];
+        Check("an item already at full condition has nothing to restore", !helm.CanRestore);
+        Check("and reads as perfect", helm.MeterLabel.StartsWith("perfect"));
+
+        var bread = pack.Items[2];
+        Check("an item with no meter has no maximum", bread.MeterMax == 0 && !bread.CanRestore);
+        Check("and shows no meter text", bread.MeterLabel == "");
+
+        // The wand's ceiling is not in its type: it comes from the first entry of the enchantment
+        // vector, which is where the game's own recharge code reads it.
+        var wand = pack.Items[3];
+        Check("a wand's charges come from its enchantment",
+            wand.Meter == 3 && wand.MeterMax == FakeGame.WandCharges);
+        Check("and read as a fraction", wand.MeterLabel == "3/12 charges");
+
+        var quiver = pack.Items[4];
+        Check("a quiver counts units", quiver.MeterLabel == "7 units");
+        Check("and one arrow is singular", (quiver with { Meter = 1 }).MeterLabel == "1 unit");
+
+        // Equipment is discovered by searching both arrays for the item's pointer; there is no flag
+        // on the item itself.
+        Check("an item in the first weapon set is equipped",
+            helm.IsEquipped && helm.EquippedSlot == 1 && helm.EquippedSet == 0);
+        Check("an item in the second set is equipped too",
+            sword.IsEquipped && sword.EquippedSlot == 4 && sword.EquippedSet == 1);
+        Check("everything else is not", !bread.IsEquipped && !wand.IsEquipped);
+
+        // An empty pack is a legitimate state, not a failure.
+        var empty = FakeGame.BuildGame(r => r.Inventory(0, 0));
+        Check("an empty vector reads as an empty pack", InventoryReader.Read(empty, record)?.Items.Count == 0);
+
+        // Every way the two pointers can fail to be a vector.
+        Check("a reversed vector is refused",
+            InventoryReader.Read(FakeGame.BuildGame(r => r.Inventory(ItemHeap.VectorBase + 16, ItemHeap.VectorBase)), record) is null);
+        Check("a misaligned length is refused",
+            InventoryReader.Read(FakeGame.BuildGame(r => r.Inventory(ItemHeap.VectorBase, ItemHeap.VectorBase + 6)), record) is null);
+        Check("an implausibly long vector is refused",
+            InventoryReader.Read(FakeGame.BuildGame(r =>
+                r.Inventory(ItemHeap.VectorBase, ItemHeap.VectorBase + (uint)(ItemLayout.MaxItems + 1) * 4)), record) is null);
+        Check("a vector whose elements cannot be read is refused",
+            InventoryReader.Read(FakeGame.BuildGame(r => r.Inventory(0x7000_0000, 0x7000_0010)), record) is null);
+
+        // A single bad element is skipped rather than losing the whole pack: the player can be
+        // holding something the trainer does not recognise, and the rest still matters.
+        var damaged = FakeGame.BuildGameWithItems();
+        damaged.Heap.SetEngine(damaged.Heap.Types[2], 0xDEAD_BEEF);
+        var partial = InventoryReader.Read(damaged.Memory, record);
+        Check("an item whose type no longer validates is skipped", partial?.Items.Count == 4);
+        Check("and the rest of the pack survives", partial!.Items.All(i => i.Type.Name != "Bread"));
+    }
+
+    private static void ItemActionChecks()
+    {
+        Section("item actions");
+
+        var (mem, heap) = FakeGame.BuildGameWithItems();
+        var image = FakeGame.Image(mem);
+        var actions = new TrainerActions(mem, image);
+        uint record = FakeGame.LiveRecord;
+
+        uint swordItem = heap.Items[0];
+        uint helmItem = heap.Items[1];
+        uint breadItem = heap.Items[2];
+        uint wandItem = heap.Items[3];
+
+        // --- restore -------------------------------------------------------------------------
+        var restored = actions.RestoreItem(record, swordItem);
+        Check("restoring a weapon fills its condition", restored.Ok && Meter(mem, swordItem) == 10000);
+        Check("and reports what landed", restored.Written == 10000);
+
+        Check("recharging a wand uses the enchantment's count",
+            actions.RestoreItem(record, wandItem).Ok && Meter(mem, wandItem) == FakeGame.WandCharges);
+
+        var nothing = actions.RestoreItem(record, breadItem);
+        Check("an item with nothing to restore is refused", !nothing.Ok);
+        Check("and says so by name", nothing.Message.Contains("Bread"));
+
+        // --- restore all ----------------------------------------------------------------------
+        var fresh = FakeGame.BuildGameWithItems();
+        var freshActions = new TrainerActions(fresh.Memory, FakeGame.Image(fresh.Memory));
+        var all = freshActions.RestoreAllItems(record);
+        Check("restore-all fills everything that can be filled", all.Ok);
+        Check("the weapon came up", Meter(fresh.Memory, fresh.Heap.Items[0]) == 10000);
+        Check("the wand came up", Meter(fresh.Memory, fresh.Heap.Items[3]) == FakeGame.WandCharges);
+        Check("the quiver did not, having no ceiling", Meter(fresh.Memory, fresh.Heap.Items[4]) == 7);
+        Check("running it again finds nothing left to do",
+            freshActions.RestoreAllItems(record).Message.Contains("already"));
+
+        // --- explicit edits ---------------------------------------------------------------------
+        Check("a meter can be set outright",
+            actions.SetItemMeter(record, swordItem, 1234).Ok && Meter(mem, swordItem) == 1234);
+        var clamped = actions.SetItemMeter(record, swordItem, 999_999);
+        Check("and is clamped to the word it goes into",
+            clamped.Ok && Meter(mem, swordItem) == GameFacts.MaxItemMeter);
+        Check("the clamp is reported rather than hidden", clamped.Written == GameFacts.MaxItemMeter);
+        Check("a negative meter clamps to zero",
+            actions.SetItemMeter(record, swordItem, -5).Ok && Meter(mem, swordItem) == 0);
+
+        // Writes are addressed to an item the game still holds, not to a position in the pack. An
+        // address that is no longer in the vector is refused — without that lookup this would
+        // happily write into a freed heap block.
+        uint orphan = heap.AddItem(heap.Types[0], meter: 1);
+        Check("an item that is not in the pack is refused", !actions.SetItemMeter(record, orphan, 500).Ok);
+        Check("and it really was left alone", Meter(mem, orphan) == 1);
+        Check("as is restoring one", !actions.RestoreItem(record, orphan).Ok);
+
+        // --- replace -------------------------------------------------------------------------
+        var target = ItemTypeReader.Read(mem, heap.Types[1], FakeGame.EngineAddress)!;   // Helm
+        var replaced = actions.ReplaceItem(record, breadItem, target);
+        Check("an item can be turned into another type", replaced.Ok);
+        Check("its type pointer really moved", TypeOf(mem, breadItem) == heap.Types[1]);
+        Check("and it arrives at full condition", Meter(mem, breadItem) == 2500);
+
+        var afterwards = InventoryReader.Read(mem, record)!;
+        Check("the pack now reports the new item", afterwards.Items[2].Type.Name == "Helm");
+        Check("and its weight follows the new type", afterwards.Items[2].Type.Weight == 200);
+
+        // Equipment slots hold raw pointers, so retyping in place would leave a body slot holding
+        // something the game never put there.
+        var equipped = actions.ReplaceItem(record, helmItem, target);
+        Check("an equipped item may not be replaced", !equipped.Ok);
+        Check("and the refusal explains what to do", equipped.Message.Contains("unequip"));
+        Check("the equipped item is untouched", TypeOf(mem, helmItem) == heap.Types[1]);
+
+        var swordType = ItemTypeReader.Read(mem, heap.Types[0], FakeGame.EngineAddress)!;
+        Check("a type that would divide by zero is refused",
+            !actions.ReplaceItem(record, breadItem, swordType with { MaxCondition = 0 }).Ok);
+
+        var stale = swordType with { Address = 0x7000_0000 };
+        var gone = actions.ReplaceItem(record, breadItem, stale);
+        Check("a catalog entry that no longer validates is refused", !gone.Ok);
+        Check("and the refusal suggests a rescan", gone.Message.Contains("rescan"));
+
+        // --- the safety catch -------------------------------------------------------------------
+        var locked = new TrainerActions(mem, image) { ReadOnly = true };
+        Check("read-only refuses a restore", !locked.RestoreItem(record, swordItem).Ok);
+        Check("read-only refuses a meter edit", !locked.SetItemMeter(record, swordItem, 10).Ok);
+        Check("read-only refuses a replacement", !locked.ReplaceItem(record, breadItem, target).Ok);
+        Check("and nothing moved", TypeOf(mem, breadItem) == heap.Types[1]);
+
+        // A record that stopped validating must refuse every item write too, not just the scalars.
+        var vanished = FakeGame.BuildGameWithItems();
+        var vanishedActions = new TrainerActions(vanished.Memory, FakeGame.Image(vanished.Memory));
+        vanished.Memory.PokeUInt32(record + QuestLayout.ExperienceTable, 12345);
+        Check("a record that stopped validating refuses a restore",
+            !vanishedActions.RestoreItem(record, vanished.Heap.Items[0]).Ok);
+    }
+
     private static void PickerChecks()
     {
         Section("process picker");
@@ -669,6 +1043,36 @@ internal static class Program
     // ---- plumbing ------------------------------------------------------------------------------
 
     private static CharacterSnapshot? Read(IMemorySource mem, uint record) => CharacterReader.Read(mem, record);
+
+    /// <summary>The one mutable word of the item at <paramref name="item"/>.</summary>
+    private static int Meter(IMemorySource mem, uint item)
+    {
+        var word = new byte[2];
+        return mem.Read(item + ItemLayout.ItemCondition, word, 2) == 2 ? BitConverter.ToUInt16(word, 0) : -1;
+    }
+
+    /// <summary>The type pointer of the item at <paramref name="item"/>.</summary>
+    private static uint TypeOf(IMemorySource mem, uint item)
+    {
+        var word = new byte[4];
+        return mem.Read(item + ItemLayout.ItemType, word, 4) == 4 ? BitConverter.ToUInt32(word, 0) : 0;
+    }
+
+    /// <summary>
+    /// Maps <paramref name="value"/> as a NUL-terminated Latin-1 string in a scratch page and
+    /// returns its address, so the C-string reader's boundaries can be checked against real bytes.
+    /// Control characters in the value are written literally, which is the point.
+    /// </summary>
+    private static uint TextAt(FakeMemory mem, string value)
+    {
+        const uint scratch = 0x0600_0000;
+        var bytes = System.Text.Encoding.Latin1.GetBytes(value);
+        var page = new byte[Math.Max(ItemTypeReader.MaxTextLength, bytes.Length + 1)];
+        bytes.CopyTo(page, 0);
+        page[bytes.Length] = 0;
+        mem.Map(scratch, page);
+        return scratch;
+    }
 
     private static void Section(string name) => Console.WriteLine($"-- {name}");
 

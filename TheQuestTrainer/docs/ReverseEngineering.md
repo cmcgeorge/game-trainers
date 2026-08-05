@@ -480,9 +480,8 @@ The session was left exactly as it was found.
 
 ## 12. What the trainer deliberately does not do
 
-- **Inventory and equipment.** The item list is a separate object graph that was not traced. Damage,
-  armour and outfit all come from it, so leaving it alone also means the trainer never contradicts
-  what the status screen computes.
+- **Moving equipment.** The trainer reads the equipment slots and shows what is worn, but never
+  writes them — see §15.5.
 - **Position and teleporting.** The map/coordinate fields were not located, and moving a party
   between levels in a game with `SDungeonWorld`/`SDungeonMap` teardown is the kind of thing that
   desynchronises quietly rather than loudly.
@@ -541,3 +540,202 @@ and probe scripts live there and are never committed.
 - The save directory's `u32` at `0x4E` is six bytes larger than `0x52 + 458 × 8`; the discrepancy is
   not understood and the last directory entry is bogus. Both facts are consistent with a terminator
   the parser here simply skips.
+
+---
+
+## 15. The item graph
+
+Traced after the rest of this document, which is why the trainer went without an inventory tab for a
+while. It turned out to be smaller than expected: the interesting structure is one `std::vector`, one
+12-byte object and one shared, read-mostly type.
+
+### 15.1 The pack is a vector inside the character record
+
+The encumbrance warning gives it away in four lines. `FUN_0056bdc0` — the function holding
+`You carry way too much - you can't move.` — sums what the character is carrying:
+
+```c
+end   = *(void **)(engine + 0x40ec);
+begin = *(void **)(engine + 0x40e8);
+for (p = begin; p != end; p++)
+    load += *(ushort *)(*p + 0x32);        // item -> type -> weight
+```
+
+That is an ordinary `std::vector<SItem*>`, and `0x40E8 - 0x3DC8` puts it at **`record + 0x320`** —
+inside the `+0x278 … +0x3D0` gap §14 used to list as unidentified. `+0x324` is `end` and `+0x328` is
+the capacity.
+
+The number of items is `(end - begin) / 4`. There is no inventory slot count: the game caps what you
+carry by weight, not by slots, so an empty pack is `begin == end` and a full one is however many the
+player has picked up.
+
+### 15.2 An item is three fields
+
+Consecutive item objects in a live session sit `0x18` apart, which is a 16-byte allocation plus the
+usual eight-byte heap header. Only twelve of those bytes are ever touched by the game's own code:
+
+| Offset | | |
+|---|---|---|
+| `+0x00` | `SItemType*` | the shared type — the whole identity of the item |
+| `+0x04` | vector* | the item's own enchantments, or 0 to inherit the type's |
+| `+0x08` | `u16` | the one mutable word: condition, charges or a unit count |
+
+`+0x0A` onward is slack. It reads zero in items allocated out of fresh heap pages and holds
+leftovers in ones from recycled blocks — in the probed session the four Waters, all of the same type,
+held 8, 32, 8 and 48 there — and nothing in the disassembly reads it.
+
+**The type is where everything else lives**, which is why "give the player an item" is a pointer
+write and not an allocation. Two Loaves of Bread are two 16-byte objects pointing at one
+`base_com_bread`.
+
+### 15.3 The item type
+
+`FUN_00508790` is the item panel — the function printing `Damage: %u-%u`, `Armor: %u`,
+`Weight: %u.%u` and `Condition: %u/%u` — and it reads a type through `ECX` and an item through its
+first argument. `FUN_00508550` next door builds the displayed name. Between them they account for the
+whole object, which is `0x50` bytes:
+
+| Offset | | |
+|---|---|---|
+| `+0x00` | `SEngine*` | back-pointer to the engine object — see §15.6 |
+| `+0x04` | vtable | in the image's read-only data |
+| `+0x08` | `char*` | internal id, e.g. `base_shield_smallwooden` |
+| `+0x10` | `char*` | resource id, e.g. `bres_helm_helm` |
+| `+0x14` | `char*` | **the displayed name**, e.g. `Small Wooden Shield` |
+| `+0x28` | vector* | the type's built-in enchantments |
+| `+0x32` | `u16` | weight, in hundredths — printed as `w/100 . (w%100)/10` |
+| `+0x36` `+0x38` | `u16` | damage, minimum and maximum |
+| `+0x3C` | `u16` | enchant storage |
+| `+0x3E` | `u16` | **full condition** |
+| `+0x45` | `u8` | category, 1..15 |
+| `+0x46` | `u8` | sub-type within the category |
+| `+0x47` | `u8` | required alignment: 1 good, 2 evil, 0 either |
+| `+0x48` | `u8` | flags; bit 1 marks a category-1 weapon as *light* |
+
+The category and sub-type names are not guessed. The executable indexes two tables by them, at
+RVAs **`0x2DDAF0`** (category) and **`0x2DDAB0`** (per-category sub-type), and reading those in the
+live process prints the game's own vocabulary:
+
+```
+ 1 Weapon        hand, short sword, long sword, mace, axe, hammer, club, magicstaff,
+                 throwing, short bow, long bow, quiver, crossbow, bolt quiver
+ 2 Heavy armor   Shield, Armored pants, Armor, Helm, Gauntlets, Boots, Cloak, Belt
+ 3 Light armor   (the same list)
+ 4 Accessory     Amulet, Ring
+ 5 Book          Book, Letter, Map
+ 6 Alchemy equipment   Mortar/pestle
+ 7 Ingredient    Ingredient
+ 8 Potion        Potion
+ 9 Magic         Scroll, Spellbook, Blank scroll, Wand, Empty wand
+10 Money         Money
+11 Key           Key, Lockpick
+12 Repair        Hammer
+13 Miscellaneous
+14 Comestible    Food, Water
+15 Gem           Gem
+```
+
+Those are transcribed into `Game/ItemTables.cs` rather than read live, on the same grounds as the
+skill names in `GameTables`: the trainer already has everything it needs from the type itself, and a
+table of nouns is not worth two more RVAs to depend on.
+
+### 15.4 One word, three meanings
+
+`+0x08` on the item is read as a different thing depending on the type, and the item panel decides
+which in a way worth reproducing exactly:
+
+| What the panel prints | When |
+|---|---|
+| `Condition: %u/%u`, against type `+0x3E` | categories 2, 3, 6, 12; category 1 except sub-types 8, 11 and 13; category 11 sub-type 2 |
+| `Contains %u units` | category 1 sub-types 8, 11, 13 — throwing weapons, quivers and bolt quivers |
+| `(%u/%u charges)` | category 9 sub-types 4 and 5 — wands |
+
+The wear ladder is the panel's own: under 10 % `broken`, under 30 % `poor`, under 70 % `average`,
+under 100 % `good`, and only a full 100 % `perfect`.
+
+A wand's ceiling is not in the type. `FUN_00508430`, the game's own recharge, reads it from the
+enchantment:
+
+```c
+v = item->enchantments;  if (!v) v = type->enchantments;
+if (v is non-empty)  item->charges = *(u16 *)(v->begin[0] + 4);
+```
+
+so the trainer's "recharge" ends by writing the same word from the same place.
+
+**The division matters.** The panel computes wear as `condition * 100 / type->maxCondition`. A type
+whose category shows a condition but whose maximum is zero would divide by zero the moment the
+player looked at it. No shipped type is like that — all 1,084 pass — and `ItemCatalog.CanReplaceWith`
+is what keeps it that way when the trainer stamps a type onto an item.
+
+### 15.5 Equipment is two arrays of pointers, and the trainer does not write them
+
+There is no "equipped" flag on an item. The shop's `(wielded)` / `(equipped)` label
+(`FUN_005cba60`) decides by *searching* two arrays for the item's pointer, and `FUN_0057b420` gives
+their bases exactly:
+
+```c
+if (*(char *)(engine + 0x416c) == '\0')  item = *(void **)(engine + 0x40fc + slot * 4);
+else                                     item = *(void **)(engine + 0x4134 + slot * 4);
+```
+
+Two arrays of fourteen slots and a byte selecting between them, which in record terms is
+**`+0x334`**, **`+0x36C`** and **`+0x3A4`**. Slot 0 is unused — the same "id 0 means none" convention
+the attribute and skill arrays follow. In the probed session a Helm sat in slot 1, a Small Wooden
+Shield in slot 6 and Hard Leather Boots in slot 11.
+
+**Which slot takes which kind of item was not established**, and that is the reason the trainer shows
+equipment but never moves it. Equipping by writing a raw pointer would also bypass the paperdoll and
+model updates the game does around it, and for the same reason `TrainerActions.ReplaceItem` refuses
+an equipped item: retyping in place would leave a body slot holding something the game never put
+there. Unequipping in the game first costs one click.
+
+### 15.6 Finding every item type without knowing an address
+
+The game does keep an indexed table — `FUN_00507cc0` resolves a saved item through
+`manager->[0xEC][id]` — but reaching that manager means a second static pointer and another chain to
+be wrong about on a patch. It is not needed. An item type is recognisable from its own bytes, and the
+strongest signal is the one the trainer already has: **`+0x00` is the engine object**, which the
+locator found before any of this ran.
+
+So the catalog is a sweep — find every dword in the heap equal to the engine address, then test what
+follows it for a module vtable, a category in 1..15, and an id and name that are readable, non-empty,
+printable C strings. In the probed session that is one pass and **268 ms** for **1,084 item types**,
+across every category from `base_weap_dagger` to the expansion's `isle_repair_hammermaster2`.
+
+The obvious false positive is the module's own `.data` slot at RVA `0x335790`, which holds the engine
+pointer too; the vtable check rejects it, and `test/FormatCheck` plants a decoy that differs from a
+real type in nothing else so that rule cannot quietly stop being load-bearing.
+
+### 15.7 Confirmed against a live session
+
+Same session as §11 — `TheQuest.exe` v1.9.10, PID 40288, module at `0x00260000`, *Gerth the Derth*.
+
+| Claim | How |
+|---|---|
+| The pack is at `record + 0x320` | 18 items read, names and weights matching the game's own inventory |
+| Weight is summed as the encumbrance check does | 20.6 total across 18 items |
+| The meter decodes per category | Fur Boots `2853/3000` "good", Small Wooden Shield `711/1500` "average", Helm `1539/2500` "average"; books, potions and bread show none |
+| Equipment is found by searching both arrays | Helm slot 1, Shield slot 6, Boots slot 11, all in set 0 |
+| The catalog sweep | 1,084 types in 268 ms; all 1,084 placeable |
+| Repair writes the game's own ceiling | Fur Boots `2853 → 3000`, read back "perfect" |
+| Retyping an item works | Fur Boots → King's Longsword, condition `40000/40000` |
+| An equipped item is refused | the Shield came back with the "unequip it in the game first" refusal |
+| An address no longer in the pack is refused | a synthetic pointer was rejected rather than written |
+| The session survives it | every item's type and meter compared identical to the pre-test read |
+
+The session was left exactly as it was found. **Not confirmed visually**: the game was minimised
+throughout, so no screenshot was taken of its own inventory screen showing a retyped item. Every
+field above is read by `FUN_00508790` each time it draws, so this is a gap in the evidence rather
+than a doubt about the mechanism — but it is a gap.
+
+### 15.8 Open ends in the item graph
+
+- Item `+0x0A` and `+0x0C` are slack as far as anything in the disassembly is concerned, but that is
+  an argument from absence. If a field turns up there, this is where it would be.
+- The equipment slot *numbering* (§15.5) is unmapped beyond the three observed. Establishing it is
+  what an equip/unequip control would need.
+- The item-type manager off `manager->[0xEC]` was found but not walked; the sweep made it
+  unnecessary. It would give item type *ids*, which is what a save editor would want.
+- Enchantments are read only far enough to find a wand's charge ceiling. The vector's entries have a
+  `u16` at `+4` and a byte at `+0x0D` the book code reads as a skill; the rest is untraced.
