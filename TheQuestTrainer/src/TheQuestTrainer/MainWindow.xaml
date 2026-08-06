@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:TheQuestTrainer.ViewModels"
         Title="The Quest — Trainer"
-        Height="760" Width="1000" MinHeight="560" MinWidth="820"
+        Height="820" Width="1120" MinHeight="600" MinWidth="880"
         Background="{StaticResource Parchment}"
         FontFamily="Segoe UI" FontSize="12">
 
@@ -341,6 +341,197 @@
                                          DisplayMemberPath="PickerLabel" Background="{StaticResource PanelFill}"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                          VirtualizingPanel.IsVirtualizing="True" />
+                            </DockPanel>
+                        </GroupBox>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ======================= Map ======================= -->
+            <TabItem Header="Map">
+                <DockPanel Margin="8" DataContext="{Binding Map}">
+
+                    <!-- where you are, and where Teleport would put you -->
+                    <GroupBox DockPanel.Dock="Top" Header="Where you are">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <Grid Grid.Column="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="70" />
+                                    <ColumnDefinition Width="Auto" MinWidth="220" />
+                                    <ColumnDefinition Width="60" />
+                                    <ColumnDefinition Width="Auto" MinWidth="150" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition /><RowDefinition /><RowDefinition />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="World" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding WorldName}" FontWeight="SemiBold" />
+                                <TextBlock Grid.Row="0" Grid.Column="2" Text="Facing" />
+                                <TextBlock Grid.Row="0" Grid.Column="3" Text="{Binding HeadingLabel}" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Map" />
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal">
+                                    <TextBlock Text="{Binding MapName}" FontWeight="SemiBold" />
+                                    <TextBlock Style="{StaticResource Caption}" Margin="8,0,0,0" Text="{Binding MapId}" />
+                                </StackPanel>
+                                <TextBlock Grid.Row="1" Grid.Column="2" Text="Cell" />
+                                <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding CellLabel}" />
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Tile" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding TileLabel}" />
+                                <TextBlock Grid.Row="2" Grid.Column="2" Text="World tile" />
+                                <TextBlock Grid.Row="2" Grid.Column="3" Text="{Binding GlobalLabel}" />
+                            </Grid>
+
+                            <TextBlock Grid.Column="1" Style="{StaticResource Caption}" Margin="16,0,8,0"
+                                       VerticalAlignment="Top" Text="{Binding MapNote}" />
+
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Top">
+                                <TextBlock Text="X" Margin="0,0,4,0" />
+                                <TextBox Width="52" MinWidth="52"
+                                         IsEnabled="{Binding CanTeleport}"
+                                         Text="{Binding TargetX, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
+                                <TextBlock Text="Y" Margin="8,0,4,0" />
+                                <TextBox Width="52" MinWidth="52" Margin="0,0,6,0"
+                                         IsEnabled="{Binding CanTeleport}"
+                                         Text="{Binding TargetY, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}" />
+                                <Button Content="Teleport" Command="{Binding TeleportCommand}" MinWidth="84"
+                                        ToolTip="Moves you to that tile of the map you are on. The camera and the automap follow at once — there is no step to take afterwards." />
+                                <Button Content="Here" Command="{Binding HereCommand}" MinWidth="52"
+                                        ToolTip="Puts the target back on the tile you are standing on." />
+                            </StackPanel>
+                        </Grid>
+                    </GroupBox>
+
+                    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Caption}" Margin="0,8,0,0"
+                               Text="Teleport moves you within the map you are on and nowhere else. Outdoors the engine keeps this map and its eight neighbours in one grid, so a coordinate past the edge would drop you on a real tile of the next map while the game went on believing you had not left this one — the automap, the world position and everything loaded around you would all be wrong. Walk across the boundary instead. The world map picture is read from your own copy of the game; the trainer ships none of it." />
+
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" MinHeight="200" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="170" MinHeight="110" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" MinWidth="260" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="320" MinWidth="260" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- the world, as the game draws it -->
+                        <GroupBox Grid.Row="0" Grid.Column="0" Header="This world">
+                            <DockPanel>
+                                <DockPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                                    <Button DockPanel.Dock="Right" Content="Rescan" MinWidth="70" Margin="6,0,0,0"
+                                            Command="{Binding DataContext.ScanMapsCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            ToolTip="Re-reads the world's map list and its map picture. Worth doing after walking into an expansion's world." />
+                                    <TextBlock Style="{StaticResource Caption}" Text="{Binding PictureNote}" />
+                                </DockPanel>
+                                <Border BorderBrush="{StaticResource Rule}" BorderThickness="1"
+                                        Visibility="{Binding HasPicture, Converter={StaticResource BoolToVisible}}">
+                                    <Viewbox Stretch="Uniform" StretchDirection="Both">
+                                        <Grid Width="{Binding PictureWidth}" Height="{Binding PictureHeight}">
+                                            <Image Source="{Binding PictureSource}" Stretch="Fill"
+                                                   RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                                            <Canvas>
+                                                <Rectangle Canvas.Left="{Binding SelectedBoxX}" Canvas.Top="{Binding SelectedBoxY}"
+                                                           Width="{Binding CellBoxSize}" Height="{Binding CellBoxSize}"
+                                                           Stroke="#FFEFD27A" StrokeThickness="2"
+                                                           Visibility="{Binding SelectedOnPicture, Converter={StaticResource BoolToVisible}}" />
+                                                <Rectangle Canvas.Left="{Binding HereBoxX}" Canvas.Top="{Binding HereBoxY}"
+                                                           Width="{Binding CellBoxSize}" Height="{Binding CellBoxSize}"
+                                                           Stroke="#FF7A2E1E" StrokeThickness="2"
+                                                           Visibility="{Binding PlayerOnPicture, Converter={StaticResource BoolToVisible}}" />
+                                                <Ellipse Canvas.Left="{Binding PlayerPixelX}" Canvas.Top="{Binding PlayerPixelY}"
+                                                         Width="{Binding MarkerSize}" Height="{Binding MarkerSize}"
+                                                         Fill="#FFE23B2E" Stroke="White" StrokeThickness="1"
+                                                         Visibility="{Binding PlayerOnPicture, Converter={StaticResource BoolToVisible}}" />
+                                            </Canvas>
+                                        </Grid>
+                                    </Viewbox>
+                                </Border>
+                            </DockPanel>
+                        </GroupBox>
+
+                        <GridSplitter Grid.Row="0" Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent" />
+
+                        <!-- the map you are on, tile by tile -->
+                        <GroupBox Grid.Row="0" Grid.Column="2" Header="This map">
+                                <DockPanel>
+                                    <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource Caption}" Margin="0,6,0,0" MaxWidth="300"
+                                               Text="Click a square to aim the teleport at it. Red is you; the outlined square is the target. Outdoor squares are tinted from the world map picture." />
+                                    <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
+                                        <ItemsControl ItemsSource="{Binding Tiles}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <UniformGrid Columns="{Binding DataContext.TileColumns, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                                 Rows="{Binding DataContext.TileRows, RelativeSource={RelativeSource AncestorType=ItemsControl}}" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Button Width="13" Height="13" Padding="0" Margin="0" MinWidth="0"
+                                                            Background="{Binding Fill}" ToolTip="{Binding Label}"
+                                                            Command="{Binding DataContext.SelectTileCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                            CommandParameter="{Binding}">
+                                                        <Button.Template>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Grid>
+                                                                    <Rectangle Fill="{TemplateBinding Background}" />
+                                                                    <Rectangle Stroke="#40000000" StrokeThickness="0.4" />
+                                                                    <Rectangle x:Name="Target" Stroke="#FF1B3A6B" StrokeThickness="2" Visibility="Collapsed" />
+                                                                    <Ellipse x:Name="Player" Margin="2" Fill="#FFE23B2E" Visibility="Collapsed" />
+                                                                </Grid>
+                                                                <ControlTemplate.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsTarget}" Value="True">
+                                                                        <Setter TargetName="Target" Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                    <DataTrigger Binding="{Binding IsPlayer}" Value="True">
+                                                                        <Setter TargetName="Player" Property="Visibility" Value="Visible" />
+                                                                    </DataTrigger>
+                                                                </ControlTemplate.Triggers>
+                                                            </ControlTemplate>
+                                                        </Button.Template>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </Viewbox>
+                                </DockPanel>
+                        </GroupBox>
+
+                        <GridSplitter Grid.Row="1" Grid.ColumnSpan="3" Height="6" HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Center" Background="Transparent" />
+
+                        <!-- every map the world holds -->
+                        <GroupBox Grid.Row="2" Grid.ColumnSpan="3" Header="Every map in this world" Margin="0">
+                            <DockPanel>
+                                <DockPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Caption}" Margin="8,0,0,0"
+                                               Text="{Binding AtlasNote}" />
+                                    <TextBox Text="{Binding AtlasFilter, UpdateSourceTrigger=PropertyChanged}"
+                                             ToolTip="Filters by name or by the game's internal id." />
+                                </DockPanel>
+                                <DataGrid ItemsSource="{Binding AtlasView}" SelectedItem="{Binding SelectedMap}"
+                                          AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="True"
+                                          HeadersVisibility="Column" GridLinesVisibility="Horizontal" SelectionMode="Single"
+                                          Background="{StaticResource PanelFill}" RowBackground="{StaticResource PanelFill}"
+                                          AlternatingRowBackground="{StaticResource Parchment}">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Map" Binding="{Binding Name}" Width="260" />
+                                        <DataGridTextColumn Header="Cell" Binding="{Binding CellLabel}" Width="70" />
+                                        <DataGridTextColumn Header="Size" Binding="{Binding SizeLabel}" Width="70" />
+                                        <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="150" />
+                                        <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
                             </DockPanel>
                         </GroupBox>
                     </Grid>

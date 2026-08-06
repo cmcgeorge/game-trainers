@@ -42,6 +42,15 @@ public interface IGameHost
     /// <summary>Fills that word to its maximum: repairs, recharges or refills the item.</summary>
     ActionResult RestoreItem(uint item);
 
+    /// <summary>
+    /// Moves the player to a tile of the map they are already standing on.
+    ///
+    /// The coordinates are <i>map-local</i> — what the Map tab shows — not the window indices the
+    /// engine actually holds; converting between the two needs the current map's flags, so it is done
+    /// against a position read at the moment of the write rather than against the one on screen.
+    /// </summary>
+    ActionResult Teleport(int localX, int localY);
+
     /// <summary>Shows a line in the status bar.</summary>
     void Report(string message);
 }

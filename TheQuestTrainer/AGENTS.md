@@ -34,12 +34,16 @@ src/TheQuestTrainer/
     ConditionLayout.cs    the disease list, the 25 effect groups, the kind table, the effect object
     ConditionTables.cs    the four conditions the game names, and its own wording for them
     ConditionReader.cs    what is adverse right now, as one typed snapshot
+    MapLayout.cs          the manager, the world, a map, and the tile window they share
+    MapReader.cs          where the player is, and every map in the world
+    DdsImage.cs           just enough BC1 to decode the game's own world map
+    WorldPicture.cs       finds that picture in the player's own paks
     TrainerActions.cs     every edit, as read-validate-write
     FreezeWriter.cs       latched freezes, no dispatcher needed
   Memory/IMemorySource.cs the process slice the locator needs, so it can be faked
-  ViewModels/             MainViewModel (session + IGameHost), rows, ProcessPicker
-  MainWindow.xaml         Character / Skills / Inventory / Reference tabs
-test/FormatCheck/         453 checks over synthetic records and a synthetic heap; needs no game
+  ViewModels/             MainViewModel (session + IGameHost), MapViewModel, rows, ProcessPicker
+  MainWindow.xaml         Character / Skills / Inventory / Map / Reference tabs
+test/FormatCheck/         621 checks over synthetic records and a synthetic heap; needs no game
 ```
 
 References `GameTrainers.Common` for both `Memory` and `Mvvm`, via csproj `<Using>` items.
@@ -158,6 +162,43 @@ freeze does — the harness drives `Tick` without a dispatcher. The UI says "Kee
 "immune", because that is what it is: the game inflicts the condition and the trainer removes it up
 to 250 ms later.
 
+**The position is not in the record, and it is an index into a scratch grid rather than a tile of a
+map.** It hangs off the engine object by a different chain — `engine + 0x98` is the engine manager,
+whose `+0x21C8` and `+0x21CC` are the world and the current map — and the two dwords at
+`manager + 0x158C` are the player's place in a square *tile window* the engine loads maps into, not
+their place on the map. Converting the two is one subtraction, and which one depends on bit 7 of the
+map's flags: an outdoor cell is laid `engine + 0x44E8` tiles in from the window's edge, an interior
+at the window's origin. `WorldMap.WindowOrigin` is that branch and it is the same one
+`FUN_00558b20` makes. Get it wrong and every teleport is fourteen tiles out; the harness pins it
+three ways. `docs/ReverseEngineering.md` §17 has the whole graph.
+
+**Teleport stops at the edge of the current map, and that is not caution.** Outdoors the window holds
+the player's map *and its eight neighbours*, so a coordinate past the edge is a real, drawn tile of a
+neighbour — and the engine goes on believing the player never left, because only its own movement
+code reassigns `manager + 0x21CC`. The automap, the world-absolute position and everything loaded
+around them are then all wrong. This was tried, not assumed (§17.6). `TrainerActions.Teleport`
+re-reads the position rather than trusting the caller's snapshot, for the same reason every item
+write re-finds its item: which map a coordinate means can change between the row being drawn and the
+button being pressed.
+
+**Indoors was never confirmed against a live game.** The session that pinned all of this was outdoors
+throughout, so the interior half — bit 7 clear, the map laid at the window's origin, 35×35 — comes
+from the disassembly, from the flags every shipped interior carries, and from the fixture. It is the
+thing to check first if a teleport inside a building lands fourteen tiles out. Same for the
+expansion's world: nothing about it is baked in, and nothing about it has been observed either.
+`docs/ReverseEngineering.md` §17.8 says so; keep it saying so.
+
+**The atlas and the world map picture are read once, like the item catalog.** `MapReader.ReadAtlas`
+walks a couple of hundred maps at four reads each and `WorldPictureLoader` opens a zip and decodes a
+588×588 surface; neither belongs on the 250 ms refresh, so both run on attach and on the explicit
+Rescan. `MapReader.Read` — the position itself — is eight reads and does run on the refresh. Keep
+that split.
+
+**The world map picture comes out of the player's own install and nothing is committed.** The
+attached process *is* the game, so the folder comes from its own module path rather than from a
+prompt. Everything on the tab works without it: a missing pak is a note in the status line, never a
+failure.
+
 **Max health and max mana do not exist.** The engine derives them every frame from Endurance,
 Intelligence and level. There is nothing to write and no offset to find — this was confirmed, not
 assumed (a session showing `72/72` and `125/165` contains neither maximum). Do not add a "set max
@@ -184,8 +225,13 @@ Do not add these without a very good reason, and update the README and the UI co
 - **Adding an item.** Allocation. Replace one instead.
 - **Editing enchantments.** Traced only as far as a wand's charge ceiling.
 - **Removing an effect that is not one of the four conditions.** See the cure rule above.
-- **Teleporting.** The map/coordinate fields were not located, and the game already ships Mark and
-  Recall.
+- **Teleporting to another map.** See the rule above: the engine would go on believing you never
+  left. Doing it properly means maintaining the current-map pointer, the three-by-three block at
+  `manager + 0x21D0`, the world's own copy at `+0x8C` and the per-slot rects at `manager + 0x1F84`,
+  and then hoping nothing else caches a map. Walking across the boundary costs the player seconds.
+- **Editing the facing.** `manager + 0x1570` is plainly the angle and plainly writable, but the turn
+  animation keeps a second copy at `+0x1574` and nothing was traced that reconciles them. Pressing a
+  turn key is free.
 - **Save editing.** `docs/ReverseEngineering.md` §10 decodes the container and the character record's
   field order, which is enough to be interesting and nowhere near enough to be safe. It is a
   different tool.
@@ -194,7 +240,7 @@ Do not add these without a very good reason, and update the README and the UI co
 ## Testing
 
 ```powershell
-.\Run.ps1 -Test -NoRun          # 453 checks, no game, no copyrighted files
+.\Run.ps1 -Test -NoRun          # 621 checks, no game, no copyrighted files
 ```
 
 `test/FormatCheck/Fakes.cs` builds a synthetic 32-bit address space with the same three-section
@@ -215,6 +261,13 @@ rather than guessed. `FakeGame.BuildGame` writes the effect-kind table for *ever
 a record without one is not a record the game would have; note that the table and the groups live
 past the `0x400` bytes `RecordBuilder` covers, so they are poked straight into the engine block.
 
+`MapHeap` does the same for the engine manager, the world and its maps, and
+`FakeGame.BuildGameWithMap` puts the player in the middle of cell (8, 4) with three grid maps and one
+interior around them — deliberately the same cell the live session was on, so the world-absolute pair
+a check derives can be compared against numbers that came out of the real game rather than out of the
+arithmetic being tested. `FakeHost` is a real `IGameHost` over the fake process rather than a stub, so
+a view-model check asserts on the bytes that landed.
+
 Extend the fixture rather than weakening a check.
 
 **A check added for a fix must fail against the code before the fix.** It is easy to write one that
@@ -225,7 +278,8 @@ the cheap way: revert the production change, rerun, confirm the new check fails,
 the file afterwards — restoring a backup carries its old timestamp and MSBuild will skip the
 rebuild, so you get the old binary's answer and think you are testing the new one. The same applies
 to the freeze re-latch, which is pinned by an explicit counterfactual check that the tick *does*
-undo an edit when the latch is not moved.
+undo an edit when the latch is not moved, and to `WorldMap.WindowOrigin`: making it return the border
+unconditionally — the obvious wrong reading of the map flags — fails three map checks.
 
 ## Reverse-engineering workspace
 

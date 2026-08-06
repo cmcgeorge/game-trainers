@@ -10,8 +10,8 @@ The game is a native 32-bit Windows program, so there is no DOSBox in the way.
 
 Two companion documents live in [`docs/`](docs/):
 
-- [`ReverseEngineering.md`](docs/ReverseEngineering.md) — how the character record was found and what
-  every field in it means.
+- [`ReverseEngineering.md`](docs/ReverseEngineering.md) — how the character record was found, what
+  every field in it means, and (§17) how the game keeps track of where you are standing.
 - [`StrategyGuide.md`](docs/StrategyGuide.md) — how the game's systems actually work, with the real
   numbers.
 
@@ -39,7 +39,7 @@ attached to is the one the offsets were measured on.
 ### Other options
 
 ```powershell
-.\Run.ps1 -Test -NoRun          # 453 checks, no game and no copyrighted files needed
+.\Run.ps1 -Test -NoRun          # 621 checks, no game and no copyrighted files needed
 .\Run.ps1 -Configuration Debug  # Debug build
 .\Run.ps1 -Clean                # delete bin/obj first
 .\Run.ps1 -NoBuild              # launch the last build
@@ -128,6 +128,40 @@ pointers and the game rebuilds the model and the paperdoll from them, so retypin
 leave a body slot holding something the game never put there. For the same reason the trainer shows
 what is worn but never moves it; equipping is one click in the game's own inventory screen.
 
+### Map tab
+
+Where you are, everywhere you could be, and one button that moves you.
+
+**Where you are** names the world, the map and its internal id, the cell of the outdoor grid it sits
+in, your tile within it and your world-absolute tile, and which way you are facing. The Quest's
+outdoors is a grid of 21×21-tile maps — `base_s0804` really is column 8, row 4 — and interiors are
+standalone 35×35 maps with no place on that grid, so the readout says so rather than showing a
+meaningless cell.
+
+**This world** is the game's own world map, read out of `data.pak` in your own installation and drawn
+with your position on it. Nothing from the game is shipped with the trainer; the folder comes from the
+attached process itself, so there is nothing to point at. The tab works without it.
+
+**This map** is the map you are on, tile by tile, tinted from that same picture. Click a square to
+aim at it, or type the coordinates, and press **Teleport**. The camera, the compass and the automap
+all follow within a frame — there is no step to take afterwards.
+
+**Every map in this world** lists all of them — 239 in Freymore — with the cell, the size and what the
+game's own flags say about each: whether Teleport magic and Mark are denied there, and whether Recall
+can bring you back to it. It is read out of the running game, so it is right for the expansion too.
+Selecting a row outlines that cell on the world map.
+
+**Teleport moves you within the map you are on and nowhere else.** Outdoors the engine keeps your map
+and its eight neighbours in one grid, so a coordinate past the edge would put you on a real tile of
+the next map while the game went on believing you had not left this one — the automap, your world
+position and everything loaded around you would all be wrong. It was tried; it is not a guess. Walk
+across the boundary instead.
+
+Confirmed outdoors against a live session. **Indoors has never been run against a real game** — the
+game lays interiors into its grid differently from outdoor maps, and while that difference comes
+straight out of the game's own code and the flags every shipped interior carries, nobody has stood in
+a building and checked. `docs/ReverseEngineering.md` §17.8 is explicit about which is which.
+
 ### Reference tab
 
 Attributes, skills and their governing attributes, race ids, the four conditions, the reputation
@@ -163,8 +197,12 @@ touching anything.
 - **Maximum health and maximum mana.** They are not stored — the engine derives them from Endurance,
   Intelligence and level every frame. Raise the attribute, or freeze the current value.
 - **Resistances, damage and armour.** Derived, same reason.
-- **Teleporting.** The map and coordinate fields were not located, and the game's own **Mark** and
-  **Recall** spells already do this properly.
+- **Teleporting to another map.** Within your map it is two writes and the engine does the rest; over
+  a boundary it is not, for the reason the Map tab gives. The game's own **Mark** and **Recall**
+  spells cross maps properly.
+- **Turning you round.** The facing angle is right next to the position and just as writable, but the
+  turn animation keeps a second copy of it and nothing was traced that reconciles the two. Pressing a
+  turn key is free.
 - **Spells and quest flags.** Script-driven; the game's dialog and quest system is the supported
   route.
 - **Save editing.** The format is partly decoded in `docs/ReverseEngineering.md`, but that is a
@@ -229,12 +267,16 @@ src/TheQuestTrainer/
     ConditionLayout.cs    the disease list, the effect groups, the kind table and the effect object
     ConditionTables.cs    the four conditions the game names, and how it words them
     ConditionReader.cs    what is adverse right now, as one typed snapshot
+    MapLayout.cs          the engine manager, the world, a map, and the tile window they share
+    MapReader.cs          where the player is, and every map in the world
+    DdsImage.cs           just enough BC1 to decode the game's own world map
+    WorldPicture.cs       finds that picture in the paks of your own installation
     TrainerActions.cs     every edit, as read-validate-write
     FreezeWriter.cs       latched freezes, testable without a dispatcher
   Memory/IMemorySource.cs the process slice the locator needs, so it can be faked
-  ViewModels/             MainViewModel (session + IGameHost), rows, ProcessPicker
-  MainWindow.xaml         Character / Skills / Inventory / Reference tabs
-test/FormatCheck/         453 checks over synthetic records and a synthetic heap; needs no game
+  ViewModels/             MainViewModel (session + IGameHost), MapViewModel, rows, ProcessPicker
+  MainWindow.xaml         Character / Skills / Inventory / Map / Reference tabs
+test/FormatCheck/         621 checks over synthetic records and a synthetic heap; needs no game
 ```
 
 References `GameTrainers.Common` for both `Memory` (`ProcessMemory`, `NativeMethods`) and `Mvvm`
@@ -248,7 +290,7 @@ References `GameTrainers.Common` for both `Memory` (`ProcessMemory`, `NativeMeth
 .\Run.ps1 -Test -NoRun
 ```
 
-453 checks against a synthetic 32-bit address space with the same section geometry as the real
+621 checks against a synthetic 32-bit address space with the same section geometry as the real
 image. It covers the cases a live game cannot be asked to produce: a module relocated away from its
 preferred base, a stale static slot, an empty slot, a build whose `.data` does not cover the slot, a
 record whose vtable points at writable memory, the new-character prototype sitting next to the live
@@ -267,13 +309,22 @@ penalty sitting side by side so the source byte has to be read to tell them apar
 files poison under a different group to prove the trainer follows the game's kind table rather than a
 baked-in number.
 
+The map gets a fourth: an engine manager, a world with its four strings and its map vector, three
+outdoor cells and one interior, and the tile window sized from a draw border the way the game sizes
+it. Which map is laid at the border and which at the window's origin is the one conversion the whole
+feature turns on, so it is pinned three ways — and the world-absolute pair a check derives is
+compared against the two numbers the running game held. The world map picture's own path is exercised
+end to end against a zip the harness writes itself, so no game files are involved there either.
+
 It was also checked against a live session (v1.9.10, character *Gerth the Derth*): both chains found
 the same record, every field matched the game's own screens, and every write path — gold, health,
 mana, crime, fame, a skill, an attribute, points, the three-field level write, the item repair,
-recharge and replace paths, and the cure — was set to a test value, read back, and restored.
-The cure was run against a genuinely poisoned character and the rest of the record compared
-byte-for-byte identical afterwards. `docs/ReverseEngineering.md` §11, §15.7 and §16.6 have the logs,
-including what §16.6 could *not* confirm.
+recharge and replace paths, the cure, and the teleport — was set to a test value, read back, and
+restored. The cure was run against a genuinely poisoned character and the rest of the record compared
+byte-for-byte identical afterwards. The teleport was watched on screen: the character moved across
+the map instantly, the automap redrew, and writing the original coordinates back put everything
+exactly as it was. `docs/ReverseEngineering.md` §11, §15.7, §16.6 and §17.8 have the logs, including
+what §16.6 could *not* confirm.
 
 ---
 

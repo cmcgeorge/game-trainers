@@ -490,9 +490,9 @@ The session was left exactly as it was found.
 
 - **Moving equipment.** The trainer reads the equipment slots and shows what is worn, but never
   writes them — see §15.5.
-- **Position and teleporting.** The map/coordinate fields were not located, and moving a party
-  between levels in a game with `SDungeonWorld`/`SDungeonMap` teardown is the kind of thing that
-  desynchronises quietly rather than loudly.
+- **Teleporting to another map.** Within the map you are standing on it is two writes and the engine
+  does the rest (§17); across a map boundary it is not, because the engine reassigns the current map
+  only from its own movement code. §17.6 has the experiment.
 - **Spells and quest flags.** Both are script-driven (`SEngineRun.cpp`); the game's own dialog and
   quest system is the supported route.
 - **Save editing.** §10 is far enough to be interesting and nowhere near far enough to be safe.
@@ -534,6 +534,10 @@ image base) are:
 | `0x0070F29C` | `Poisoned: -%u health per turn, until cured.` → all four conditions at once (§16.1) |
 | `0x004EF590` | the cure every "Cure poison" / "Remove curse" ends in |
 | `0x004EF1A0` | "strip every effect from this source" → the whole group array |
+| `0x004C7570` | the script VM's command table — every command, its arguments and its opcode (§17.1) |
+| `0x0055D2E0` | Recall → the world, the current map and the world-absolute tile pair |
+| `0x004C6590` | the world-absolute position update → the whole window/local/global conversion (§17.4) |
+| `0x00558B20` | the local→window helper → the flag that decides where a map sits in the window |
 
 A useful shortcut for finding more: the game's string table is one contiguous run in `.rdata`, and a
 raw file offset converts to a Ghidra address with `VA = fileOffset + 0x1600 + 0x400000`.
@@ -1005,3 +1009,238 @@ character screen with the poison icon gone.
 - Nothing was found that expires an effect by counting `+0x0C` down, so it is not known whether
   writing a duration of zero would make the game free the object itself. If it does, that would be a
   cure with no leak at all, and it is the first thing to try.
+
+---
+
+## 17. Where the player is standing
+
+Traced last, and the surprise was how little of it is in the character record: none of it. The record
+is one member of the engine object, and the position hangs off two *other* objects the engine object
+points at.
+
+### 17.1 The chain, and how it was found
+
+The whole thing came out of the script VM's command table. `SEngineRun.cpp`'s vocabulary is
+registered in one function (`FUN_004c7570`) as {name, argument count, flags, argument description,
+opcode} tuples, and the argument descriptions are unusually generous:
+
+```
+movepos        x,y                    opcode 0xA6
+getposx                               opcode 0xA7
+getposy                               opcode 0xA8
+iscurrentmap   mapid                  opcode 0xA9
+iscurrentworld worldid                opcode 0xAA
+move           mapobjid               opcode 0xA3
+```
+
+So the game thinks in terms of a *map id*, a *world id*, and an x/y within a map. The template
+variable `%Map%` is substituted from `[[[engine + 0x98] + 0x21CC] + 0x10]`, which pins two of the
+three hops before any scanning.
+
+The rest fell out of the Recall spell, `FUN_0055d2e0`:
+
+```c
+// this = the engine manager
+if ((*(ushort *)(this->0x21CC) + 0x40) >> 10 & 1) -> "Teleport magic is denied on this map."
+cellX = *(int *)(this->0x21C8 + 0x90) / 0x15;   // world-absolute tile / 21
+cellY = *(int *)(this->0x21C8 + 0x94) / 0x15;
+FUN_004c5070(cellX, cellY);                     // find the map at that cell
+```
+
+and `FUN_004c5070` — the map lookup — gives away the whole naming scheme:
+
+```c
+// this = the world
+prefix = this->0xA0;                            // std::string, "base_s"
+sprintf(name, "%s%02u%02u", prefix, x, y);      // "base_s0804"
+// ... then a linear search of the vector at this->0x74 .. this->0x78
+```
+
+**The Quest's outdoor world is a grid of 21x21-tile maps whose ids spell out their cell.** Freymore
+is 14x14 of them — 196 maps — plus 43 standalone 35x35 interiors with names instead of cells, 239 in
+all.
+
+The chain, then:
+
+| | |
+|---|---|
+| `engine` | `record - 0x3DC8`, as everywhere else in this document |
+| `engine + 0x98` | the **engine manager** (`SEngineManager`), the live game |
+| `manager + 0x21C8` | the **world** (`SWorld`); its `+0x00` is the engine object |
+| `manager + 0x21CC` | the **map** the player is on; its `+0x00`/`+0x04` are the engine and the world |
+
+Those back-pointers are what the trainer validates against, exactly as `ItemCatalog` validates an
+item type: two comparisons, and a pointer that survives them is the object it claims to be.
+
+### 17.2 The world
+
+| Offset | Type | What |
+|---|---|---|
+| `+0x00` | ptr | the engine object |
+| `+0x08` | `std::string` | display name — `Freymore` |
+| `+0x20` | `std::string` | resource pack — `base` |
+| `+0x38` | `std::string` | id prefix — `base_` |
+| `+0x54` | `std::string` | database — `TheQuestBase` |
+| `+0x74`/`+0x78` | ptr | `std::vector<SMap*>` begin/end — every map in the world |
+| `+0x8C` | ptr | the map the player is on, mirroring `manager + 0x21CC` |
+| `+0x90`/`+0x94` | i32 | world-absolute tile position |
+| `+0x98` | u32 | game-time stamp of the last position update |
+| `+0xA0` | `std::string` | grid prefix — `base_s` |
+| `+0xBC` | `std::string` | map picture id — `base_-WORLDMAP-` |
+
+### 17.3 A map
+
+| Offset | Type | What |
+|---|---|---|
+| `+0x00`/`+0x04` | ptr | the engine object and the world |
+| `+0x0C` | `char*` | internal id — `base_s0804`, `base_house7` |
+| `+0x10` | `char*` | display name — `Port of Mithria` |
+| `+0x2C`/`+0x30` | i32 | width and height in tiles — 21x21 outdoors, 35x35 inside |
+| `+0x40` | u16 | flags |
+
+The flags were read off the game's own branches rather than guessed:
+
+| Bit | Mask | Read by | Meaning |
+|---|---|---|---|
+| 3 | `0x0008` | `FUN_0055d080` | Mark is denied here |
+| 7 | `0x0080` | `FUN_00558b20` | the map is laid into the tile window a *border* in |
+| 9 | `0x0200` | `FUN_0055d1c0` | Recall may bring the player back here |
+| 10 | `0x0400` | `FUN_0055d080`, `FUN_0055d2e0` | Teleport magic is denied here |
+
+Bit 7 is the load-bearing one, and it is set on every outdoor cell and clear on every interior.
+
+### 17.4 The tile window, which is the whole trick
+
+The engine does not address tiles by their place on the map. It keeps one square scratch grid and
+loads the map — outdoors, a three-by-three block of maps — into it:
+
+```c
+// FUN_004cfa91, in the startup path
+engine->0x44E8 = engine->0x66C;             // the border = the configured drawDistance
+engine->0x44EC = engine->0x66C * 2 + 0x15;  // the window's side = 2 x border + 21
+```
+
+With the default `drawDistance=14` that is a 49x49 window with a 14-tile border. The player's
+position — `manager + 0x158C` and `+0x1590` — is an index into **that** grid, and the conversion is
+one subtraction whose operand depends on bit 7:
+
+```c
+// FUN_00558b20 — the game's own local-to-window helper
+if (map->0x40 >= 0)               { win = local; }                  // interiors: the window's origin
+else if (map == manager->0x21CC)  { win = engine->0x44E8 + local; }  // outdoor cells: the border
+else                              { ... per-slot rects for the eight neighbours ... }
+```
+
+and the reverse direction is written out in full by `FUN_004c6590`, which the engine calls whenever
+the player moves:
+
+```c
+digits = map->0x0C + world->prefix.size();      // "base_s0804" + 6 -> "0804"
+world->0x90 = (digits[0]*10 + digits[1] - 0x211) * 0x15 - engine->0x44E8 + winX;
+world->0x94 = (digits[2]*10 + digits[3] - 0x211) * 0x15 - engine->0x44E8 + winY;
+```
+
+`0x211` is `'0'*10 + '0' + 1`, so **the cell in a map id is one-based** and the map's north-west
+corner is at world tile `(column - 1) * 21`. Everything the trainer shows follows from that:
+
+```
+local  = window - (map is an outdoor cell ? border : 0)
+global = (column - 1) * 21 + local
+```
+
+`manager + 0x1570` is the facing, in degrees anticlockwise from north: 0 north, 90 west, 180 south,
+270 east. Turning right walks backwards through those four.
+
+### 17.5 Teleporting is two writes
+
+`manager + 0x158C` and `+0x1590` are read by the engine every frame. Writing them moves the player,
+the camera, the compass and the automap together, within a frame; nothing has to be nudged
+afterwards and nothing else has to be kept in step, because the world-absolute pair at `world + 0x90`
+is recomputed from the window position by the code above.
+
+That makes the trainer's teleport smaller than most of its other edits: read the map, convert local
+to window, write two dwords.
+
+### 17.6 ...but only within the map you are on
+
+Outdoors the window holds the player's map *and its eight neighbours*, so a coordinate outside the
+middle 21x21 is a real, drawn tile of a real neighbouring map. It renders correctly — and the engine
+goes on believing the player is on the map they left, because `manager + 0x21CC` is only reassigned
+by the engine's own movement code.
+
+This was tried rather than assumed. Writing window X = 5 while standing on `base_s0804` put the
+character nine tiles into the forest of `base_s0704`, drawn correctly, with the automap still showing
+Port of Mithria and the world-absolute position computed from the wrong cell. Walking a step did not
+repair it. So the trainer refuses any target outside the current map's own width and height, and says
+why.
+
+### 17.7 The world map picture
+
+`world + 0xBC` names a resource, `base_-WORLDMAP-`, which is `worlds/base/-WORLDMAP-.dds` inside
+`data.pak` — the paks are ordinary zip archives. It is a 588x588 DXT1 surface with no mipmaps, and
+588 = 14 cells x 21 tiles x **2**, so it is a plan of the whole outdoor world at two pixels a tile,
+aligned to tile (0, 0) with no offset. The trainer reads it out of the player's own install (found
+from the attached process's own path), decodes the BC1 blocks itself because WPF cannot open DDS, and
+draws the position on it. Nothing from the game is redistributed and everything on the tab works
+without it.
+
+### 17.8 Confirmed against a live session
+
+Same session as §11 — `TheQuest.exe` v1.9.10, module at `0x00260000`, *Gerth the Derth* standing in
+the Port of Mithria:
+
+| | |
+|---|---|
+| manager | `[engine + 0x98]`, world `Freymore`, pack `base`, grid prefix `base_s` |
+| map | `base_s0804` / `Port of Mithria`, 21x21, flags `0x0290` |
+| window | side 49, border 14, outdoor flag set |
+| position | window (25, 23) -> local (11, 9) -> world tile (158, 72) |
+| the engine's own cached pair | `world + 0x90` = 158, `world + 0x94` = 72 — **the same two numbers** |
+| atlas | 239 maps, 196 outdoor cells running to column 14, row 14 |
+| picture | `worlds/base/-WORLDMAP-.dds`, 588x588, 2 px/tile |
+
+That last row of the position block is the one worth keeping: the trainer derives the world-absolute
+tile from the window position and the map id, and the engine maintains its own copy by a different
+route. They agree, so neither is the same arithmetic checking itself.
+
+Also confirmed by doing it:
+
+- **Facing.** Pressing "turn right" four times walked `manager + 0x1570` 0 -> 270 -> 180 -> 90 -> 0,
+  and a step at each of the four moved the position by -Y, +X, +Y, -X in turn.
+- **Teleport.** Writing window (18, 30) moved the character from a cobbled street to a jetty over
+  water on the far side of the same map, instantly, with the automap redrawn and an NPC nameplate
+  picked up at the new spot. Writing the original pair back restored it exactly, and `world + 0x90`
+  came back to 158/72 after one step.
+- **Cross-map.** §17.6.
+
+**Not confirmed against a live game: being indoors.** The session was outdoors throughout, and
+getting inside would have meant playing it rather than observing it. Everything about an interior
+here is read out of the disassembly and the shipped data: the flag branch is `FUN_00558b20`'s own
+test, the 43 interiors in Freymore all carry bit 7 clear and all measure 35×35 in the atlas the
+running game handed over, and the harness fixture covers the case — but a fixture is not a game. The
+thing to watch is the one number that follows from the branch rather than from an observation: an
+interior is laid at the window's *origin*, so its local tile is the window index unchanged. If that
+is wrong, the readout and every teleport inside a building are out by the draw distance, and the
+whole outdoor half of this section is unaffected.
+
+**Not confirmed either: the expansion's world.** *Islands of Ice and Fire* ships its own PDB and its
+own `-WORLDMAP-` in `expansions/isle.pak`, and the trainer reads the world's name, pack, grid prefix
+and picture id out of the world object precisely so that none of them is baked in — but the session
+never left Freymore, so the second world has only ever been read off disk, not out of memory.
+
+### 17.9 Open ends
+
+- The three-by-three block at `manager + 0x21D0` is read for nothing. It is what a cross-map teleport
+  would have to maintain, along with `manager + 0x21CC`, `world + 0x8C` and the per-slot rects at
+  `manager + 0x1F84`; that is the shape of the work if anyone wants to try.
+- `manager + 0x21BC` is the window's own tile array, `WindowSize²` entries of 0x42 bytes. It holds
+  what the automap draws and would be the way to render real terrain rather than tinting from the
+  world map picture. Untraced.
+- The world PDBs in `pdbs/` inside each pak (Palm databases — the game began on Palm OS, type `ThQW`,
+  creator `ThQu`) hold the maps offline. Record 0 of `TheQuestBase.pdb` is
+  `Freymore\0base\0TheQuestBase\0`, which lines up with `world + 0x08`/`+0x20`/`+0x54`, and the
+  tagged records after it are items (`0x15`), map objects (`0x28`), NPCs (`0x2A`) and spells (`0x04`).
+  The map records were not identified; the trainer reads the atlas out of the running game instead,
+  which is both easier and correct for whatever expansion is loaded.
+- `manager + 0x1574` mirrors the facing and is presumably the target angle for the turn animation.
+  Reading it mid-turn is how a first attempt at the facing table got the wrong answer.

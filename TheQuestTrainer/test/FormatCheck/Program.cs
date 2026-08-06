@@ -1,3 +1,4 @@
+using System.IO;
 using TheQuestTrainer.Game;
 using TheQuestTrainer.Memory;
 using TheQuestTrainer.ViewModels;
@@ -39,6 +40,12 @@ internal static class Program
         ConditionTableChecks();
         ConditionReaderChecks();
         ConditionActionChecks();
+        MapLayoutChecks();
+        MapReaderChecks();
+        TeleportChecks();
+        DdsChecks();
+        WorldPictureChecks();
+        MapViewChecks();
         PickerChecks();
 
         Console.WriteLine();
@@ -1391,7 +1398,506 @@ internal static class Program
         Check("and copes without one", entries[0].Display == "TheQuestTrainer (1)");
     }
 
+    private static void MapLayoutChecks()
+    {
+        Section("map layout");
+
+        Check("the manager hangs off the engine object at +0x98", MapLayout.EngineManager == 0x098);
+        Check("the window's border and size are adjacent",
+            MapLayout.WindowBorder == 0x44E8 && MapLayout.WindowSize == 0x44EC);
+        Check("facing sits at +0x1570", MapLayout.Facing == 0x1570);
+        Check("the position is a contiguous pair",
+            MapLayout.PlayerX == 0x158C && MapLayout.PlayerY == 0x1590);
+        Check("the world and the map are adjacent pointers",
+            MapLayout.World == 0x21C8 && MapLayout.Map == 0x21CC);
+        Check("the outdoor flag sits before them", MapLayout.Outdoors == 0x21C4);
+        Check("the neighbour block follows the map pointer", MapLayout.NeighbourMaps == 0x21D0);
+        Check("the player's own map is the middle of the block",
+            MapLayout.NeighbourCentre == MapLayout.NeighbourCount / 2);
+        Check("neighbour slots stride by a pointer",
+            MapLayout.NeighbourSlot(0x1000, 3) == 0x1000 + MapLayout.NeighbourMaps + 12);
+        Check("map slots stride by a pointer", MapLayout.MapSlot(0x1000, 5) == 0x1014);
+
+        // The world's four strings really do abut, so each is stated from the one before it.
+        Check("the world's strings tile",
+            MapLayout.WorldName == 0x08 && MapLayout.WorldPack == 0x20 &&
+            MapLayout.WorldIdPrefix == 0x38 && MapLayout.WorldDatabase == 0x54);
+        Check("the world's map vector sits at +0x74",
+            MapLayout.WorldMapsBegin == 0x74 && MapLayout.WorldMapsEnd == 0x78);
+        Check("the world's cached tile pair is contiguous",
+            MapLayout.WorldTileX == 0x90 && MapLayout.WorldTileY == 0x94);
+        Check("the grid prefix and the picture id follow it",
+            MapLayout.WorldGridPrefix == 0xA0 && MapLayout.WorldMapPicture == 0xBC);
+        Check("the world snapshot covers the picture id",
+            MapLayout.WorldBytes >= MapLayout.WorldMapPicture + StdString.Bytes);
+
+        Check("a map's back-pointers come first",
+            MapLayout.MapEngine == 0x00 && MapLayout.MapWorld == 0x04);
+        Check("a map's id and name are adjacent pointers",
+            MapLayout.MapId == 0x0C && MapLayout.MapName == 0x10);
+        Check("a map's size is a contiguous pair",
+            MapLayout.MapWidth == 0x2C && MapLayout.MapHeight == 0x30);
+        Check("the map snapshot covers the flag word",
+            MapLayout.MapFlags == 0x40 && MapLayout.MapBytes >= MapLayout.MapFlags + 2);
+
+        // The flags were read off the game's own branches: bit 7 is the one that decides where a map
+        // is laid into the window, and getting it wrong puts every teleport 14 tiles out.
+        Check("the flag bits are the game's",
+            MapLayout.FlagMarkDenied == 0x0008 && MapLayout.FlagOffsetByBorder == 0x0080 &&
+            MapLayout.FlagRecallTarget == 0x0200 && MapLayout.FlagTeleportDenied == 0x0400);
+
+        Check("an outdoor id splits into its one-based cell",
+            MapLayout.CellFromId("base_s0804", "base_s") == (8, 4));
+        Check("and the first cell is 0101",
+            MapLayout.CellFromId("base_s0101", "base_s") == (1, 1));
+        Check("an interior has no cell", MapLayout.CellFromId("base_house7", "base_s") is null);
+        Check("a short id has no cell", MapLayout.CellFromId("base_s080", "base_s") is null);
+        Check("a long id has no cell", MapLayout.CellFromId("base_s08041", "base_s") is null);
+        Check("a non-numeric id has no cell", MapLayout.CellFromId("base_s08a4", "base_s") is null);
+        Check("cell 0000 is refused", MapLayout.CellFromId("base_s0004", "base_s") is null);
+        Check("row 00 is refused", MapLayout.CellFromId("base_s0800", "base_s") is null);
+        Check("another world's prefix does not match",
+            MapLayout.CellFromId("base_s0804", "isle_s") is null);
+        Check("an empty id has no cell", MapLayout.CellFromId("", "base_s") is null);
+        Check("an empty prefix has no cell", MapLayout.CellFromId("base_s0804", "") is null);
+
+        Check("cell 1 starts the world", MapLayout.CellOriginTile(1) == 0);
+        Check("cell 8 starts 147 tiles in", MapLayout.CellOriginTile(8) == 147);
+        Check("a cell is 21 tiles", MapLayout.GridMapTiles == 21);
+    }
+
+    private static void MapReaderChecks()
+    {
+        Section("map reader");
+
+        var (mem, heap) = FakeGame.BuildGameWithMap();
+        var where = MapReader.Read(mem, FakeGame.LiveRecord);
+
+        Check("the position reads", where is not null);
+        if (where is null) return;
+
+        Check("the world names itself", where.WorldName == MapHeap.WorldName);
+        Check("and its pack and grid prefix",
+            where.WorldPack == MapHeap.Pack && where.GridPrefix == MapHeap.GridPrefix);
+        Check("and its map picture", where.PictureId == MapHeap.Picture);
+        Check("the current map is named", where.Here is { Id: "base_s0804", Name: "Port of Mithria" });
+        Check("and sized", where.Here.Width == 21 && where.Here.Height == 21);
+        Check("and placed in the world", where.Here.Column == 8 && where.Here.Row == 4);
+        Check("its origin is where the cell starts",
+            where.Here.OriginX == 147 && where.Here.OriginY == 63);
+        Check("the window is the border either side of a cell",
+            where.WindowBorder == MapHeap.Border && where.WindowSize == MapHeap.Border * 2 + 21);
+        Check("the outdoor flag is read", where.Outdoors);
+
+        // The whole feature turns on this subtraction: an outdoor map is laid into the window a
+        // border in, so local is window minus border and nothing else.
+        Check("the window position is local plus the border",
+            where.WindowX == 25 && where.WindowY == 23);
+        Check("local is window minus the border", where.LocalX == 11 && where.LocalY == 9);
+        Check("the player is on their own map", where.IsOnMap);
+
+        // 147 + 11 and 63 + 9 — and the numbers on the right came out of the running game, so this
+        // is not the same arithmetic checking itself.
+        Check("the world-absolute tile is the cell's origin plus local",
+            where.GlobalX == 158 && where.GlobalY == 72);
+        Check("and it agrees with the pair the engine caches",
+            where.GlobalX == where.CachedWorldTileX && where.GlobalY == where.CachedWorldTileY);
+
+        Check("the map's flags are read", (where.Here.Flags & MapLayout.FlagRecallTarget) != 0);
+        Check("and described", where.Here.Notes.Contains("Recall target"));
+
+        Check("north is zero", where.Heading == Heading.North && where.HeadingLabel == "North");
+        heap.SetPosition(25, 23, 90);
+        Check("ninety is west", MapReader.Read(mem, FakeGame.LiveRecord)?.Heading == Heading.West);
+        heap.SetPosition(25, 23, 180);
+        Check("a hundred and eighty is south", MapReader.Read(mem, FakeGame.LiveRecord)?.Heading == Heading.South);
+        heap.SetPosition(25, 23, 270);
+        Check("two hundred and seventy is east", MapReader.Read(mem, FakeGame.LiveRecord)?.Heading == Heading.East);
+        heap.SetPosition(25, 23, 45);
+        Check("a turn in progress is neither", MapReader.Read(mem, FakeGame.LiveRecord)?.Heading == Heading.Unknown);
+        Check("and is shown as the raw angle", MapReader.Read(mem, FakeGame.LiveRecord)?.HeadingLabel == "45°");
+        heap.SetPosition(25, 23);
+
+        // An interior carries no cell and is laid at the window's origin rather than the border, so
+        // the same window position means a different tile. This is the case the flag exists for.
+        uint interior = heap.Maps[3];
+        heap.SetCurrentMap(interior);
+        heap.SetOutdoors(false);
+        heap.SetPosition(4, 6);
+        var inside = MapReader.Read(mem, FakeGame.LiveRecord);
+        Check("an interior is read", inside is not null);
+        Check("it is not a cell of the grid", inside is { Here.IsOutdoorCell: false });
+        Check("it is 35 tiles square", inside is { Here.Width: 35, Here.Height: 35 });
+        Check("it is laid at the window's origin", inside is { LocalX: 4, LocalY: 6 });
+        Check("so it has no world-absolute tile", inside?.GlobalX is null);
+        Check("and the outdoor flag is clear", inside is { Outdoors: false });
+        Check("its flags are described",
+            inside is not null && inside.Here.Notes.Contains("Teleport magic denied") &&
+            inside.Here.Notes.Contains("Mark denied"));
+
+        // Standing outside the map's own tiles is what a cross-map teleport would produce, and the
+        // reader has to say so rather than report a negative coordinate as if it were fine.
+        heap.SetPosition(0, 0);
+        Check("a tile outside the map is reported",
+            MapReader.Read(mem, FakeGame.LiveRecord) is { IsOnMap: true });
+        heap.SetCurrentMap(heap.Maps[0]);
+        heap.SetOutdoors(true);
+        heap.SetPosition(2, 2);
+        Check("and so is one before an outdoor map's border",
+            MapReader.Read(mem, FakeGame.LiveRecord) is { IsOnMap: false, LocalX: -12 });
+        heap.SetPosition(25, 23);
+
+        // --- the atlas ---
+        var atlas = MapReader.ReadAtlas(mem, FakeGame.LiveRecord);
+        Check("the atlas has every map", atlas.Count == 4);
+        Check("its outdoor cells carry their column and row",
+            atlas.Count(m => m.IsOutdoorCell) == 3);
+        Check("and its interior does not",
+            atlas.Single(m => !m.IsOutdoorCell).Id == FakeGame.InteriorId);
+        Check("the current map is in it", atlas.Any(m => m.Id == "base_s0804"));
+        Check("a cell reads as its column and row", atlas.First(m => m.Id == "base_s0704").CellLabel == "7, 4");
+        Check("an interior's cell is a dash",
+            atlas.Single(m => !m.IsOutdoorCell).CellLabel == "—");
+        Check("the size is shown the way the game words it",
+            atlas.First(m => m.Id == "base_s0101").SizeLabel == "21×21");
+
+        // --- the validators ---
+        heap.SetMapWorld(heap.Maps[1], 0xDEAD_BEEF);
+        Check("a map that belongs to another world is dropped",
+            MapReader.ReadAtlas(mem, FakeGame.LiveRecord).Count == 3);
+        heap.SetMapWorld(heap.Maps[1], MapHeap.WorldBase);
+
+        heap.SetMapWidth(heap.Maps[1], 4000);
+        Check("a map with an implausible size is dropped",
+            MapReader.ReadAtlas(mem, FakeGame.LiveRecord).Count == 3);
+        heap.SetMapWidth(heap.Maps[1], 21);
+
+        heap.SetMapName(heap.Maps[1], 0x7FFF_0000);
+        Check("a map whose name cannot be read is dropped",
+            MapReader.ReadAtlas(mem, FakeGame.LiveRecord).Count == 3);
+        heap.SetMapName(heap.Maps[1], 0);
+        Check("and so is one with no name at all",
+            MapReader.ReadAtlas(mem, FakeGame.LiveRecord).Count == 3);
+
+        heap.SetMapsRaw(MapHeap.VectorBase, MapHeap.VectorBase - 4);
+        Check("a misordered vector yields nothing", MapReader.ReadAtlas(mem, FakeGame.LiveRecord).Count == 0);
+        heap.SetMapsRaw(MapHeap.VectorBase, MapHeap.VectorBase + 6);
+        Check("and so does a misaligned one", MapReader.ReadAtlas(mem, FakeGame.LiveRecord).Count == 0);
+
+        var (fresh, clean) = FakeGame.BuildGameWithMap();
+        clean.SetWorldEngine(0xDEAD_BEEF);
+        Check("a world that is not this engine's is refused",
+            MapReader.Read(fresh, FakeGame.LiveRecord) is null);
+
+        var (fresh2, clean2) = FakeGame.BuildGameWithMap();
+        clean2.SetMapWorld(clean2.Maps[0], 0xDEAD_BEEF);
+        Check("and a current map that is not this world's",
+            MapReader.Read(fresh2, FakeGame.LiveRecord) is null);
+
+        var (fresh3, clean3) = FakeGame.BuildGameWithMap();
+        clean3.ClearManager();
+        Check("no manager means no position, not a guess",
+            MapReader.Read(fresh3, FakeGame.LiveRecord) is null);
+        Check("and no atlas either",
+            MapReader.ReadAtlas(fresh3, FakeGame.LiveRecord).Count == 0);
+
+        // A game with no map graph at all is the title screen, and the tab has to cope with it.
+        Check("a record with no manager behind it reads as no position",
+            MapReader.Read(FakeGame.BuildGame(), FakeGame.LiveRecord) is null);
+    }
+
+    private static void TeleportChecks()
+    {
+        Section("teleport");
+
+        var (mem, heap) = FakeGame.BuildGameWithMap();
+        var actions = new TrainerActions(mem, FakeGame.Image(mem));
+
+        var moved = actions.Teleport(FakeGame.LiveRecord, 3, 17);
+        Check("a teleport within the map succeeds", moved.Ok);
+        Check("and says where it went", moved.Message.Contains("(3, 17)") && moved.Message.Contains("Port of Mithria"));
+        Check("it writes local plus the border",
+            heap.WindowX == 3 + MapHeap.Border && heap.WindowY == 17 + MapHeap.Border);
+        Check("and the reader agrees",
+            MapReader.Read(mem, FakeGame.LiveRecord) is { LocalX: 3, LocalY: 17 });
+        Check("the world-absolute tile follows it",
+            MapReader.Read(mem, FakeGame.LiveRecord)?.GlobalX == 150);
+
+        Check("the corner is reachable", actions.Teleport(FakeGame.LiveRecord, 0, 0).Ok);
+        Check("and so is the far corner", actions.Teleport(FakeGame.LiveRecord, 20, 20).Ok);
+
+        // Confining the target to the current map is the load-bearing refusal: outdoors the window
+        // holds the neighbours too, so one tile past the edge is a real, drawn tile of another map.
+        int before = heap.WindowX;
+        var off = actions.Teleport(FakeGame.LiveRecord, 21, 5);
+        Check("a column past the edge is refused", !off.Ok);
+        Check("and says how big the map is", off.Message.Contains("21×21"));
+        Check("a row past the edge is refused", !actions.Teleport(FakeGame.LiveRecord, 5, 21).Ok);
+        Check("a negative column is refused", !actions.Teleport(FakeGame.LiveRecord, -1, 5).Ok);
+        Check("a negative row is refused", !actions.Teleport(FakeGame.LiveRecord, 5, -1).Ok);
+        Check("and a refusal writes nothing", heap.WindowX == before);
+
+        // An interior is laid at the window's origin, so the same local tile is a different write.
+        heap.SetCurrentMap(heap.Maps[3]);
+        heap.SetOutdoors(false);
+        Check("an interior teleport succeeds", actions.Teleport(FakeGame.LiveRecord, 3, 17).Ok);
+        Check("and writes local with no border at all", heap.WindowX == 3 && heap.WindowY == 17);
+        Check("its 35 tiles are all reachable", actions.Teleport(FakeGame.LiveRecord, 34, 34).Ok);
+        Check("and 35 is not", !actions.Teleport(FakeGame.LiveRecord, 35, 0).Ok);
+        heap.SetCurrentMap(heap.Maps[0]);
+        heap.SetOutdoors(true);
+
+        actions.ReadOnly = true;
+        before = heap.WindowX;
+        var refused = actions.Teleport(FakeGame.LiveRecord, 1, 1);
+        Check("read-only refuses a teleport", !refused.Ok && refused.Message.Contains("Read-only"));
+        Check("and writes nothing", heap.WindowX == before);
+        actions.ReadOnly = false;
+
+        // Same rule as every other write: the record has to still be there.
+        var (gone, _) = FakeGame.BuildGameWithMap();
+        gone.PokeUInt32(FakeGame.LiveRecord + QuestLayout.ExperienceTable, 12345);
+        var stale = new TrainerActions(gone, FakeGame.Image(gone))
+            .Teleport(FakeGame.LiveRecord, 1, 1);
+        Check("a record that no longer validates refuses a teleport", !stale.Ok);
+        Check("and says so", stale.Message.Contains("moved or went away"));
+
+        var (blind, blindHeap) = FakeGame.BuildGameWithMap();
+        blindHeap.ClearManager();
+        var nowhere = new TrainerActions(blind, FakeGame.Image(blind)).Teleport(FakeGame.LiveRecord, 1, 1);
+        Check("no world means no teleport", !nowhere.Ok);
+        Check("and it says why", nowhere.Message.Contains("where the player is"));
+
+        // Teleport magic being denied is the game's rule for its own spell, not for the trainer —
+        // but the message has to say so, or the player thinks the trainer is broken.
+        var (denied, deniedHeap) = FakeGame.BuildGameWithMap();
+        deniedHeap.SetMapFlags(deniedHeap.Maps[0],
+            MapLayout.FlagOffsetByBorder | MapLayout.FlagTeleportDenied);
+        var anyway = new TrainerActions(denied, FakeGame.Image(denied)).Teleport(FakeGame.LiveRecord, 2, 2);
+        Check("a teleport-denied map is still reachable", anyway.Ok);
+        Check("and the message says the game's own spell would not be",
+            anyway.Message.Contains("Teleport magic is denied"));
+    }
+
+    private static void DdsChecks()
+    {
+        Section("dds");
+
+        Check("a non-DDS is refused", DdsImage.Decode(new byte[200], out _) is null);
+        Check("and says so", Refusal(new byte[200]).Contains("not a DDS"));
+
+        Check("a truncated DDS is refused", DdsImage.Decode(Dds(8, 8, 1), out _) is null);
+        Check("and says how short it is", Refusal(Dds(8, 8, 1)).Contains("truncated"));
+
+        var dxt3 = Dds(4, 4, 1, fourCc: "DXT3");
+        Check("an unsupported compression is refused", DdsImage.Decode(dxt3, out _) is null);
+        Check("and names it", Refusal(dxt3).Contains("DXT3"));
+
+        Check("implausible dimensions are refused", DdsImage.Decode(Dds(0, 8, 1), out _) is null);
+
+        // One opaque block: endpoints red and blue with c0 > c1, so the palette is red, blue and two
+        // thirds-of-the-way colours, and the indices pick one of each.
+        var opaque = Dds(4, 4, 1);
+        WriteBlock(opaque, 128, 0xF800, 0x001F, 0b_11_10_01_00);
+        var image = DdsImage.Decode(opaque, out string detail);
+        Check("an opaque DXT1 block decodes", image is not null);
+        Check("with its dimensions", image is { Width: 4, Height: 4 });
+        Check("and says what it decoded", detail.Contains("4×4 DXT1"));
+        Check("index 0 is the first endpoint", image?.Pixel(0, 0) == 0xFFFF0000);
+        Check("index 1 is the second", image?.Pixel(1, 0) == 0xFF0000FF);
+        Check("index 2 is a third of the way", image?.Pixel(2, 0) == 0xFFAA0055);
+        Check("index 3 is two thirds", image?.Pixel(3, 0) == 0xFF5500AA);
+        Check("every pixel of the block is filled", image?.Pixel(3, 3) == 0xFF5500AA);
+
+        // The other palette: c0 <= c1 means one midpoint and a transparent fourth entry, and reading
+        // it the opaque way would silently turn holes into black.
+        var punched = Dds(4, 4, 1);
+        WriteBlock(punched, 128, 0x001F, 0xF800, 0b_11_10_01_00);
+        var holes = DdsImage.Decode(punched, out _);
+        Check("the transparent palette decodes", holes is not null);
+        Check("index 0 and 1 are still the endpoints",
+            holes?.Pixel(0, 0) == 0xFF0000FF && holes?.Pixel(1, 0) == 0xFFFF0000);
+        Check("index 2 is the midpoint", holes?.Pixel(2, 0) == 0xFF7F007F);
+        Check("index 3 is transparent", (holes?.Pixel(3, 0) & 0xFF000000) == 0);
+
+        Check("a pixel outside the surface reads as nothing", image?.Pixel(9, 9) == 0);
+        Check("the stride is four bytes a pixel", image?.Stride == 16);
+
+        // A surface that is not a multiple of four still decodes: the last block is clipped.
+        var odd = Dds(6, 6, 4);
+        for (int i = 0; i < 4; i++) WriteBlock(odd, 128 + i * 8, 0xF800, 0x001F, 0);
+        Check("a size that is not a multiple of four decodes", DdsImage.Decode(odd, out _) is { Width: 6, Height: 6 });
+    }
+
+    private static void WorldPictureChecks()
+    {
+        Section("world picture");
+
+        Check("a resource id becomes a pak entry",
+            WorldPictureLoader.EntryFor("base", "base_-WORLDMAP-") == "worlds/base/-WORLDMAP-.dds");
+        Check("only the leading pack name is stripped",
+            WorldPictureLoader.EntryFor("base", "base_base_map") == "worlds/base/base_map.dds");
+        Check("an id that does not carry the prefix is taken as it is",
+            WorldPictureLoader.EntryFor("isle", "-WORLDMAP-") == "worlds/isle/-WORLDMAP-.dds");
+
+        Check("no game folder means no picture",
+            WorldPictureLoader.Load(null, "base", "base_-WORLDMAP-", 294, out _) is null);
+        Check("and says so", Note(null, "base", "base_-WORLDMAP-").Contains("game folder"));
+        Check("a folder that does not exist means no picture",
+            WorldPictureLoader.Load(@"C:\no\such\folder", "base", "base_-WORLDMAP-", 294, out _) is null);
+        Check("a world with no picture id means no picture",
+            WorldPictureLoader.Load(Path.GetTempPath(), "base", "", 294, out _) is null);
+
+        // The whole path, against a pak this harness writes itself: no game files are involved.
+        string folder = Path.Combine(Path.GetTempPath(), "TheQuestTrainer.FormatCheck." + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(folder);
+            var surface = Dds(8, 8, 4);
+            for (int i = 0; i < 4; i++) WriteBlock(surface, 128 + i * 8, 0xF800, 0x001F, 0);
+            WritePak(Path.Combine(folder, "data.pak"), "worlds/base/-WORLDMAP-.dds", surface);
+
+            var picture = WorldPictureLoader.Load(folder, "base", "base_-WORLDMAP-", 4, out string note);
+            Check("a picture in a pak is found and decoded", picture is not null);
+            Check("its scale comes from how wide the grid is", picture?.PixelsPerTile == 2);
+            Check("a tile maps to the middle of its pixels", picture?.PixelX(3) == 7);
+            Check("and the note names the pak", note.Contains("data.pak"));
+
+            Check("a picture that is not in any pak is not invented",
+                WorldPictureLoader.Load(folder, "isle", "isle_-WORLDMAP-", 294, out _) is null);
+            Check("and the note says which entry was wanted",
+                Note(folder, "isle", "isle_-WORLDMAP-").Contains("worlds/isle/-WORLDMAP-.dds"));
+
+            // An expansion's pak lives one folder down and has to be searched too.
+            string expansions = Path.Combine(folder, "expansions");
+            Directory.CreateDirectory(expansions);
+            WritePak(Path.Combine(expansions, "isle.pak"), "worlds/isle/-WORLDMAP-.dds", surface);
+            Check("an expansion's pak is searched as well",
+                WorldPictureLoader.Load(folder, "isle", "isle_-WORLDMAP-", 4, out _) is not null);
+
+            // A pak holding an entry that is not a DDS must not produce a picture built from noise.
+            WritePak(Path.Combine(folder, "broken.pak"), "worlds/mod/-WORLDMAP-.dds", new byte[300]);
+            Check("an entry that will not decode yields no picture",
+                WorldPictureLoader.Load(folder, "mod", "mod_-WORLDMAP-", 294, out _) is null);
+            Check("and the note says why", Note(folder, "mod", "mod_-WORLDMAP-").Contains("could not be decoded"));
+        }
+        finally
+        {
+            try { Directory.Delete(folder, recursive: true); } catch (IOException) { /* best effort */ }
+        }
+    }
+
+    private static void MapViewChecks()
+    {
+        Section("map tab");
+
+        var (mem, heap) = FakeGame.BuildGameWithMap();
+        var host = new FakeHost(mem);
+        var view = new MapViewModel(host);
+
+        Check("nothing is shown before a position arrives", !view.HasPosition && view.Tiles.Count == 0);
+
+        view.Update(MapReader.Read(mem, FakeGame.LiveRecord));
+        Check("a position fills the readout", view is { HasPosition: true, MapName: "Port of Mithria" });
+        Check("the schematic is the map's own size",
+            view is { TileColumns: 21, TileRows: 21 } && view.Tiles.Count == 441);
+        Check("the player's square is marked",
+            view.Tiles.Single(t => t.IsPlayer) is { X: 11, Y: 9 });
+
+        // A first position aims the target at the tile the player is on, so Teleport with nothing
+        // typed is a no-op rather than a jump to (0, 0).
+        Check("the target starts where the player is", view is { TargetX: 11, TargetY: 9 });
+
+        view.TargetX = 4;
+        view.TargetY = 16;
+        Check("moving the target moves the marker",
+            view.Tiles.Single(t => t.IsTarget) is { X: 4, Y: 16 });
+
+        view.SelectTileCommand.Execute(view.Tiles.First(t => t is { X: 7, Y: 2 }));
+        Check("clicking a square aims at it", view is { TargetX: 7, TargetY: 2 });
+
+        view.TeleportCommand.Execute(null);
+        Check("Teleport writes through the host", heap.WindowX == 7 + MapHeap.Border);
+        Check("and the host is told where it went", host.Reported[^1].Contains("(7, 2)"));
+        view.Update(MapReader.Read(mem, FakeGame.LiveRecord));
+        Check("so the next position marks the new square",
+            view.Tiles.Single(t => t.IsPlayer) is { X: 7, Y: 2 });
+
+        host.IsReadOnly = true;
+        view.SelectTileCommand.Execute(view.Tiles.First(t => t is { X: 1, Y: 1 }));
+        view.TeleportCommand.Execute(null);
+        Check("read-only stops the tab writing", heap.WindowX == 7 + MapHeap.Border);
+        Check("and says so", host.Reported[^1].Contains("Read-only"));
+        host.IsReadOnly = false;
+
+        // Walking into a building replaces a 21x21 schematic with a 35x35 one.
+        heap.SetCurrentMap(heap.Maps[3]);
+        heap.SetOutdoors(false);
+        heap.SetPosition(2, 3);
+        view.Update(MapReader.Read(mem, FakeGame.LiveRecord));
+        Check("a new map rebuilds the schematic", view.Tiles.Count == 35 * 35);
+        Check("and the interior's tiles are plain", view is { TileColumns: 35, TileRows: 35 });
+        Check("and the target comes with you rather than staying on the old map",
+            view is { TargetX: 2, TargetY: 3 });
+
+        view.SetAtlas(MapReader.ReadAtlas(mem, FakeGame.LiveRecord));
+        Check("the atlas is listed", view.AtlasView.Count == 4);
+        view.AtlasFilter = "sea";
+        Check("and can be narrowed by name", view.AtlasView.Count == 1);
+        view.AtlasFilter = "house";
+        Check("or by the internal id", view.AtlasView.Single().Id == FakeGame.InteriorId);
+        view.AtlasFilter = "";
+        Check("and widened again", view.AtlasView.Count == 4);
+
+        view.Update(null);
+        Check("losing the position empties the tab", !view.HasPosition && view.Tiles.Count == 0);
+        Check("and forgets the atlas with it", view.AtlasView.Count == 0);
+    }
+
     // ---- plumbing ------------------------------------------------------------------------------
+
+    /// <summary>Why <see cref="DdsImage"/> refused these bytes.</summary>
+    private static string Refusal(byte[] dds)
+    {
+        DdsImage.Decode(dds, out string detail);
+        return detail;
+    }
+
+    /// <summary>What <see cref="WorldPictureLoader"/> said about a load.</summary>
+    private static string Note(string? folder, string pack, string id)
+    {
+        WorldPictureLoader.Load(folder, pack, id, 294, out string note);
+        return note;
+    }
+
+    /// <summary>A DDS header plus room for <paramref name="blocks"/> BC1 blocks.</summary>
+    private static byte[] Dds(int width, int height, int blocks, string fourCc = "DXT1")
+    {
+        var dds = new byte[128 + blocks * 8];
+        BitConverter.GetBytes(0x20534444).CopyTo(dds, 0);          // "DDS "
+        BitConverter.GetBytes(124).CopyTo(dds, 4);
+        BitConverter.GetBytes(height).CopyTo(dds, 12);
+        BitConverter.GetBytes(width).CopyTo(dds, 16);
+        System.Text.Encoding.ASCII.GetBytes(fourCc).CopyTo(dds, 84);
+        return dds;
+    }
+
+    /// <summary>Writes one BC1 block: two RGB565 endpoints and sixteen two-bit indices.</summary>
+    private static void WriteBlock(byte[] dds, int at, ushort c0, ushort c1, uint rowIndices)
+    {
+        BitConverter.GetBytes(c0).CopyTo(dds, at);
+        BitConverter.GetBytes(c1).CopyTo(dds, at + 2);
+        uint bits = rowIndices | rowIndices << 8 | rowIndices << 16 | rowIndices << 24;
+        BitConverter.GetBytes(bits).CopyTo(dds, at + 4);
+    }
+
+    /// <summary>Writes a one-entry pak — the game's paks are ordinary zips.</summary>
+    private static void WritePak(string path, string entry, byte[] content)
+    {
+        using var zip = System.IO.Compression.ZipFile.Open(path, System.IO.Compression.ZipArchiveMode.Create);
+        using var stream = zip.CreateEntry(entry).Open();
+        stream.Write(content, 0, content.Length);
+    }
 
     private static CharacterSnapshot? Read(IMemorySource mem, uint record) => CharacterReader.Read(mem, record);
 

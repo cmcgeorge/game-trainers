@@ -4,6 +4,8 @@
              StartupUri="MainWindow.xaml">
     <Application.Resources>
 
+        <BooleanToVisibilityConverter x:Key="BoolToVisible" />
+
         <SolidColorBrush x:Key="Parchment"   Color="#FFF3E7CE" />
         <SolidColorBrush x:Key="Ink"         Color="#FF2B2118" />
         <SolidColorBrush x:Key="Rule"        Color="#FFB9A57C" />

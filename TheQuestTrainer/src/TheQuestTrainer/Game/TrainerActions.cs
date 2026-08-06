@@ -354,6 +354,68 @@ public sealed class TrainerActions
         return true;
     }
 
+    // ---- position ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// Moves the player to tile (<paramref name="localX"/>, <paramref name="localY"/>) of the map
+    /// they are already on.
+    ///
+    /// <b>This is one pair of writes and the game does the rest.</b> The engine reads the player's
+    /// window position every frame, so the camera, the compass and the automap all follow within a
+    /// frame — there is no step to take afterwards and nothing else to keep in step. The
+    /// world-absolute pair the world object caches is recomputed by the engine from this one, so it
+    /// is deliberately left alone.
+    ///
+    /// <b>The target is confined to the current map, and that is a real restriction rather than
+    /// caution.</b> Outdoors the tile window holds a three-by-three block, so a coordinate outside
+    /// the middle map lands the player on a genuine, drawn tile of a neighbour — and the engine goes
+    /// on believing they are on the map they left, because only its own movement code reassigns that.
+    /// Everything downstream of it is then wrong: the automap draws the wrong map, the world-absolute
+    /// position is computed from the wrong cell, and walking further takes them off the end of what
+    /// is loaded. Confirmed by doing it. Walk across the boundary in the game instead.
+    ///
+    /// The position is re-read here rather than taken from the caller's snapshot, for the same reason
+    /// every other write re-validates: the player can walk, enter a building or load a save between
+    /// the row being drawn and the button being pressed, and each of those changes which map the
+    /// coordinates mean.
+    /// </summary>
+    public ActionResult Teleport(uint record, int localX, int localY)
+    {
+        if (!Ready(record, out string why)) return ActionResult.Failure(why);
+
+        var where = MapReader.Read(_source, record);
+        if (where is null)
+            return ActionResult.Failure("Could not read where the player is — is a game loaded rather than the menu?");
+
+        var map = where.Here;
+        if (localX < 0 || localY < 0 || localX >= map.Width || localY >= map.Height)
+            return ActionResult.Failure(
+                $"({localX}, {localY}) is outside “{map.Name}”, which is {map.Width}×{map.Height} tiles. " +
+                "Teleport only moves you within the map you are on — walk across the boundary in the game.");
+
+        int windowX = localX + where.Origin;
+        int windowY = localY + where.Origin;
+        if (windowX < 0 || windowY < 0 || windowX >= where.WindowSize || windowY >= where.WindowSize)
+            return ActionResult.Failure(
+                $"({localX}, {localY}) falls outside the engine's {where.WindowSize}×{where.WindowSize} tile window.");
+
+        if (!_source.Write(where.Manager + MapLayout.PlayerX, BitConverter.GetBytes(windowX)))
+            return ActionResult.Failure("Teleport failed: the position could not be written.");
+
+        // The two coordinates are written separately because they are two fields, so there is one
+        // frame in which the player is at the new column and the old row. That is a legal position —
+        // the engine clamps nothing and draws whatever tile it is given — so the worst case is a
+        // single frame somewhere else on the same map, not a state the game has to cope with.
+        if (!_source.Write(where.Manager + MapLayout.PlayerY, BitConverter.GetBytes(windowY)))
+            return ActionResult.Failure(
+                $"Teleport half-applied: moved to column {localX} but the row could not be written.");
+
+        string denied = (map.Flags & MapLayout.FlagTeleportDenied) != 0
+            ? " (the game's own Teleport magic is denied on this map; this is not the game's spell)"
+            : "";
+        return ActionResult.Success($"Moved to ({localX}, {localY}) on “{map.Name}”{denied}.");
+    }
+
     /// <summary>"a", "a and b", "a, b and c" — the cure's message lists whatever it took away.</summary>
     private static string Join(IReadOnlyList<string> parts) => parts.Count switch
     {

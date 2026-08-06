@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Windows.Threading;
 using TheQuestTrainer.Game;
 using TheQuestTrainer.Memory;
@@ -36,6 +37,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     private Process? _process;
     private uint _record;
     private bool _rowsBuilt;
+    private string? _gameFolder;
 
     private string _status = "Start The Quest, load or begin a game, then press Attach.";
     private string _buildNote = "";
@@ -75,6 +77,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         CatalogView = new ObservableCollection<ItemType>();
         Processes = new ObservableCollection<ProcessEntry>();
         Reference = new ObservableCollection<ReferenceRow>();
+        Map = new MapViewModel(this);
 
         AttachCommand = new RelayCommand(Attach, () => !IsAttached);
         DetachCommand = new RelayCommand(Detach, () => IsAttached);
@@ -88,6 +91,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         ReplaceItemCommand = new RelayCommand(ReplaceSelectedItem,
             () => CanEdit && SelectedItem is { IsEquipped: false } && SelectedCatalogEntry is not null);
         ScanCatalogCommand = new RelayCommand(ScanCatalog, () => IsAttached);
+        ScanMapsCommand = new RelayCommand(ScanMaps, () => IsAttached);
 
         // Built up front rather than on attach, so the window shows what it can edit before it is
         // pointed at anything. The rows carry no game state until the first refresh fills them.
@@ -121,6 +125,9 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     /// <summary>Static reference data for the Reference tab.</summary>
     public ObservableCollection<ReferenceRow> Reference { get; }
 
+    /// <summary>Where the player is, where they could be, and the one write that moves them.</summary>
+    public MapViewModel Map { get; }
+
     /// <summary>Attaches to the selected process.</summary>
     public RelayCommand AttachCommand { get; }
 
@@ -153,6 +160,9 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
 
     /// <summary>Sweeps the game's heap for item types again.</summary>
     public RelayCommand ScanCatalogCommand { get; }
+
+    /// <summary>Re-reads the world's map list and the world map picture.</summary>
+    public RelayCommand ScanMapsCommand { get; }
 
     // ---- session state ---------------------------------------------------------------------
 
@@ -553,6 +563,57 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         ScanCatalogCommand.RaiseCanExecuteChanged();
     }
 
+    // ---- the map -----------------------------------------------------------------------------
+
+    /// <summary>
+    /// Re-reads the world's map list and its map picture.
+    ///
+    /// Both are paid on attach and then only on request, for the same reason the item catalog is:
+    /// the atlas is four reads for each of a couple of hundred maps and the picture is a zip lookup
+    /// and a block decode, neither of which belongs on a 250 ms timer. Neither is needed for the
+    /// position readout or for a teleport — they are the reference half of the tab — so a failure is
+    /// reported and nothing else stops working.
+    /// </summary>
+    public void ScanMaps()
+    {
+        if (_source is null || _record == 0)
+        {
+            Map.SetAtlas(Array.Empty<WorldMap>());
+            Map.SetPicture(null, "Attach first.");
+            return;
+        }
+
+        var atlas = MapReader.ReadAtlas(_source, _record);
+        Map.SetAtlas(atlas);
+
+        var where = MapReader.Read(_source, _record);
+        if (where is null)
+        {
+            Map.SetPicture(null, "No world is loaded, so there is no map picture to read.");
+            return;
+        }
+
+        // The picture covers the outdoor grid, so its scale comes from how wide that grid is — which
+        // the atlas has just told us, rather than a constant that would be wrong for the expansion.
+        int cells = atlas.Where(m => m.Column is not null).Select(m => m.Column!.Value).DefaultIfEmpty(0).Max();
+        var picture = WorldPictureLoader.Load(_gameFolder, where.WorldPack, where.PictureId,
+                                              cells * MapLayout.GridMapTiles, out string note);
+        Map.SetPicture(picture, note);
+    }
+
+    /// <summary>
+    /// The folder the attached game runs from, which is where its <c>.pak</c> files are.
+    ///
+    /// Unlike the DOS trainers in this repository, the attached process <i>is</i> the game, so there
+    /// is nothing to ask the user for. Reading the path can still fail — a 32-bit process queried
+    /// from a 64-bit one, or one that exits between the two calls — and that is not fatal.
+    /// </summary>
+    private static string? FolderOf(Process process)
+    {
+        try { return Path.GetDirectoryName(process.MainModule?.FileName); }
+        catch (Exception e) when (e is InvalidOperationException or System.ComponentModel.Win32Exception) { return null; }
+    }
+
     // ---- freezes ------------------------------------------------------------------------------
 
     /// <summary>Holds health at whatever it was when the box was ticked.</summary>
@@ -702,6 +763,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
 
         _process = process;
         _memory = memory;
+        _gameFolder = FolderOf(process);
         _image = module.Image;
         _source = new ProcessMemorySource(memory, module.Base, module.Size);
         _actions = new TrainerActions(_source, _image) { ReadOnly = IsReadOnly };
@@ -729,6 +791,8 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         _catalog = ItemCatalog.Sweep(_source, _record - QuestLayout.RecordInEngine);
         ApplyCatalogFilter();
         UpdateInventoryNote();
+
+        ScanMaps();
     }
 
     private string DescribeBuild(ModuleLocation module)
@@ -756,6 +820,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         _image = null;
         _record = 0;
         _rowsBuilt = false;
+        _gameFolder = null;
 
         // The item rows and the catalog both name addresses in a process that is no longer open, so
         // they go rather than linger as a list that looks live and would refuse every write.
@@ -768,6 +833,10 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
 
         ConditionSummary = "—";
         IsAfflicted = false;
+
+        // The atlas and the schematic name maps in a process that is no longer open, and the
+        // position they were drawn around is gone with it.
+        Map.Clear();
 
         if (IsAttached) Status = "Detached.";
         IsAttached = false;
@@ -870,6 +939,11 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         // player types into, so the editor-focus rule above does not apply to them.
         UpdateConditions();
 
+        // The position is not in the record at all — it hangs off the engine object the record is
+        // embedded in — so it is read on its own, and a chain that cannot be followed (the player is
+        // at the main menu) empties the tab rather than ending the session.
+        Map.Update(MapReader.Read(_source, _record));
+
         // The inventory is read separately from the record: it is a vector of heap pointers rather
         // than fields inside the snapshot, and a pack that cannot be read is a reason to show no
         // items, not a reason to end the session.
@@ -959,6 +1033,17 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         _actions is null ? ActionResult.Failure("Attach first.") : _actions.RestoreItem(_record, item);
 
     /// <inheritdoc/>
+    public ActionResult Teleport(int localX, int localY)
+    {
+        if (_actions is null) return ActionResult.Failure("Attach first.");
+        var result = _actions.Teleport(_record, localX, localY);
+        // The position is not a scalar with an editor, so nothing has to be settled — but the
+        // readout and the schematic's marker should show the new tile now rather than in 250 ms.
+        if (result.Ok && _source is not null) Map.Update(MapReader.Read(_source, _record));
+        return result;
+    }
+
+    /// <inheritdoc/>
     public void Report(string message)
     {
         if (!string.IsNullOrEmpty(message)) Status = message;
@@ -1037,6 +1122,8 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         LevelUpCommand.RaiseCanExecuteChanged();
         ClearCrimeCommand.RaiseCanExecuteChanged();
         CureConditionsCommand.RaiseCanExecuteChanged();
+        ScanMapsCommand.RaiseCanExecuteChanged();
+        Map.RaiseCommandStates();
         RaiseItemCommandStates();
     }
 

@@ -610,6 +610,280 @@ public sealed class ConditionHeap
     }
 }
 
+/// <summary>
+/// Lays out an engine manager, a world and its maps, so the position reader, the atlas and the
+/// teleport can all be exercised without a game.
+///
+/// The geometry mirrors the real thing where it matters. The world's strings are real MSVC
+/// <c>std::string</c>s at the offsets the game has them at; the maps carry back-pointers to both the
+/// engine object and the world, which is what the reader validates against; the ids of the outdoor
+/// cells really do spell out their column and row; and the tile window is sized from a draw border
+/// exactly as the game sizes it, so "local plus the border" is a conversion a check can get wrong.
+/// </summary>
+public sealed class MapHeap
+{
+    /// <summary>Where the engine manager lives.</summary>
+    public const uint ManagerBase = 0x0550_0000;
+
+    /// <summary>Where the world object lives.</summary>
+    public const uint WorldBase = 0x0554_0000;
+
+    /// <summary>Where map objects are laid out.</summary>
+    public const uint MapBase = 0x0558_0000;
+
+    /// <summary>Where ids and names live.</summary>
+    public const uint TextBase = 0x055C_0000;
+
+    /// <summary>Where the world's map pointer array lives.</summary>
+    public const uint VectorBase = 0x0560_0000;
+
+    /// <summary>Stride between maps: the object plus a heap header.</summary>
+    public const int MapStride = MapLayout.MapBytes + 12;
+
+    /// <summary>The draw border the fixture's window is built with — the game's own default.</summary>
+    public const int Border = 14;
+
+    /// <summary>The world's display name.</summary>
+    public const string WorldName = "Freymore";
+
+    /// <summary>The world's resource pack.</summary>
+    public const string Pack = "base";
+
+    /// <summary>The prefix the outdoor grid's ids are built from.</summary>
+    public const string GridPrefix = "base_s";
+
+    /// <summary>The world's map picture id.</summary>
+    public const string Picture = "base_-WORLDMAP-";
+
+    private readonly FakeMemory _mem;
+    private readonly uint _engine;
+    private readonly byte[] _manager = new byte[0x2300];
+    private readonly byte[] _world = new byte[0x140];
+    private readonly byte[] _maps = new byte[0x2000];
+    private readonly byte[] _text = new byte[0x2000];
+    private readonly byte[] _vector = new byte[0x800];
+    private int _mapCount, _textUsed;
+
+    /// <summary>Maps the blocks, wires the engine object to the manager, and sizes the tile window.</summary>
+    public MapHeap(FakeMemory mem, uint engine)
+    {
+        ArgumentNullException.ThrowIfNull(mem);
+        _mem = mem;
+        _engine = engine;
+        mem.Map(ManagerBase, _manager);
+        mem.Map(WorldBase, _world);
+        mem.Map(MapBase, _maps);
+        mem.Map(TextBase, _text);
+        mem.Map(VectorBase, _vector);
+
+        mem.PokeUInt32(engine + MapLayout.EngineManager, ManagerBase);
+        mem.PokeUInt32(ManagerBase + MapLayout.World, WorldBase);
+        SetWindow(Border);
+
+        BitConverter.GetBytes(engine).CopyTo(_world, (int)MapLayout.WorldEngine);
+        InlineString(_world, (int)MapLayout.WorldName, WorldName);
+        InlineString(_world, (int)MapLayout.WorldPack, Pack);
+        InlineString(_world, (int)MapLayout.WorldIdPrefix, "base_");
+        InlineString(_world, (int)MapLayout.WorldDatabase, "TheQuestBase");
+        InlineString(_world, (int)MapLayout.WorldGridPrefix, GridPrefix);
+        InlineString(_world, (int)MapLayout.WorldMapPicture, Picture);
+    }
+
+    /// <summary>Maps added so far, in the order they were added.</summary>
+    public List<uint> Maps { get; } = new();
+
+    /// <summary>Sizes the tile window the way the game does: the border either side of a grid map.</summary>
+    public void SetWindow(int border)
+    {
+        _mem.PokeUInt32(_engine + MapLayout.WindowBorder, (uint)border);
+        _mem.PokeUInt32(_engine + MapLayout.WindowSize, (uint)(border * 2 + MapLayout.GridMapTiles));
+    }
+
+    /// <summary>Adds a map and returns its address.</summary>
+    public uint AddMap(string id, string name, int width = MapLayout.GridMapTiles,
+                       int height = MapLayout.GridMapTiles,
+                       ushort flags = MapLayout.FlagOffsetByBorder, uint world = 0)
+    {
+        int at = _mapCount++ * MapStride;
+        uint address = MapBase + (uint)at;
+
+        BitConverter.GetBytes(_engine).CopyTo(_maps, at + (int)MapLayout.MapEngine);
+        BitConverter.GetBytes(world == 0 ? WorldBase : world).CopyTo(_maps, at + (int)MapLayout.MapWorld);
+        BitConverter.GetBytes(AddText(id)).CopyTo(_maps, at + (int)MapLayout.MapId);
+        BitConverter.GetBytes(AddText(name)).CopyTo(_maps, at + (int)MapLayout.MapName);
+        BitConverter.GetBytes(width).CopyTo(_maps, at + (int)MapLayout.MapWidth);
+        BitConverter.GetBytes(height).CopyTo(_maps, at + (int)MapLayout.MapHeight);
+        BitConverter.GetBytes(flags).CopyTo(_maps, at + (int)MapLayout.MapFlags);
+
+        Maps.Add(address);
+        return address;
+    }
+
+    /// <summary>Adds a 35×35 interior — no cell in the world, and laid at the window's origin.</summary>
+    public uint AddInterior(string id, string name, ushort flags = 0) =>
+        AddMap(id, name, 35, 35, flags);
+
+    /// <summary>Writes the world's map vector from <paramref name="maps"/>.</summary>
+    public void SetMaps(params uint[] maps)
+    {
+        ArgumentNullException.ThrowIfNull(maps);
+        Array.Clear(_vector);
+        for (int i = 0; i < maps.Length; i++)
+            BitConverter.GetBytes(maps[i]).CopyTo(_vector, i * 4);
+
+        BitConverter.GetBytes(VectorBase).CopyTo(_world, (int)MapLayout.WorldMapsBegin);
+        BitConverter.GetBytes(VectorBase + (uint)maps.Length * 4).CopyTo(_world, (int)MapLayout.WorldMapsEnd);
+    }
+
+    /// <summary>Points the world's map vector at an arbitrary pair, for the malformed cases.</summary>
+    public void SetMapsRaw(uint begin, uint end)
+    {
+        _mem.PokeUInt32(WorldBase + MapLayout.WorldMapsBegin, begin);
+        _mem.PokeUInt32(WorldBase + MapLayout.WorldMapsEnd, end);
+    }
+
+    /// <summary>Puts the player on <paramref name="map"/>, which both the manager and the world hold.</summary>
+    public void SetCurrentMap(uint map)
+    {
+        _mem.PokeUInt32(ManagerBase + MapLayout.Map, map);
+        _mem.PokeUInt32(WorldBase + MapLayout.WorldCurrentMap, map);
+    }
+
+    /// <summary>Places the player at a tile of the window, facing <paramref name="facing"/> degrees.</summary>
+    public void SetPosition(int windowX, int windowY, int facing = 0)
+    {
+        _mem.PokeUInt32(ManagerBase + MapLayout.PlayerX, (uint)windowX);
+        _mem.PokeUInt32(ManagerBase + MapLayout.PlayerY, (uint)windowY);
+        _mem.PokeUInt32(ManagerBase + MapLayout.Facing, (uint)facing);
+    }
+
+    /// <summary>Places the player at a tile of <paramref name="map"/>, converting the way the game does.</summary>
+    public void SetLocal(WorldMap map, int localX, int localY, int facing = 0)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        int origin = map.WindowOrigin(Border);
+        SetPosition(localX + origin, localY + origin, facing);
+    }
+
+    /// <summary>Sets the outdoor flag: the three-by-three block is loaded rather than one interior.</summary>
+    public void SetOutdoors(bool outdoors) =>
+        _mem.Write(ManagerBase + MapLayout.Outdoors, new[] { outdoors ? (byte)1 : (byte)0 });
+
+    /// <summary>Sets the world-absolute pair the engine caches.</summary>
+    public void SetWorldTile(int x, int y)
+    {
+        _mem.PokeUInt32(WorldBase + MapLayout.WorldTileX, (uint)x);
+        _mem.PokeUInt32(WorldBase + MapLayout.WorldTileY, (uint)y);
+    }
+
+    /// <summary>Rewrites the world's engine back-pointer, so it stops validating.</summary>
+    public void SetWorldEngine(uint engine) => _mem.PokeUInt32(WorldBase + MapLayout.WorldEngine, engine);
+
+    /// <summary>Rewrites a map's world back-pointer, so it stops validating.</summary>
+    public void SetMapWorld(uint map, uint world) => _mem.PokeUInt32(map + MapLayout.MapWorld, world);
+
+    /// <summary>Rewrites a map's width, for the implausible-size case.</summary>
+    public void SetMapWidth(uint map, int width) => _mem.PokeUInt32(map + MapLayout.MapWidth, (uint)width);
+
+    /// <summary>Rewrites a map's name pointer, so it stops reading back as one.</summary>
+    public void SetMapName(uint map, uint pointer) => _mem.PokeUInt32(map + MapLayout.MapName, pointer);
+
+    /// <summary>Rewrites a map's flag word.</summary>
+    public void SetMapFlags(uint map, ushort flags) => _mem.PokeUInt16(map + MapLayout.MapFlags, flags);
+
+    /// <summary>Nulls the manager pointer, as the game does between a save being loaded and rebuilt.</summary>
+    public void ClearManager() => _mem.PokeUInt32(_engine + MapLayout.EngineManager, 0);
+
+    /// <summary>The player's window column, so a check can see exactly what a teleport wrote.</summary>
+    public int WindowX => ReadInt(ManagerBase + MapLayout.PlayerX);
+
+    /// <summary>The player's window row.</summary>
+    public int WindowY => ReadInt(ManagerBase + MapLayout.PlayerY);
+
+    private int ReadInt(uint at)
+    {
+        var word = new byte[4];
+        return _mem.Read(at, word, 4) == 4 ? BitConverter.ToInt32(word, 0) : -1;
+    }
+
+    private uint AddText(string value)
+    {
+        var bytes = Encoding.ASCII.GetBytes(value);
+        uint address = TextBase + (uint)_textUsed;
+        bytes.CopyTo(_text, _textUsed);
+        _textUsed += bytes.Length + 1;
+        return address;
+    }
+
+    private static void InlineString(byte[] block, int at, string value)
+    {
+        Array.Clear(block, at, StdString.Bytes);
+        var bytes = Encoding.Latin1.GetBytes(value);
+        if (bytes.Length > StdString.InlineCapacity)
+            throw new ArgumentException($"'{value}' does not fit in the inline buffer.", nameof(value));
+        bytes.CopyTo(block, at);
+        BitConverter.GetBytes((uint)bytes.Length).CopyTo(block, at + 16);
+        BitConverter.GetBytes((uint)StdString.InlineCapacity).CopyTo(block, at + 20);
+    }
+}
+
+/// <summary>
+/// An <see cref="IGameHost"/> over a fake process, so a view model can be driven without a window.
+///
+/// It is a real host rather than a stub: the writes go through <see cref="TrainerActions"/> into the
+/// fake address space, so a check can assert on the bytes that landed rather than on the fact that a
+/// method was called.
+/// </summary>
+public sealed class FakeHost : ViewModels.IGameHost
+{
+    private readonly TrainerActions _actions;
+
+    /// <summary>Binds the host to a fake process.</summary>
+    public FakeHost(FakeMemory mem, uint record = 0)
+    {
+        ArgumentNullException.ThrowIfNull(mem);
+        Record = record == 0 ? FakeGame.LiveRecord : record;
+        _actions = new TrainerActions(mem, FakeGame.Image(mem));
+    }
+
+    /// <summary>The record the host writes to.</summary>
+    public uint Record { get; }
+
+    /// <summary>Everything the host was asked to say, newest last.</summary>
+    public List<string> Reported { get; } = new();
+
+    /// <inheritdoc/>
+    public bool IsAttached { get; set; } = true;
+
+    /// <inheritdoc/>
+    public bool IsReadOnly
+    {
+        get => _actions.ReadOnly;
+        set => _actions.ReadOnly = value;
+    }
+
+    /// <inheritdoc/>
+    public bool EditorHasFocus { get; set; }
+
+    /// <inheritdoc/>
+    public ActionResult WriteAttribute(int id, int value) => _actions.SetAttribute(Record, id, value);
+
+    /// <inheritdoc/>
+    public ActionResult WriteSkill(int id, int value) => _actions.SetSkill(Record, id, value);
+
+    /// <inheritdoc/>
+    public ActionResult WriteItemMeter(uint item, int value) => _actions.SetItemMeter(Record, item, value);
+
+    /// <inheritdoc/>
+    public ActionResult RestoreItem(uint item) => _actions.RestoreItem(Record, item);
+
+    /// <inheritdoc/>
+    public ActionResult Teleport(int localX, int localY) => _actions.Teleport(Record, localX, localY);
+
+    /// <inheritdoc/>
+    public void Report(string message) => Reported.Add(message);
+}
+
 /// <summary>Assembles a whole fake process: a mapped image, an engine object and its records.</summary>
 public static class FakeGame
 {
@@ -754,6 +1028,40 @@ public static class FakeGame
 
     /// <summary>Full charge count of the fixture's wand.</summary>
     public const int WandCharges = 12;
+
+    /// <summary>
+    /// A fake game whose player is standing in the middle of an outdoor cell, in a world holding
+    /// three grid maps and one interior.
+    ///
+    /// The cell is column 8, row 4 — the same one the live session this was confirmed against was on
+    /// — so the world-absolute pair a check derives can be compared against a number that came out of
+    /// the real game rather than out of the same arithmetic being tested.
+    /// </summary>
+    public static (FakeMemory Memory, MapHeap Heap) BuildGameWithMap()
+    {
+        var mem = BuildGame();
+        var heap = new MapHeap(mem, EngineAddress);
+
+        uint here = heap.AddMap("base_s0804", "Port of Mithria",
+                                flags: MapLayout.FlagOffsetByBorder | MapLayout.FlagRecallTarget);
+        uint west = heap.AddMap("base_s0704", "Wounded Land");
+        uint sea = heap.AddMap("base_s0101", "Sea");
+        uint house = heap.AddInterior("base_house7", "Your House",
+                                      flags: MapLayout.FlagTeleportDenied | MapLayout.FlagMarkDenied);
+
+        heap.SetMaps(here, west, sea, house);
+        heap.SetCurrentMap(here);
+        heap.SetOutdoors(true);
+
+        // Local (11, 9) of cell (8, 4), i.e. window (25, 23) and world tile (158, 72).
+        heap.SetPosition(11 + MapHeap.Border, 9 + MapHeap.Border);
+        heap.SetWorldTile(158, 72);
+
+        return (mem, heap);
+    }
+
+    /// <summary>The interior the map fixture builds, which the window lays at its origin, not the border.</summary>
+    public const string InteriorId = "base_house7";
 
     /// <summary>Parses the fake image's header the same way the trainer does at run time.</summary>
     public static PeImage Image(FakeMemory mem)
