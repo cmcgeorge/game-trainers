@@ -188,11 +188,17 @@ public sealed class FakeModule : IMemorySource
     /// the Leader ability, so the cross-check in <c>GameTables</c> can be exercised both ways: pointing
     /// <c>General</c> at a type that lacks the ability must produce -1 rather than that type.</para>
     /// </summary>
+    /// <param name="idOf">
+    /// What to put in each record's <c>ID</c> field. It defaults to the row index, which is what the
+    /// epic ruleset happens to hold — a conquest does not, so a test can pass the shape that broke the
+    /// reader: ids that skip values and repeat them.
+    /// </param>
     public void PlantUnitTypes(uint tableRva, int typeCount, int stride, int armyId, int leaderId,
                                bool giveArmyAbility = true, bool giveLeaderAbility = true,
-                               Func<int, int>? classOf = null)
+                               Func<int, int>? classOf = null, Func<int, int>? idOf = null)
     {
         classOf ??= i => i % 3;         // land, sea, air in rotation — two domains at least, as required
+        idOf ??= i => i;
         PutInt32(Civ3Layout.RvaBicData + (uint)Civ3Layout.BicUnitTypeCount, typeCount);
         PutUInt32(Civ3Layout.RvaBicData + (uint)Civ3Layout.BicUnitTypes, (uint)At(tableRva));
         PutInt32(Civ3Layout.RvaBicData + (uint)Civ3Layout.BicArmyUnitType, armyId);
@@ -201,7 +207,7 @@ public sealed class FakeModule : IMemorySource
         for (int i = 0; i < typeCount; i++)
         {
             uint u = tableRva + (uint)(i * stride);
-            PutInt32(u + (uint)Civ3Layout.UnitTypeRecordId, i);
+            PutInt32(u + (uint)Civ3Layout.UnitTypeRecordId, idOf(i));
             PutInt32(u + (uint)Civ3Layout.UnitTypeAttack, i);
             PutInt32(u + (uint)Civ3Layout.UnitTypeDefence, i + 1);
             PutInt32(u + (uint)Civ3Layout.UnitTypeMovement, 1);
@@ -219,9 +225,9 @@ public sealed class FakeModule : IMemorySource
     }
 
     /// <summary>
-    /// Plants a worker-job table. Unlike the race and unit-type tables this one carries no <c>ID</c>
-    /// field, so the stride can only be recovered from every record looking like a job — which is what
-    /// planting it at a non-standard stride exercises.
+    /// Plants a worker-job table. Unlike the race table this one carries no <c>ID</c> field at all, so
+    /// the stride can only be recovered from every record looking like a job — which is what planting it
+    /// at a non-standard stride exercises.
     /// </summary>
     public void PlantWorkerJobs(uint tableRva, int jobCount, int stride, params int[] costs)
     {

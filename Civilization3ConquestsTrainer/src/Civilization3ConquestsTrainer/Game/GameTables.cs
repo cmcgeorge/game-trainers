@@ -221,7 +221,10 @@ public sealed class GameTables
         nuint table = (nuint)ReadUInt(mem, bic + (nuint)Civ3Layout.BicUnitTypes);
         if (count is <= 0 or > 1024 || !Civ3Layout.LooksLikeHeapPointer((uint)table)) return list;
 
-        int stride = FindStride(mem, table, count, Civ3Layout.UnitTypeRecordId, Civ3Layout.UnitTypeStride);
+        // Not FindStride: this table's ID field is not the row index in a conquest, so the record has to
+        // vouch for itself. See Civ3Layout.UnitTypeRecordId.
+        int stride = FindStrideByRecord(mem, table, count, Civ3Layout.UnitTypeRecordProbeBytes,
+                                        Civ3Layout.UnitTypeStride, r => Civ3Layout.ValidateUnitType(r));
         if (stride <= 0) return list;
 
         for (int i = 0; i < count; i++)
@@ -277,7 +280,7 @@ public sealed class GameTables
     /// <summary>
     /// Reads the worker-job table, and returns where it is so the costs can be edited later.
     ///
-    /// <para>This is the one table with no <c>ID</c> field, so <see cref="FindStride"/> — which proves a
+    /// <para>This table has no <c>ID</c> field at all, so <see cref="FindStride"/> — which proves a
     /// stride by <c>Table[i].ID == i</c> — cannot be used. The substitute is
     /// <see cref="Civ3Layout.ValidateWorkerJob"/> applied to <i>every</i> record: a printable name and a
     /// sane cost, thirteen times running at a fixed spacing, is not something arbitrary memory offers.
@@ -292,7 +295,8 @@ public sealed class GameTables
         if (count is <= 0 or > 256 || !Civ3Layout.LooksLikeHeapPointer((uint)table))
             return (list, 0, Civ3Layout.WorkerJobStride);
 
-        int stride = FindWorkerJobStride(mem, table, count);
+        int stride = FindStrideByRecord(mem, table, count, Civ3Layout.WorkerJobRecordProbeBytes,
+                                        Civ3Layout.WorkerJobStride, r => Civ3Layout.ValidateWorkerJob(r));
         if (stride <= 0) return (list, 0, Civ3Layout.WorkerJobStride);
 
         for (int i = 0; i < count; i++)
@@ -306,23 +310,28 @@ public sealed class GameTables
         return (list, table, stride);
     }
 
-    private static int FindWorkerJobStride(IMemorySource mem, nuint table, int count)
+    /// <summary>
+    /// Confirms <paramref name="expected"/> is the real stride by requiring every record to satisfy
+    /// <paramref name="looksReal"/>, and searches only if it does not — the same shape as
+    /// <see cref="FindStride"/>, for the two tables whose <c>ID</c> field cannot prove a stride: a
+    /// <c>Worker_Job</c> has none, and a <c>UnitType</c>'s is not the row index.
+    /// </summary>
+    private static int FindStrideByRecord(IMemorySource mem, nuint table, int count, int probeBytes,
+                                          int expected, Func<byte[], bool> looksReal)
     {
-        if (WorkerJobStrideHolds(mem, table, count, Civ3Layout.WorkerJobStride)) return Civ3Layout.WorkerJobStride;
+        if (RecordsHold(mem, table, count, probeBytes, expected, looksReal)) return expected;
         for (int s = 0x40; s <= MaxSearchStride; s += 4)
-            if (s != Civ3Layout.WorkerJobStride && WorkerJobStrideHolds(mem, table, count, s)) return s;
+            if (s != expected && RecordsHold(mem, table, count, probeBytes, s, looksReal)) return s;
         return -1;
     }
 
-    private static bool WorkerJobStrideHolds(IMemorySource mem, nuint table, int count, int stride)
+    private static bool RecordsHold(IMemorySource mem, nuint table, int count, int probeBytes, int stride,
+                                    Func<byte[], bool> looksReal)
     {
         // Every record has to pass, not a sample of them: with no index to check, the only thing making
         // a false stride implausible is that it would have to produce a valid record every single time.
         for (int i = 0; i < count; i++)
-        {
-            byte[] rec = mem.Read(table + (nuint)(i * stride), Civ3Layout.WorkerJobRecordProbeBytes);
-            if (!Civ3Layout.ValidateWorkerJob(rec)) return false;
-        }
+            if (!looksReal(mem.Read(table + (nuint)(i * stride), probeBytes))) return false;
         return true;
     }
 

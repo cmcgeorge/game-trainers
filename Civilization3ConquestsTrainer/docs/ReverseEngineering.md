@@ -327,6 +327,43 @@ garbage through a stale constant. Live, this yielded all 32 civilizations
 (`Rome — Caesar`, `Egypt — Cleopatra`, … `Maya — Smoke-Jaguar`) and 141 unit types with correct
 attack/defence/movement/cost.
 
+#### `UnitType.ID` is not the row index — which the epic game hides and a conquest exposes
+
+That last paragraph was true of `Race` and only accidentally true of `UnitType`. Loading the
+**Mesopotamia** conquest emptied the Units tab's *Type* dropdown completely, and the reason is that
+`UnitType[i].ID == i` is a property of the *epic* ruleset rather than of the table. Mesopotamia's 31
+types read:
+
+```
+  idx  name                ID@+0x5C          idx  name                ID@+0x5C
+    0  Settler                    0           10  Galley                    29
+    1  Worker                     1           11  Leader                    47
+    2  Scout                      2           12  Army                      48
+    3  Warrior                    6           …
+    9  Catapult                  22           26  Galley                    29   <- repeated
+```
+
+The ids skip (row 3 holds 6) and repeat (both `Galley` rows hold 29, both `Boat` rows 195) — they are
+the ids the *epic* unit list gives those units, carried along by a ruleset that ships a subset of it.
+So the proof failed at row 3, `FindStride` searched every stride from `0x40` to `0x1000`, found none
+that satisfied `Table[i].ID == i` either, and returned -1. `ReadUnitTypes` then returned an empty
+list, and with it went the whole *Type* column, the army and great-leader ids (both derived from that
+list), and the domain filter.
+
+What the game indexes the table by is the **row position**, which two independent facts settle:
+
+* `General.BuildArmyUnitID` reads **12**, and row 12 is `Army`. The row whose `ID` is 12 is `Chariot`.
+  `Unit_form_army` passes that number straight to `Leader_spawn_unit`, so the game means row 12.
+* A barbarian on the map carries `Unit_Body.UnitTypeID` = **23**, and row 23 is `Fighter` — the
+  barbarian unit. Row 23's own `ID` field reads 6, which is `Warrior`.
+
+So the id the trainer hands the *Type* column, and writes into `Unit_Body+0x24`, is correct as it
+stands; only the stride proof was wrong. `Civ3Layout.ValidateUnitType` replaces it with the same
+self-vouching test `Worker_Job` already used — a printable, non-empty name and stats inside loose
+bounds, required of *every* record. Thirty-one of those in a row at `0x138` is as unlikely to be
+coincidence as thirteen job records at `0x74`, and it holds for a conquest and the epic game alike.
+The `ID` field is left read but unchecked, because its range is not ours to assume.
+
 Two more tables were mapped while answering "why does the AI have 30 units on turn 5?", and are read by
 the probe rather than the trainer:
 
@@ -361,10 +398,11 @@ A third table joins them, and it is the one the trainer **writes**:
 | `+0x8B8` | `WorkerJobCount` — 13 in the epic game |
 | `+0x3E1C` | `Worker_Job*` (stride `0x74`): `Name +0x04`, `TurnToComplete +0x44`, `Order +0x54` |
 
-`Worker_Job` is the **only** one of these tables with **no `ID` field**, so the `Table[i].ID == i` proof
-that pins the others is unavailable. `Civ3Layout.ValidateWorkerJob` substitutes for it: a printable,
-non-empty name and a cost inside a sane bound, required of *every* record rather than a sample. Thirteen
-consecutive records satisfying that at a fixed spacing is not something arbitrary memory offers.
+`Worker_Job` has **no `ID` field at all**, so the `Table[i].ID == i` proof that pins `Race` is
+unavailable. `Civ3Layout.ValidateWorkerJob` substitutes for it: a printable, non-empty name and a cost
+inside a sane bound, required of *every* record rather than a sample. Thirteen consecutive records
+satisfying that at a fixed spacing is not something arbitrary memory offers. `UnitType` now goes the same
+way, for the different reason set out above — leaving `Race` as the one table an id column still pins.
 
 ---
 
@@ -558,7 +596,8 @@ Five things fall out, all **[Confirmed]**:
    what a unit *is*, immediately and completely — which is what makes the Units tab's *Type* column a
    single four-byte write rather than a reconstruction.
 2. `BIC.UnitTypes` at `+0x3CD8` and the `0x138` stride, previously brute-forced against
-   `Table[i].ID == i`, are now the game's own numbers.
+   `Table[i].ID == i`, are now the game's own numbers — which is just as well, because that constraint
+   later turned out to be false for any ruleset but the epic one (§4.6).
 3. `UnitType.UnitAbilities` sits at `+0x88`, and abilities 32 and up live in a second word at `+0x130`
    — which is the second-to-last field in the record, so it independently re-confirms the stride.
 4. The four action words start at `UnitType+0xA8`. `UCV_Build_Army` is `0x10000040`: word 1

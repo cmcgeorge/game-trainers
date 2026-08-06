@@ -26,11 +26,14 @@ Three projects in `Civilization3ConquestsTrainer.sln`: the WPF app, its harness,
     - `GameLocator.cs` — chain A (module base + RVAs) → chain B (re-derive the array from the game's
       own code) → validate. Returns a `Civ3Location` or null with `LastError` set.
     - `GameTables.cs` — civilizations, unit types and worker jobs read out of the loaded `BIC`. The job
-      table is the one the trainer *writes*, and the only one with no `ID` column — so its stride is
-      proved by `ValidateWorkerJob` holding for every record rather than by `Table[i].ID == i`. **Do not replace
-      this with a curated table**: Conquests ships nine scenarios and the community ships thousands
-      of mods, each substituting its own civs and units, so a baked table would be right only for the
-      unmodified epic game and would silently mislabel everything else.
+      table is the one the trainer *writes*. **Only `Race` has an `ID` column that equals the row
+      index**: `Worker_Job` has no `ID` at all, and `UnitType.ID` is the *epic* unit's id, which in a
+      conquest skips values and repeats them (§4.6 — this once emptied the Units tab's Type dropdown for
+      every scenario). Both strides are therefore proved by `ValidateWorkerJob` / `ValidateUnitType`
+      holding for every record; **do not "restore" a `Table[i].ID == i` check on unit types.**
+      **Do not replace this with a curated table** either: Conquests ships nine scenarios and the
+      community ships thousands of mods, each substituting its own civs and units, so a baked table
+      would be right only for the unmodified epic game and would silently mislabel everything else.
     - `ConquestBook.cs` — the nine shipped conquests and the behaviour notes. The conquest list came
       from the shipped `.biq` filenames, not from memory — the fifth is **Mesoamerica**, which is
       commonly misremembered as an industrial-era scenario.
@@ -42,7 +45,7 @@ Three projects in `Civilization3ConquestsTrainer.sln`: the WPF app, its harness,
     (`IScanHost`, `ScanValue`, `ScanResultViewModel`, `FrozenValueViewModel`) matches the repo's other
     value-scanner trainers.
 - `test/FormatCheck/` — headless harness (console `Exe`, `net8.0-windows` + `UseWPF` because it
-  references the WPF app for the view-model types). **429 checks**, no game and no copyrighted files
+  references the WPF app for the view-model types). **452 checks**, no game and no copyrighted files
   needed.
 
 It **has a `GameLocator`** and **no save editor**. The exe is native, unpacked, fixed-base and
@@ -72,6 +75,15 @@ that wraps at 460px, plus `ToolTipService.ShowDuration` of 60 s on the `Button` 
 without both, a WPF tooltip is a single unwrapped line that vanishes after five seconds. Keep new
 multi-line tooltips in that shape and separate paragraphs with `&#10;&#10;`.
 
+**A control inside a `DataGridTemplateColumn.CellTemplate` must bind with
+`UpdateSourceTrigger=PropertyChanged`, or its edits go nowhere.** A `DataGrid` puts a `BindingGroup` on
+every row; a binding inside the row joins it and then withholds its source update until that group
+commits — which never happens for a control in the *cell* template, because the cell is not in edit
+mode while the control is being used. The symptom is silent and convincing: the ComboBox moves, its
+`SelectedValue` updates, the view-model setter is never called, and no write reaches the game. This
+already cost the Units tab's **Type** column once. `FormatCheck` now parses `MainWindow.xaml` and fails
+if any editable `CellTemplate` binding omits the trigger.
+
 ## Testing Guidelines
 
 There is no xUnit/NUnit suite. `FormatCheck` runs `Check(...)`/`Equal(...)` assertions and exits 0
@@ -83,8 +95,9 @@ and runs the locator over `FakeModule` address spaces — a module relocated awa
 unrecognised build, one corrupted leader slot out of 32, an empty image, a module with no PE header, a
 human civ id outside the player set, and a leader array moved so only the signature chain can find it
 (plus the negative case proving that chain is not passing by accident), and a 64-bit image the locator
-must refuse. What cannot be headless — the GUI and the live locate/write — was confirmed by hand
-against a running game.
+must refuse. It also parses `MainWindow.xaml` and fails on a `CellTemplate` binding that a `DataGrid`
+row's `BindingGroup` would swallow. What cannot be headless — the GUI and the live locate/write — was
+confirmed by hand against a running game.
 
 ## Commit & Pull Request Guidelines
 

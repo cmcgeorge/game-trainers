@@ -310,21 +310,35 @@ public static class Civ3Layout
     public const int WorkerJobRecordProbeBytes = WorkerJobTurnToComplete + 4;
 
     /// <summary>
-    /// [Confirmed] <c>sizeof(UnitType)</c>. Brute-forced against <c>UnitType[i].ID == i</c>, and later
-    /// read straight out of the game's code: both <c>Unit_has_ability</c> (<c>0x5CB430</c>) and
-    /// <c>Unit_upgrade</c> (<c>0x5CF2E0</c>) index the table with <c>imul ecx,ecx,0x138</c> or the
-    /// equivalent <c>lea</c> chain.
+    /// [Confirmed] <c>sizeof(UnitType)</c>. Read straight out of the game's code: both
+    /// <c>Unit_has_ability</c> (<c>0x5CB430</c>) and <c>Unit_upgrade</c> (<c>0x5CF2E0</c>) index the
+    /// table with <c>imul ecx,ecx,0x138</c> or the equivalent <c>lea</c> chain.
     /// </summary>
     public const int UnitTypeStride = 0x138;
     public const int UnitTypeName = 0x08;             // [Confirmed] char[32]
     public const int UnitTypeCost = 0x54;             // [Confirmed]
     public const int UnitTypeDefence = 0x58;          // [Confirmed]
 
-    /// <summary>[Confirmed] The <c>ID</c> field inside a <c>UnitType</c> record — not to be confused
-    /// with <see cref="UnitTypeId"/>, which is where a <i>unit</i> stores its type.</summary>
+    /// <summary>
+    /// [Confirmed] The <c>ID</c> field inside a <c>UnitType</c> record — not to be confused with
+    /// <see cref="UnitTypeId"/>, which is where a <i>unit</i> stores its type.
+    ///
+    /// <para><b>It is not the row index, and it is not unique.</b> In the epic ruleset the two coincide,
+    /// which is what once made <c>Table[i].ID == i</c> look like a stride proof for this table. A
+    /// conquest disproves it: Mesopotamia's 31 types read 0, 1, 2, 6, 7, 8 … 195 here — the ids the epic
+    /// unit list gives those units — and repeat several of them, its two <i>Galley</i> rows both reading
+    /// 29. What the game indexes by is the row position instead: <c>General.BuildArmyUnitID</c> holds 12
+    /// there, which is row 12 <i>Army</i> and not the row whose <c>ID</c> is 12, and a barbarian on the
+    /// map carries type 23, which is row 23 <i>Fighter</i>. So the field is documented here but nothing
+    /// reads it: the stride is proved by <see cref="ValidateUnitType"/> instead, and the id the trainer
+    /// hands out is the row index the game itself means.</para>
+    /// </summary>
     public const int UnitTypeRecordId = 0x5C;
     public const int UnitTypeAttack = 0x60;           // [Confirmed]
     public const int UnitTypeMovement = 0x70;         // [Confirmed]
+
+    /// <summary>How many bytes of a <c>UnitType</c> record <see cref="ValidateUnitType"/> needs.</summary>
+    public const int UnitTypeRecordProbeBytes = UnitTypeMovement + 4;
 
     /// <summary>
     /// [Confirmed] The unit type's ability bitfield, indexed by <c>enum UnitTypeAbilities</c> — the
@@ -540,9 +554,9 @@ public static class Civ3Layout
     }
 
     /// <summary>
-    /// Whether a <c>Worker_Job</c> record looks real. Unlike <c>Race</c> and <c>UnitType</c> this table
-    /// has <b>no <c>ID</c> field</b>, so the usual <c>Table[i].ID == i</c> stride proof is unavailable
-    /// and the record has to vouch for itself: a printable, non-empty name and a cost inside
+    /// Whether a <c>Worker_Job</c> record looks real. Unlike <c>Race</c> this table has <b>no <c>ID</c>
+    /// field</b>, so the usual <c>Table[i].ID == i</c> stride proof is unavailable and the record has to
+    /// vouch for itself: a printable, non-empty name and a cost inside
     /// <see cref="GameFacts.MaxWorkerJobTurnToComplete"/>. Thirteen consecutive records satisfying that
     /// at a stride of <c>0x74</c> is what stands in for the missing index.
     /// </summary>
@@ -553,15 +567,49 @@ public static class Civ3Layout
         int cost = BitConverter.ToInt32(record.Slice(WorkerJobTurnToComplete, 4));
         if (cost < 0 || cost > GameFacts.MaxWorkerJobTurnToComplete) return false;
 
-        // A name, not just bytes: printable ASCII up to the terminator, and at least one character of it.
-        var name = record.Slice(WorkerJobName, 32);
+        return IsName(record.Slice(WorkerJobName, 32));
+    }
+
+    /// <summary>
+    /// Whether a <c>UnitType</c> record looks real.
+    ///
+    /// <para>This table <i>has</i> an <c>ID</c> field, but it is not the row index (see
+    /// <see cref="UnitTypeRecordId"/> — a conquest's ids skip and repeat), so it proves nothing about a
+    /// stride and the record has to vouch for itself exactly as a <c>Worker_Job</c> does: a printable,
+    /// non-empty name and stats inside bounds arbitrary memory does not clear. Thirty-one consecutive
+    /// records satisfying that at a spacing of <c>0x138</c> is what stands in for the missing index.</para>
+    /// </summary>
+    public static bool ValidateUnitType(ReadOnlySpan<byte> record)
+    {
+        if (record.Length < UnitTypeRecordProbeBytes) return false;
+
+        // Deliberately loose, and for the same reason as MaxWorkerJobTurnToComplete: the ruleset is the
+        // modder's to write, so these only have to be tight enough that random memory fails them. Zero
+        // is legal throughout — a Settler attacks and defends at 0, and a barbarian costs nothing. The
+        // ID field is deliberately left out: it is not the row index, and its range is not ours to assume.
+        int cost = BitConverter.ToInt32(record.Slice(UnitTypeCost, 4));
+        int attack = BitConverter.ToInt32(record.Slice(UnitTypeAttack, 4));
+        int defence = BitConverter.ToInt32(record.Slice(UnitTypeDefence, 4));
+        int movement = BitConverter.ToInt32(record.Slice(UnitTypeMovement, 4));
+        if (cost is < 0 or > 1_000_000) return false;
+        if (attack is < 0 or > 10_000 || defence is < 0 or > 10_000 || movement is < 0 or > 10_000) return false;
+
+        return IsName(record.Slice(UnitTypeName, 32));
+    }
+
+    /// <summary>
+    /// Whether a fixed-width character field holds a <i>name</i> rather than merely bytes: printable
+    /// ASCII up to the terminator, at least one character of it, and a terminator inside the field.
+    /// </summary>
+    private static bool IsName(ReadOnlySpan<byte> field)
+    {
         int length = 0;
-        while (length < name.Length && name[length] != 0)
+        while (length < field.Length && field[length] != 0)
         {
-            if (name[length] is < 0x20 or > 0x7E) return false;
+            if (field[length] is < 0x20 or > 0x7E) return false;
             length++;
         }
-        return length is > 0 and < 32;
+        return length > 0 && length < field.Length;
     }
 
     /// <summary>

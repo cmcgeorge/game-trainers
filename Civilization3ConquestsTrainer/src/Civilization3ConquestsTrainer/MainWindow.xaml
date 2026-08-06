@@ -204,12 +204,21 @@
                             <DataGridTextColumn Header="#" Binding="{Binding Slot}" IsReadOnly="True" Width="40"/>
                             <!-- A template column rather than a DataGridComboBoxColumn: the list of types
                                  a unit may become is per-row (it is filtered to that unit's own domain),
-                                 and a DataGridComboBoxColumn shares one ItemsSource across the grid. -->
+                                 and a DataGridComboBoxColumn shares one ItemsSource across the grid.
+
+                                 UpdateSourceTrigger=PropertyChanged is load-bearing, not decoration. A
+                                 DataGrid puts a BindingGroup on every row, bindings inside the row join
+                                 it, and a joined binding holds its source update until the group commits
+                                 — which for a control living in the CellTemplate never happens, because
+                                 the cell is not in edit mode when the dropdown is used. Without this the
+                                 ComboBox moves, SelectedValue updates, and the view-model never hears:
+                                 picking a type silently does nothing. Confirmed against a live game. -->
                             <DataGridTemplateColumn Header="Type" Width="170">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <ComboBox ItemsSource="{Binding AvailableTypes}" DisplayMemberPath="Name"
-                                                  SelectedValuePath="Id" SelectedValue="{Binding TypeId}"
+                                                  SelectedValuePath="Id"
+                                                  SelectedValue="{Binding TypeId, UpdateSourceTrigger=PropertyChanged}"
                                                   BorderThickness="0" Background="Transparent"
                                                   ToolTipService.ShowDuration="60000"
                                                   ToolTip="Changes what this unit IS. Civ3 looks up a unit's attack, defence, movement, hit points, abilities and available orders from this field every time it needs them, so the change takes effect immediately — a Warrior written to Modern Armor fights as Modern Armor.&#10;&#10;WHAT IT DOES NOT CHANGE: the picture on the map. A unit's artwork is loaded when the unit is created, from its type, era and civilization, so a retyped unit keeps the sprite it was born with.&#10;&#10;DAMAGE IS CLEARED as part of the change, because maximum hit points come from the type — a unit carrying damage that became a smaller type would otherwise be past dead.&#10;&#10;The list offers this unit's own domain (land, sea or air); tick 'Any domain' above to see all of them. For an army, use 'Make great leader' rather than picking the Army type here — that gets you an empty shell."/>

@@ -6,6 +6,8 @@
 //
 //   dotnet run --project test\FormatCheck
 
+using System.IO;
+using System.Xml.Linq;
 using Civilization3ConquestsTrainer.Game;
 using Civilization3ConquestsTrainer.ViewModels;
 using FormatCheck;
@@ -618,12 +620,14 @@ foreach (int plantedStride in new[] { Civ3Layout.WorkerJobStride, 0x80 })
 // the ability that role implies. That is what these exercise, in both directions.
 
 GameTables TypeTables(int armyId, int leaderId, bool armyAbility = true, bool leaderAbility = true,
-                      Func<int, int>? classOf = null, int stride = Civ3Layout.UnitTypeStride)
+                      Func<int, int>? classOf = null, int stride = Civ3Layout.UnitTypeStride,
+                      Func<int, int>? idOf = null)
 {
     var m = new FakeModule(0x400000, 0x700000);
     m.WritePeHeader(GameFacts.KnownTimeDateStamp);
     m.PlantGame(Civ3Layout.RvaLeaders);
-    m.PlantUnitTypes(0x2D0000, typeCount: 9, stride: stride, armyId, leaderId, armyAbility, leaderAbility, classOf);
+    m.PlantUnitTypes(0x2D0000, typeCount: 9, stride: stride, armyId, leaderId, armyAbility, leaderAbility,
+                     classOf, idOf);
     var l = new GameLocator(m).Locate();
     return l != null ? GameTables.Read(m, l) : GameTables.Empty;
 }
@@ -669,6 +673,57 @@ Check("but the army id still works, because it never depended on the class field
 Equal("empty tables nominate no army", GameTables.Empty.ArmyUnitTypeId, -1);
 Equal("and no great leader", GameTables.Empty.GreatLeaderUnitTypeId, -1);
 Check("and cannot filter by domain", !GameTables.Empty.UnitClassesUsable);
+
+// The regression that emptied the Type dropdown in a live conquest. UnitType.ID equals the row index in
+// the epic ruleset and in nothing else: Mesopotamia's 31 types read 0, 1, 2, 6, 7 … 195 and repeat
+// several of those. The table's stride can therefore only be proved by the records themselves.
+int[] conquestIds = { 0, 1, 2, 6, 7, 8, 29, 47, 29 };
+var conquestTypes = TypeTables(armyId: 7, leaderId: 8, idOf: i => conquestIds[i]);
+Equal("a conquest whose ids skip and repeat still reads", conquestTypes.UnitTypes.Count, 9);
+Equal("with the right names", conquestTypes.UnitTypeName(6), "Unit6");
+Check("and ids that are row indices, which is what the game itself indexes the table by",
+    conquestTypes.UnitTypes.Select(t => t.Id).SequenceEqual(Enumerable.Range(0, 9)));
+Equal("the army type is still nominated", conquestTypes.ArmyUnitTypeId, 7);
+Equal("and the great-leader type", conquestTypes.GreatLeaderUnitTypeId, 8);
+Check("and the domain filter still works", conquestTypes.UnitClassesUsable);
+
+foreach (int plantedStride in new[] { Civ3Layout.UnitTypeStride, 0x140, 0x200 })
+{
+    var strided = TypeTables(armyId: 7, leaderId: 8, stride: plantedStride, idOf: i => conquestIds[i]);
+    Equal($"unit types recovered at stride 0x{plantedStride:X} with no usable id column",
+        strided.UnitTypes.Count, 9);
+    if (strided.UnitTypes.Count == 9)
+        Equal($"and named correctly at stride 0x{plantedStride:X}", strided.UnitTypeName(4), "Unit4");
+}
+
+// What stands in for the missing index: the record has to look like a unit type on its own terms.
+byte[] UnitTypeRecord(string name, int cost = 30, int attack = 2, int defence = 1, int movement = 1)
+{
+    var r = new byte[Civ3Layout.UnitTypeRecordProbeBytes];
+    System.Text.Encoding.ASCII.GetBytes(name).CopyTo(r, Civ3Layout.UnitTypeName);
+    BitConverter.GetBytes(cost).CopyTo(r, Civ3Layout.UnitTypeCost);
+    BitConverter.GetBytes(attack).CopyTo(r, Civ3Layout.UnitTypeAttack);
+    BitConverter.GetBytes(defence).CopyTo(r, Civ3Layout.UnitTypeDefence);
+    BitConverter.GetBytes(movement).CopyTo(r, Civ3Layout.UnitTypeMovement);
+    return r;
+}
+
+Check("a real-looking unit type validates", Civ3Layout.ValidateUnitType(UnitTypeRecord("Swordsman")));
+Check("a Settler validates despite attacking and defending at 0",
+    Civ3Layout.ValidateUnitType(UnitTypeRecord("Settler", cost: 30, attack: 0, defence: 0)));
+Check("so does a barbarian that costs nothing", Civ3Layout.ValidateUnitType(UnitTypeRecord("Fighter", cost: 0)));
+Check("a zeroed record does not — it has no name", !Civ3Layout.ValidateUnitType(new byte[Civ3Layout.UnitTypeRecordProbeBytes]));
+
+var controlByte = UnitTypeRecord("Swordsman");
+controlByte[Civ3Layout.UnitTypeName + 3] = 0x01;
+Check("nor does a name with a control byte in it", !Civ3Layout.ValidateUnitType(controlByte));
+
+var noTerminator = UnitTypeRecord("Swordsman");
+Array.Fill(noTerminator, (byte)'A', Civ3Layout.UnitTypeName, 32);
+Check("nor one that runs past the end of its field", !Civ3Layout.ValidateUnitType(noTerminator));
+Check("nor a negative cost", !Civ3Layout.ValidateUnitType(UnitTypeRecord("Swordsman", cost: -1)));
+Check("nor an absurd attack", !Civ3Layout.ValidateUnitType(UnitTypeRecord("Swordsman", attack: 1_000_000)));
+Check("nor a truncated record", !Civ3Layout.ValidateUnitType(new byte[Civ3Layout.UnitTypeRecordProbeBytes - 1]));
 
 // =================================================================================================
 Group("Scan value helpers");
@@ -1110,6 +1165,56 @@ blockedRow.StoredFood = 999;
 Equal("a blocked city edit writes nothing", blockedHost.Writes.Count, 0);
 Equal("and the row does not pretend it took", blockedRow.StoredFood, 0);
 Check("and the user is told why", blockedHost.LastReport.Contains("Writes are disabled"));
+
+// =================================================================================================
+Group("Shell bindings a DataGrid would otherwise swallow");
+// =================================================================================================
+// A DataGrid puts a BindingGroup on every row, and a binding inside that row joins it and then holds
+// its source update until the group commits. For a control that lives in a CellTemplate — where the
+// cell is not in edit mode while the control is being used — that commit never comes, so the edit
+// silently does nothing at all. Every such binding therefore has to say UpdateSourceTrigger=
+// PropertyChanged. Confirmed against a live game: without it the Units tab's Type dropdown moved, its
+// SelectedValue updated, and the view-model never heard about it.
+
+string? shellXaml = FindUp("src/Civilization3ConquestsTrainer/MainWindow.xaml");
+if (shellXaml == null)
+{
+    Console.WriteLine("  SKIP  MainWindow.xaml is not reachable from the harness — binding check not run");
+}
+else
+{
+    XNamespace pres = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+    string[] editableProperties = { "SelectedValue", "SelectedItem", "SelectedIndex", "IsChecked", "Text", "Value" };
+
+    var swallowed = new List<string>();
+    int examined = 0;
+    foreach (var template in XDocument.Load(shellXaml).Descendants(pres + "DataGridTemplateColumn.CellTemplate"))
+        foreach (var element in template.Descendants())
+            foreach (var attribute in element.Attributes())
+            {
+                if (!editableProperties.Contains(attribute.Name.LocalName)) continue;
+                if (!attribute.Value.TrimStart().StartsWith("{Binding")) continue;
+                examined++;
+                if (!attribute.Value.Contains("UpdateSourceTrigger=PropertyChanged"))
+                    swallowed.Add($"{element.Name.LocalName}.{attribute.Name.LocalName}");
+            }
+
+    Check("the Type column's dropdown is one of them", examined > 0);
+    Check($"every editable CellTemplate binding updates its source on the spot" +
+          (swallowed.Count > 0 ? $" — these do not: {string.Join(", ", swallowed)}" : ""),
+        swallowed.Count == 0);
+}
+
+static string? FindUp(string relativePath)
+{
+    string relative = relativePath.Replace('/', Path.DirectorySeparatorChar);
+    for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+    {
+        string candidate = Path.Combine(dir.FullName, relative);
+        if (File.Exists(candidate)) return candidate;
+    }
+    return null;
+}
 
 // =================================================================================================
 Console.WriteLine();
