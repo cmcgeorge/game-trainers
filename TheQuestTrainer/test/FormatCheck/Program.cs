@@ -35,6 +35,10 @@ internal static class Program
         CatalogChecks();
         InventoryChecks();
         ItemActionChecks();
+        ConditionLayoutChecks();
+        ConditionTableChecks();
+        ConditionReaderChecks();
+        ConditionActionChecks();
         PickerChecks();
 
         Console.WriteLine();
@@ -1006,6 +1010,353 @@ internal static class Program
             !vanishedActions.RestoreItem(record, vanished.Heap.Items[0]).Ok);
     }
 
+    private static void ConditionLayoutChecks()
+    {
+        Section("condition layout");
+
+        Check("the disease vector sits at +0x3B4", ConditionLayout.DiseasesBegin == 0x3B4);
+        Check("its three pointers are contiguous",
+            ConditionLayout.DiseasesEnd == 0x3B8 && ConditionLayout.DiseasesCapacity == 0x3BC);
+        Check("it comes after the equipment arrays",
+            ConditionLayout.DiseasesBegin > ItemLayout.ActiveWeaponSet);
+        Check("it comes before fame", ConditionLayout.DiseasesCapacity <= QuestLayout.Fame);
+
+        Check("the effect groups start at +0x404", ConditionLayout.EffectGroups == 0x404);
+        Check("they start past the fields the snapshot covers",
+            ConditionLayout.EffectGroups >= QuestLayout.RecordBytes);
+        Check("a group is one std::vector", ConditionLayout.EffectGroupBytes == 12);
+        Check("there are 25 of them, slot 0 unused",
+            ConditionLayout.EffectGroupSlots == 25 &&
+            ConditionLayout.FirstEffectGroup == 1 && ConditionLayout.LastEffectGroup == 24);
+
+        // The kind table abuts the group array. That is the arithmetic the game's own cure does,
+        // written out, so a slip in either constant fails here rather than reading a neighbour.
+        Check("the kind table abuts the group array", ConditionLayout.EffectGroupOfKind == 0x530);
+
+        // The three groups the shipped build files these kinds under, reached the way the trainer
+        // reaches them: group index times twelve, from the base.
+        Check("group 23 is where +0x518 is", ConditionLayout.EffectGroupBegin(0x1000, 23) == 0x1000 + 0x518);
+        Check("group 22 is where +0x50C is", ConditionLayout.EffectGroupBegin(0x1000, 22) == 0x1000 + 0x50C);
+        Check("group 21 is where +0x500 is", ConditionLayout.EffectGroupBegin(0x1000, 21) == 0x1000 + 0x500);
+        Check("a group's end follows its begin",
+            ConditionLayout.EffectGroupEnd(0x1000, 23) == ConditionLayout.EffectGroupBegin(0x1000, 23) + 4);
+        Check("the last group ends exactly where the kind table starts",
+            ConditionLayout.EffectGroupBegin(0, ConditionLayout.LastEffectGroup) + ConditionLayout.EffectGroupBytes
+                == ConditionLayout.EffectGroupOfKind);
+
+        Check("the kind table is indexed by dword",
+            ConditionLayout.EffectGroupSlot(0x1000, ConditionLayout.KindPoison) == 0x1000 + 0x530 + 0x1A * 4);
+        Check("the three kinds are the game's own",
+            ConditionLayout.KindPoison == 0x1A && ConditionLayout.KindCurse == 0x1B &&
+            ConditionLayout.KindParalysis == 0x1C);
+
+        Check("only groups the game uses are accepted",
+            !ConditionLayout.IsEffectGroup(0) && ConditionLayout.IsEffectGroup(1) &&
+            ConditionLayout.IsEffectGroup(24) && !ConditionLayout.IsEffectGroup(25) &&
+            !ConditionLayout.IsEffectGroup(-1));
+
+        Check("the effect's fields tile",
+            ConditionLayout.EffectTypeKey == 0x04 && ConditionLayout.EffectMagnitude == 0x08 &&
+            ConditionLayout.EffectDuration == 0x0C && ConditionLayout.EffectGroup == 0x10 &&
+            ConditionLayout.EffectSource == 0x11 && ConditionLayout.EffectSubject == 0x12);
+        Check("the effect is the size the game frees", ConditionLayout.EffectBytes == 0x14);
+        Check("every field is inside the allocation",
+            ConditionLayout.EffectSubject < ConditionLayout.EffectBytes);
+
+        // The game's own cure removes these three sources and no others. Equipment, disease and
+        // race are all re-derived from something that still exists.
+        Check("a cure removes sources 2, 3 and 6",
+            ConditionLayout.IsCurable(2) && ConditionLayout.IsCurable(3) && ConditionLayout.IsCurable(6));
+        Check("a cure leaves equipment, disease and race alone",
+            !ConditionLayout.IsCurable(ConditionLayout.SourceEquipment) &&
+            !ConditionLayout.IsCurable(ConditionLayout.SourceDisease) &&
+            !ConditionLayout.IsCurable(ConditionLayout.SourceRace));
+        Check("and leaves an unknown source alone",
+            !ConditionLayout.IsCurable(0) && !ConditionLayout.IsCurable(7) && !ConditionLayout.IsCurable(255));
+
+        Check("a disease type's id and name are where the game reads them",
+            ConditionLayout.DiseaseTypeId == 0x04 && ConditionLayout.DiseaseTypeName == 0x08);
+    }
+
+    private static void ConditionTableChecks()
+    {
+        Section("condition tables");
+
+        Check("the game names four", ConditionTables.All.Count == 4);
+        Check("they are the four with icons",
+            ConditionTables.All.Contains(Condition.Poison) && ConditionTables.All.Contains(Condition.Disease) &&
+            ConditionTables.All.Contains(Condition.Curse) && ConditionTables.All.Contains(Condition.Paralysis));
+
+        Check("the labels are the game's own",
+            ConditionTables.Name(Condition.Poison) == "Poisoned" &&
+            ConditionTables.Name(Condition.Disease) == "Diseased" &&
+            ConditionTables.Name(Condition.Curse) == "Cursed" &&
+            ConditionTables.Name(Condition.Paralysis) == "Paralyzed");
+        Check("every condition has a noun and an effect",
+            ConditionTables.All.All(c => ConditionTables.Noun(c).Length > 0 && ConditionTables.Effect(c).Length > 0));
+
+        Check("three conditions are effect kinds, disease is not",
+            ConditionTables.EffectKind(Condition.Poison) == ConditionLayout.KindPoison &&
+            ConditionTables.EffectKind(Condition.Curse) == ConditionLayout.KindCurse &&
+            ConditionTables.EffectKind(Condition.Paralysis) == ConditionLayout.KindParalysis &&
+            ConditionTables.EffectKind(Condition.Disease) is null);
+
+        // The game prints poison as health per turn and both of the timed ones as turns left.
+        Check("poison is described per turn",
+            ConditionTables.Describe(Condition.Poison, 2, 0) == "2 health per turn");
+        Check("one turn is not pluralised",
+            ConditionTables.Describe(Condition.Curse, 0, 1) == "1 turn left");
+        Check("more than one is",
+            ConditionTables.Describe(Condition.Paralysis, 0, 14) == "14 turns left");
+    }
+
+    private static void ConditionReaderChecks()
+    {
+        Section("condition reader");
+
+        var clean = FakeGame.BuildGame();
+        uint record = FakeGame.LiveRecord;
+
+        var healthy = ConditionReader.Read(clean, record);
+        Check("a clean character reads as clean", healthy is { Any: false, AnyCurable: false });
+        Check("and says so", healthy?.Summary == "None.");
+        Check("with no diseases", healthy?.Diseases.Count == 0);
+
+        var (mem, heap) = FakeGame.BuildAfflictedGame();
+        var sick = ConditionReader.Read(mem, record);
+        Check("an afflicted character reads as afflicted", sick is { Any: true, AnyCurable: true });
+
+        // Two diseases are two afflictions, so all four conditions produce five lines.
+        Check("every condition is reported", sick?.Afflictions.Count == 5);
+        Check("poison is reported the way the game words it",
+            sick?.Afflictions.Any(a => a.Label == "Poisoned — 2 health per turn") == true);
+        Check("a curse reports its longest remaining turn count",
+            sick?.Afflictions.Any(a => a.Label == "Cursed — 14 turns left") == true);
+        Check("paralysis is reported too",
+            sick?.Afflictions.Any(a => a.Label == "Paralyzed — 5 turns left") == true);
+        Check("diseases are named through their type",
+            sick?.Diseases.SequenceEqual(new[] { "Grey Fever", "Bone Rot" }) == true);
+        Check("and each is its own line",
+            sick?.Afflictions.Count(a => a.Condition == Condition.Disease) == 2 &&
+            sick.Afflictions.Any(a => a.Label == "Diseased — Grey Fever"));
+        Check("the summary is one line per affliction", sick?.Summary.Split('\n').Length == 5);
+
+        // The racial modifier in group 2 is an effect like any other, and it is not an affliction.
+        Check("a racial modifier is not reported as a condition",
+            sick?.Afflictions.All(a => a.Condition != Condition.Poison || a.Entries == 1) == true);
+
+        var curseGroup = ConditionReader.ReadGroup(mem, record, ConditionHeap.CurseGroup);
+        Check("a group reports its entries and its totals",
+            curseGroup is { Effects.Count: 2, LongestDuration: 14, Curable: 2 });
+
+        var racial = ConditionReader.ReadGroup(mem, record, 2);
+        Check("a group counts only the curable entries as curable",
+            racial is { Effects.Count: 2, Curable: 0 });
+        Check("and reports each effect's source",
+            racial?.Effects.Select(e => e.Source).SequenceEqual(
+                new byte[] { ConditionLayout.SourceRace, ConditionLayout.SourceDisease }) == true);
+
+        // The reader follows the record's own kind table rather than a baked-in group number.
+        var (moved, movedHeap) = FakeGame.BuildAfflictedGame();
+        movedHeap.SetKind(ConditionLayout.KindPoison, 19);
+        movedHeap.SetGroup(19, movedHeap.AddEffect(9, 0, source: 6, group: 19));
+        movedHeap.SetGroup(ConditionHeap.PoisonGroup);
+        Check("the kind table is followed, not assumed",
+            ConditionReader.Read(moved, record)?.Afflictions
+                .Any(a => a.Label == "Poisoned — 9 health per turn") == true);
+
+        // The game's own test is "does the poison total more than zero", not "is the list empty".
+        var (balanced, balancedHeap) = FakeGame.BuildAfflictedGame();
+        balancedHeap.SetGroup(ConditionHeap.PoisonGroup,
+            balancedHeap.AddEffect(4, 0, source: 6, group: ConditionHeap.PoisonGroup),
+            balancedHeap.AddEffect(-4, 0, source: 6, group: ConditionHeap.PoisonGroup));
+        Check("poison that nets to nothing is not poison",
+            ConditionReader.Read(balanced, record)?.Afflictions
+                .All(a => a.Condition != Condition.Poison) == true);
+
+        // Every way the structures can fail to be what they should be ends in null, never in a
+        // half-read list — these are the addresses the cure writes to.
+        var (bad, badHeap) = FakeGame.BuildAfflictedGame();
+        ConditionHeap.SetKind(bad, record, ConditionLayout.KindPoison, 0);
+        Check("a kind filed under no group is refused", ConditionReader.Read(bad, record) is null);
+
+        ConditionHeap.SetKind(bad, record, ConditionLayout.KindPoison, ConditionLayout.EffectGroupSlots);
+        Check("a kind filed past the array is refused", ConditionReader.Read(bad, record) is null);
+
+        ConditionHeap.SetKind(bad, record, ConditionLayout.KindPoison, ConditionHeap.PoisonGroup);
+        Check("and putting it back makes it readable again", ConditionReader.Read(bad, record) is not null);
+
+        badHeap.SetGroupRaw(ConditionHeap.PoisonGroup, 0x1000, 0x0FF0);
+        Check("a backwards group vector is refused", ConditionReader.Read(bad, record) is null);
+
+        badHeap.SetGroupRaw(ConditionHeap.PoisonGroup, 0x1001, 0x1005);
+        Check("a misaligned group vector is refused", ConditionReader.Read(bad, record) is null);
+
+        badHeap.SetGroupRaw(ConditionHeap.PoisonGroup, 0x1000,
+            0x1000 + (uint)(ConditionLayout.MaxEffectsPerGroup + 1) * 4);
+        Check("an implausibly long group vector is refused", ConditionReader.Read(bad, record) is null);
+
+        badHeap.SetGroupRaw(ConditionHeap.PoisonGroup, 0x7000_0000, 0x7000_0004);
+        Check("a group whose elements cannot be read is refused", ConditionReader.Read(bad, record) is null);
+
+        badHeap.SetGroup(ConditionHeap.PoisonGroup, 0);
+        Check("a null effect pointer is refused", ConditionReader.Read(bad, record) is null);
+
+        var (sickly, sicklyHeap) = FakeGame.BuildAfflictedGame();
+        sicklyHeap.SetDiseasesRaw(0x1004, 0x1000);
+        Check("a backwards disease vector is refused", ConditionReader.Read(sickly, record) is null);
+
+        sicklyHeap.SetDiseasesRaw(0x7000_0000, 0x7000_0004);
+        Check("a disease vector whose elements cannot be read is refused",
+            ConditionReader.Read(sickly, record) is null);
+
+        var (nameless, namelessHeap) = FakeGame.BuildAfflictedGame();
+        uint type = namelessHeap.AddDiseaseType("base_dis_x", "Ague");
+        namelessHeap.SetDiseases(type);
+        namelessHeap.SetDiseaseName(type, 0x7000_0000);
+        Check("a disease whose name cannot be read is refused",
+            ConditionReader.Read(nameless, record) is null);
+
+        // An empty vector is a legitimate state, and a never-allocated one is how the game leaves a
+        // character who has never been ill.
+        var (empty, emptyHeap) = FakeGame.BuildAfflictedGame();
+        emptyHeap.SetDiseasesRaw(0, 0);
+        emptyHeap.SetGroup(ConditionHeap.PoisonGroup);
+        emptyHeap.SetGroup(ConditionHeap.CurseGroup);
+        emptyHeap.SetGroup(ConditionHeap.ParalysisGroup);
+        Check("an emptied character reads as clean", ConditionReader.Read(empty, record) is { Any: false });
+    }
+
+    private static void ConditionActionChecks()
+    {
+        Section("condition actions");
+
+        uint record = FakeGame.LiveRecord;
+        var image = FakeGame.Image(FakeGame.BuildGame());
+
+        // Nothing wrong: the cure reports so and writes nothing at all.
+        var clean = FakeGame.BuildGame();
+        var cleanActions = new TrainerActions(clean, image);
+        uint endBefore = GroupEnd(clean, record, ConditionHeap.PoisonGroup);
+        var nothing = cleanActions.CureConditions(record);
+        Check("a clean character needs no cure", nothing is { Ok: true });
+        Check("and nothing was written", GroupEnd(clean, record, ConditionHeap.PoisonGroup) == endBefore);
+
+        var (mem, heap) = FakeGame.BuildAfflictedGame();
+        var actions = new TrainerActions(mem, image);
+
+        Check("the fixture starts afflicted", ConditionReader.Read(mem, record) is { Any: true });
+        var cured = actions.CureConditions(record);
+        Check("the cure reports success", cured.Ok);
+        Check("and lists what it took", cured.Message.Contains("poison") && cured.Message.Contains("paralysis"));
+
+        var after = ConditionReader.Read(mem, record);
+        Check("nothing adverse is left", after is { Any: false });
+        Check("the diseases are gone", after?.Diseases.Count == 0);
+        Check("the poison group is empty",
+            ConditionReader.ReadGroup(mem, record, ConditionHeap.PoisonGroup)?.Effects.Count == 0);
+        Check("the curse group is empty",
+            ConditionReader.ReadGroup(mem, record, ConditionHeap.CurseGroup)?.Effects.Count == 0);
+        Check("the paralysis group is empty",
+            ConditionReader.ReadGroup(mem, record, ConditionHeap.ParalysisGroup)?.Effects.Count == 0);
+
+        // The whole point of reading the source byte: the racial modifier survives and the penalty
+        // the disease was granting does not.
+        var racial = ConditionReader.ReadGroup(mem, record, 2);
+        Check("a racial modifier survives the cure",
+            racial is { Effects.Count: 1 } && racial.Effects[0].Source == ConditionLayout.SourceRace);
+        Check("a disease's own penalty does not", racial?.Effects.All(e => e.Magnitude == -5) == true);
+
+        // Emptying a vector must leave begin alone: the buffer is still the game's to free.
+        Check("the vector's buffer is left in place",
+            ConditionReader.ReadGroup(mem, record, ConditionHeap.PoisonGroup)?.Begin
+                == ConditionHeap.GroupArray(ConditionHeap.PoisonGroup));
+
+        // A partial erase has to compact in order, not merely shorten. The one removed here sits in
+        // the middle, between two the cure must leave: an effect from the character's race and one
+        // from something worn.
+        var (partial, partialHeap) = FakeGame.BuildAfflictedGame();
+        int poison = ConditionHeap.PoisonGroup;
+        uint keepFirst = partialHeap.AddEffect(1, 0, ConditionLayout.SourceRace, group: poison);
+        uint drop = partialHeap.AddEffect(2, 0, source: 6, group: poison);
+        uint keepLast = partialHeap.AddEffect(3, 0, ConditionLayout.SourceEquipment, group: poison);
+        partialHeap.SetGroup(poison, keepFirst, drop, keepLast);
+        new TrainerActions(partial, image).CureConditions(record);
+        var survivors = ConditionReader.ReadGroup(partial, record, poison);
+        Check("a partial erase keeps the survivors, in order",
+            survivors?.Effects.Select(e => e.Address).SequenceEqual(new[] { keepFirst, keepLast }) == true);
+        Check("and shortens the vector by exactly what it removed",
+            survivors?.End == survivors?.Begin + 8);
+
+        // The same compaction, reached the other way: a disease's penalties are stripped from every
+        // group, and the racial modifier beside them in group 2 is not.
+        var (diseased, _) = FakeGame.BuildAfflictedGame();
+        new TrainerActions(diseased, image).CureConditions(record);
+        var group2 = ConditionReader.ReadGroup(diseased, record, 2);
+        Check("stripping a disease's effects compacts the group it was in",
+            group2 is { Effects.Count: 1 } && group2.End == group2.Begin + 4);
+
+        // An affliction the game itself would not cure is reported rather than forced away.
+        var (stuck, stuckHeap) = FakeGame.BuildAfflictedGame();
+        stuckHeap.SetGroup(ConditionHeap.CurseGroup);
+        stuckHeap.SetGroup(ConditionHeap.ParalysisGroup);
+        stuckHeap.SetDiseasesRaw(0, 0);
+        stuckHeap.SetGroup(ConditionHeap.PoisonGroup,
+            stuckHeap.AddEffect(3, 0, ConditionLayout.SourceEquipment, group: ConditionHeap.PoisonGroup));
+        uint stuckEnd = GroupEnd(stuck, record, ConditionHeap.PoisonGroup);
+        var refusedQuietly = new TrainerActions(stuck, image).CureConditions(record);
+        Check("an uncurable affliction is not forced away", refusedQuietly.Ok);
+        Check("and nothing was written for it", GroupEnd(stuck, record, ConditionHeap.PoisonGroup) == stuckEnd);
+        Check("the reader says so on the line itself",
+            ConditionReader.Read(stuck, record)?.Summary.Contains("not something a cure removes") == true);
+
+        // Read-only and a record that stopped validating both refuse, as every other write does.
+        var (locked, _) = FakeGame.BuildAfflictedGame();
+        var lockedActions = new TrainerActions(locked, image) { ReadOnly = true };
+        uint lockedEnd = GroupEnd(locked, record, ConditionHeap.PoisonGroup);
+        Check("read-only refuses the cure", !lockedActions.CureConditions(record).Ok);
+        Check("and writes nothing", GroupEnd(locked, record, ConditionHeap.PoisonGroup) == lockedEnd);
+
+        var (broken, _) = FakeGame.BuildAfflictedGame();
+        broken.PokeUInt32(record + QuestLayout.VTable, 0x1234_5678);
+        var brokenResult = new TrainerActions(broken, image).CureConditions(record);
+        Check("a record that stopped validating refuses the cure", !brokenResult.Ok);
+        Check("and still holds its poison",
+            ConditionReader.ReadGroup(broken, record, ConditionHeap.PoisonGroup)?.Effects.Count == 1);
+
+        var (unreadable, unreadableHeap) = FakeGame.BuildAfflictedGame();
+        unreadableHeap.SetGroupRaw(ConditionHeap.PoisonGroup, 0x1001, 0x1005);
+        Check("conditions that cannot be read refuse the cure",
+            !new TrainerActions(unreadable, image).CureConditions(record).Ok);
+
+        // The freeze is the cure on repeat. Both halves are checked, so the first cannot pass for
+        // the wrong reason: without the tick the poison really does stay.
+        var (frozen, frozenHeap) = FakeGame.BuildAfflictedGame();
+        var frozenActions = new TrainerActions(frozen, image);
+        var freezes = new FreezeWriter();
+
+        frozenActions.CureConditions(record);
+        frozenHeap.SetGroup(ConditionHeap.PoisonGroup,
+            frozenHeap.AddEffect(7, 0, source: 6, group: ConditionHeap.PoisonGroup));
+        Check("without the freeze, a new poison stays",
+            freezes.Tick(frozenActions, record) == 0 &&
+            ConditionReader.Read(frozen, record)?.Any == true);
+
+        freezes.Freeze(FrozenField.Conditions, 0);
+        Check("the freeze counts as one write", freezes.Tick(frozenActions, record) == 1);
+        Check("with the freeze, a new poison is taken off",
+            ConditionReader.Read(frozen, record) is { Any: false });
+
+        frozenHeap.SetGroup(ConditionHeap.ParalysisGroup,
+            frozenHeap.AddEffect(0, 2, source: 6, group: ConditionHeap.ParalysisGroup));
+        freezes.Tick(frozenActions, record);
+        Check("and so is anything else the game inflicts",
+            ConditionReader.Read(frozen, record) is { Any: false });
+
+        freezes.Thaw(FrozenField.Conditions);
+        Check("thawing stops it", !freezes.IsFrozen(FrozenField.Conditions));
+    }
+
     private static void PickerChecks()
     {
         Section("process picker");
@@ -1049,6 +1400,15 @@ internal static class Program
     {
         var word = new byte[2];
         return mem.Read(item + ItemLayout.ItemCondition, word, 2) == 2 ? BitConverter.ToUInt16(word, 0) : -1;
+    }
+
+    /// <summary>The <c>end</c> pointer of an effect group, for the checks that assert nothing moved.</summary>
+    private static uint GroupEnd(IMemorySource mem, uint record, int group)
+    {
+        var word = new byte[4];
+        return mem.Read(ConditionLayout.EffectGroupEnd(record, group), word, 4) == 4
+            ? BitConverter.ToUInt32(word, 0)
+            : 0;
     }
 
     /// <summary>The type pointer of the item at <paramref name="item"/>.</summary>

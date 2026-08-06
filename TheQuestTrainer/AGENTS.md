@@ -31,12 +31,15 @@ src/TheQuestTrainer/
     ItemType.cs           the shared type + the four checks that identify one
     ItemCatalog.cs        every item type in the loaded game, swept out of the heap
     InventoryReader.cs    the pack as one typed snapshot
+    ConditionLayout.cs    the disease list, the 25 effect groups, the kind table, the effect object
+    ConditionTables.cs    the four conditions the game names, and its own wording for them
+    ConditionReader.cs    what is adverse right now, as one typed snapshot
     TrainerActions.cs     every edit, as read-validate-write
     FreezeWriter.cs       latched freezes, no dispatcher needed
   Memory/IMemorySource.cs the process slice the locator needs, so it can be faked
   ViewModels/             MainViewModel (session + IGameHost), rows, ProcessPicker
   MainWindow.xaml         Character / Skills / Inventory / Reference tabs
-test/FormatCheck/         363 checks over synthetic records and a synthetic heap; needs no game
+test/FormatCheck/         453 checks over synthetic records and a synthetic heap; needs no game
 ```
 
 References `GameTrainers.Common` for both `Memory` and `Mvvm`, via csproj `<Using>` items.
@@ -130,6 +133,31 @@ refresh. The four validation checks in `ItemTypeReader` are what make a sweep sa
 plants a decoy heap block that differs from a real type only in its vtable so none of them can
 quietly stop mattering.
 
+**A condition is a list, not a flag, and the cure is the game's own function minus one `delete`.**
+Poison, curse and paralysis are `std::vector<SEffect*>` in an array of 25 groups at `record + 0x404`;
+which group holds which is a *table* at `record + 0x530`, and `CureConditions` reads that table
+because the game's own cure does. Curing erases every entry whose source byte is 2, 3 or 6 — the
+game's own set — and leaves 1 (equipment), 4 (disease) and 5 (race) alone, because the game
+re-derives all three from something that still exists. The trainer cannot free the effect objects, so
+each cured effect leaks twenty bytes; nothing dangles, because nothing is freed, and the vector's
+buffer and `begin` are never written. Survivors are written *before* `end` is shortened, so the worst
+a mid-cure read sees is one duplicated pointer. Do not add a control that strips an effect outside
+those three sources — that is a different tool. `docs/ReverseEngineering.md` §16 has the whole graph.
+
+**Curing a disease is two jobs, and doing only the first is a bug.** The disease list at
+`record + 0x3B4` holds pointers to *shared* types, so emptying it is free and leaks nothing — but the
+penalties a disease granted are ordinary allocated effects in the groups above, tagged source 4, and
+nothing re-derives them once the list changes. `CureDiseases` clears the list and then strips those,
+which is exactly what `FUN_004ef880` does. Disease is also the one condition never confirmed against
+a live game (§16.6); treat it accordingly.
+
+**`FrozenField.Conditions` is the one freeze with no value.** `FreezeWriter` otherwise holds fields
+at a latched number; this entry re-runs the cure instead, so `TargetOf` means nothing for it and the
+view model passes zero. It lives there rather than in the view model for the same reason every other
+freeze does — the harness drives `Tick` without a dispatcher. The UI says "Keep clear", not
+"immune", because that is what it is: the game inflicts the condition and the trainer removes it up
+to 250 ms later.
+
 **Max health and max mana do not exist.** The engine derives them every frame from Endurance,
 Intelligence and level. There is nothing to write and no offset to find — this was confirmed, not
 assumed (a session showing `72/72` and `125/165` contains neither maximum). Do not add a "set max
@@ -155,6 +183,7 @@ Do not add these without a very good reason, and update the README and the UI co
   pointer write would bypass the model and paperdoll updates the game does around it.
 - **Adding an item.** Allocation. Replace one instead.
 - **Editing enchantments.** Traced only as far as a wand's charge ceiling.
+- **Removing an effect that is not one of the four conditions.** See the cure rule above.
 - **Teleporting.** The map/coordinate fields were not located, and the game already ships Mark and
   Recall.
 - **Save editing.** `docs/ReverseEngineering.md` §10 decodes the container and the character record's
@@ -165,7 +194,7 @@ Do not add these without a very good reason, and update the README and the UI co
 ## Testing
 
 ```powershell
-.\Run.ps1 -Test -NoRun          # 363 checks, no game, no copyrighted files
+.\Run.ps1 -Test -NoRun          # 453 checks, no game, no copyrighted files
 ```
 
 `test/FormatCheck/Fakes.cs` builds a synthetic 32-bit address space with the same three-section
@@ -178,6 +207,13 @@ records, an unreadable page, and a `std::string` whose heap buffer has gone away
 the real heap uses, and `FakeGame.BuildGameWithItems` assembles a pack covering every shape the
 reader has to handle. Keep the strings reached by *pointer* rather than inlined into the type — that
 is what makes the sweep's string checks real.
+
+`ConditionHeap` does the same for effects, their group vectors and disease types, and
+`FakeGame.BuildAfflictedGame` assembles a character with all four conditions plus a racial modifier
+and a disease-granted penalty side by side — that pair is what forces the source byte to be read
+rather than guessed. `FakeGame.BuildGame` writes the effect-kind table for *every* fixture, because
+a record without one is not a record the game would have; note that the table and the groups live
+past the `0x400` bytes `RecordBuilder` covers, so they are poked straight into the engine block.
 
 Extend the fixture rather than weakening a check.
 

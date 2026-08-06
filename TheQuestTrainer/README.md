@@ -39,7 +39,7 @@ attached to is the one the offsets were measured on.
 ### Other options
 
 ```powershell
-.\Run.ps1 -Test -NoRun          # 223 checks, no game and no copyrighted files needed
+.\Run.ps1 -Test -NoRun          # 453 checks, no game and no copyrighted files needed
 .\Run.ps1 -Configuration Debug  # Debug build
 .\Run.ps1 -Clean                # delete bin/obj first
 .\Run.ps1 -NoBuild              # launch the last build
@@ -58,11 +58,41 @@ attached to is the one the offsets were measured on.
 | **Health**, **Mana** | Current values, editable, each with a **Freeze**. The maxima are *derived* by the game and are not stored anywhere — you can set health above the maximum and the game will show `500/72` without complaint. |
 | **Gold** | Editable, freezable. |
 | **Crime** | The outstanding bounty. Editable, freezable, plus a **Clear crime** button. Serving a prison sentence permanently lowers skills, so this is the one status worth zeroing. |
+| **Conditions** | What is adverse right now — poison, disease, curse, paralysis — with a **Cure** button and a **Keep clear** freeze. See below. |
 | **Level** | Editable, plus **Level up**. Writing a level also raises experience to that level's floor and rewrites the game's cached next-level threshold, so the character stays internally consistent. |
 | **Experience** | Editable on its own. Note the game applies a *level* only when it next awards experience — use the Level field if you want it now. |
 | **Attribute points**, **Skill points** | Unspent points, editable. |
 | **Fame** | −100..+100, editable, with the game's own reputation word shown beside it. |
 | **Attributes** | The five base values, editable. |
+
+### Conditions
+
+The Character tab lists whatever is currently wrong: `Poisoned — 2 health per turn`,
+`Cursed — 14 turns left`, `Diseased — Grey Fever`, `Paralyzed — 3 turns left`, or `None.`
+**Cure** removes all four. **Keep clear** re-runs the cure four times a second.
+
+Three things are worth knowing about it.
+
+**It is the game's own cure, not a shortcut past it.** None of the four is a flag. Poison, curse and
+paralysis are lists of effect objects hanging off the character record, and the game's *Cure poison*,
+*Remove curse* and *Cure paralysis* all end in one function that erases from the matching list every
+entry whose source says a cure may take it. The trainer reproduces that function, including which
+entries it leaves alone. A disease is cured the way the game cures one: the list is emptied and the
+penalties it was granting are stripped, because nothing re-derives those on their own.
+
+**An effect that is not an affliction is left alone**, which is the reason the source matters. A
+Derth's `-5 Strength` and a cursed helm's downside are effects sitting in exactly the same structures
+as the poison, and the game re-derives both from something that still exists — so removing one would
+either be undone on the next recalculation or take something with it. When that is all that is left,
+the line says *(not something a cure removes)* rather than the button quietly doing nothing.
+
+**"Keep clear" is a cure on repeat, not an immunity.** The game still inflicts the condition and the
+trainer still takes it away on the next tick, so a poison costs you its first turn of health before
+it goes. What it does mean is that nothing accumulates and nothing sticks.
+
+Confirmed against a live poisoned character; disease, curse and paralysis are covered by the test
+harness but have never run against a real game — `docs/ReverseEngineering.md` §16.6 is explicit about
+which is which.
 
 ### Skills tab
 
@@ -100,8 +130,8 @@ what is worn but never moves it; equipping is one click in the game's own invent
 
 ### Reference tab
 
-Attributes, skills and their governing attributes, race ids, the reputation ladder and the wardrobe
-ladder, all lifted from the game's own tables.
+Attributes, skills and their governing attributes, race ids, the four conditions, the reputation
+ladder and the wardrobe ladder, all lifted from the game's own tables.
 
 ### Base values, not screen values
 
@@ -127,6 +157,9 @@ touching anything.
   safe; making the game allocate a new one is not.
 - **Item enchantments.** Read only as far as a wand's charge ceiling. Damage, armour and the outfit
   score are all still the game's own arithmetic over what you carry.
+- **Removing an effect that is not one of the four conditions.** The cure takes exactly what the
+  game's own cures take. A racial penalty or a cursed item's downside is not an affliction, and both
+  are re-derived by the game anyway.
 - **Maximum health and maximum mana.** They are not stored — the engine derives them from Endurance,
   Intelligence and level every frame. Raise the attribute, or freeze the current value.
 - **Resistances, damage and armour.** Derived, same reason.
@@ -193,12 +226,15 @@ src/TheQuestTrainer/
     ItemType.cs           the shared type, and the four checks that identify one
     ItemCatalog.cs        every item type in the loaded game, swept out of the heap
     InventoryReader.cs    the pack as one typed snapshot
+    ConditionLayout.cs    the disease list, the effect groups, the kind table and the effect object
+    ConditionTables.cs    the four conditions the game names, and how it words them
+    ConditionReader.cs    what is adverse right now, as one typed snapshot
     TrainerActions.cs     every edit, as read-validate-write
     FreezeWriter.cs       latched freezes, testable without a dispatcher
   Memory/IMemorySource.cs the process slice the locator needs, so it can be faked
   ViewModels/             MainViewModel (session + IGameHost), rows, ProcessPicker
   MainWindow.xaml         Character / Skills / Inventory / Reference tabs
-test/FormatCheck/         363 checks over synthetic records and a synthetic heap; needs no game
+test/FormatCheck/         453 checks over synthetic records and a synthetic heap; needs no game
 ```
 
 References `GameTrainers.Common` for both `Memory` (`ProcessMemory`, `NativeMethods`) and `Mvvm`
@@ -212,7 +248,7 @@ References `GameTrainers.Common` for both `Memory` (`ProcessMemory`, `NativeMeth
 .\Run.ps1 -Test -NoRun
 ```
 
-363 checks against a synthetic 32-bit address space with the same section geometry as the real
+453 checks against a synthetic 32-bit address space with the same section geometry as the real
 image. It covers the cases a live game cannot be asked to produce: a module relocated away from its
 preferred base, a stale static slot, an empty slot, a build whose `.data` does not cover the slot, a
 record whose vtable points at writable memory, the new-character prototype sitting next to the live
@@ -225,11 +261,19 @@ meter, a wand whose charges come from an enchantment, a stack of ammunition), an
 each of the two weapon sets, a vector broken in each of the four ways it can be, an item whose type
 stopped validating, and a decoy heap block that looks like an item type in everything but its vtable.
 
+The conditions get a third fixture: effect objects at the strides the real heap uses, a character
+poisoned and cursed and paralysed and carrying two diseases, a racial modifier and a disease-granted
+penalty sitting side by side so the source byte has to be read to tell them apart, and a check that
+files poison under a different group to prove the trainer follows the game's kind table rather than a
+baked-in number.
+
 It was also checked against a live session (v1.9.10, character *Gerth the Derth*): both chains found
 the same record, every field matched the game's own screens, and every write path — gold, health,
-mana, crime, fame, a skill, an attribute, points, the three-field level write, and the item repair,
-recharge and replace paths — was set to a test value, read back, and restored.
-`docs/ReverseEngineering.md` §11 and §15.7 have the logs.
+mana, crime, fame, a skill, an attribute, points, the three-field level write, the item repair,
+recharge and replace paths, and the cure — was set to a test value, read back, and restored.
+The cure was run against a genuinely poisoned character and the rest of the record compared
+byte-for-byte identical afterwards. `docs/ReverseEngineering.md` §11, §15.7 and §16.6 have the logs,
+including what §16.6 could *not* confirm.
 
 ---
 

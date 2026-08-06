@@ -49,6 +49,9 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     private string _catalogFilter = "";
     private string _inventoryNote = "";
 
+    private string _conditionSummary = "—";
+    private bool _isAfflicted;
+
     private string _characterName = "";
     private string _portraitId = "";
     private string _raceName = "";
@@ -79,6 +82,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         MaxSkillsCommand = new RelayCommand(MaxSkills, () => IsAttached && !IsReadOnly);
         LevelUpCommand = new RelayCommand(LevelUp, () => IsAttached && !IsReadOnly);
         ClearCrimeCommand = new RelayCommand(ClearCrime, () => IsAttached && !IsReadOnly);
+        CureConditionsCommand = new RelayCommand(CureConditions, () => CanEdit && IsAfflicted);
         RestoreItemCommand = new RelayCommand(RestoreSelectedItem, () => CanEdit && SelectedItem is { CanRestore: true });
         RestoreAllItemsCommand = new RelayCommand(RestoreAllItems, () => CanEdit && Items.Count > 0);
         ReplaceItemCommand = new RelayCommand(ReplaceSelectedItem,
@@ -134,6 +138,9 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
 
     /// <summary>Sets crime to zero.</summary>
     public RelayCommand ClearCrimeCommand { get; }
+
+    /// <summary>Cures poison, disease, curse and paralysis.</summary>
+    public RelayCommand CureConditionsCommand { get; }
 
     /// <summary>Repairs, recharges or refills the selected item.</summary>
     public RelayCommand RestoreItemCommand { get; }
@@ -344,6 +351,43 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         }
     }
 
+    // ---- conditions ---------------------------------------------------------------------------
+
+    /// <summary>
+    /// What is wrong with the character, one line per affliction, or "None." when nothing is.
+    /// Read-only: a condition is a list of effect objects, so there is no number to type into.
+    /// </summary>
+    public string ConditionSummary { get => _conditionSummary; private set => SetField(ref _conditionSummary, value); }
+
+    /// <summary>Whether the character has any of the four adverse conditions right now.</summary>
+    public bool IsAfflicted
+    {
+        get => _isAfflicted;
+        private set
+        {
+            if (!SetField(ref _isAfflicted, value)) return;
+            CureConditionsCommand.RaiseCanExecuteChanged();
+        }
+    }
+
+    private void CureConditions()
+    {
+        if (_actions is null) { Report("Attach first."); return; }
+        Report(_actions.CureConditions(_record).Message);
+        Refresh(initial: true);
+    }
+
+    private void UpdateConditions()
+    {
+        var conditions = _source is null || _record == 0 ? null : ConditionReader.Read(_source, _record);
+
+        // A read that failed is *not* reported as a clean bill of health. The structures are the
+        // ones the cure writes to, so "they did not read back as what they should be" is exactly
+        // when the trainer must say nothing and refuse rather than show "None."
+        ConditionSummary = conditions?.Summary ?? "Could not be read.";
+        IsAfflicted = conditions?.Any ?? false;
+    }
+
     // ---- inventory ----------------------------------------------------------------------------
 
     /// <summary>The item the Inventory tab is acting on.</summary>
@@ -523,6 +567,12 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     /// <summary>Holds crime at whatever it was when the box was ticked — usually zero.</summary>
     public bool FreezeCrime { get => _freezes.IsFrozen(FrozenField.Crime); set => SetFreeze(FrozenField.Crime, value, _crime); }
 
+    /// <summary>
+    /// Re-runs the cure on every tick, so an adverse condition is taken off within a quarter of a
+    /// second of the game inflicting it. There is no value to latch, hence the zero.
+    /// </summary>
+    public bool FreezeConditions { get => _freezes.IsFrozen(FrozenField.Conditions); set => SetFreeze(FrozenField.Conditions, value, 0); }
+
     private void SetFreeze(FrozenField field, bool on, long latched)
     {
         if (on && (!IsAttached || IsReadOnly))
@@ -542,6 +592,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         FrozenField.Health => nameof(FreezeHealth),
         FrozenField.Mana => nameof(FreezeMana),
         FrozenField.Gold => nameof(FreezeGold),
+        FrozenField.Conditions => nameof(FreezeConditions),
         _ => nameof(FreezeCrime),
     };
 
@@ -551,6 +602,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         OnPropertyChanged(nameof(FreezeMana));
         OnPropertyChanged(nameof(FreezeGold));
         OnPropertyChanged(nameof(FreezeCrime));
+        OnPropertyChanged(nameof(FreezeConditions));
     }
 
     // ---- attach / detach ------------------------------------------------------------------------
@@ -714,6 +766,9 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         SelectedCatalogEntry = null;
         UpdateInventoryNote();
 
+        ConditionSummary = "—";
+        IsAfflicted = false;
+
         if (IsAttached) Status = "Detached.";
         IsAttached = false;
         OnPropertyChanged(nameof(RecordAddress));
@@ -809,6 +864,11 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
             bool available = TrainerActions.SkillAvailableTo(row.Id, snapshot.RaceId);
             row.Update(snapshot.Skills[row.Id], snapshot.StartingSkills[row.Id], cap, available, initial || !_rowsBuilt);
         }
+
+        // Conditions are read separately for the same reason the inventory is: they are vectors of
+        // heap pointers outside the snapshotted part of the record, and none of them is a field a
+        // player types into, so the editor-focus rule above does not apply to them.
+        UpdateConditions();
 
         // The inventory is read separately from the record: it is a vector of heap pointers rather
         // than fields inside the snapshot, and a pack that cannot be read is a reason to show no
@@ -976,6 +1036,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         MaxSkillsCommand.RaiseCanExecuteChanged();
         LevelUpCommand.RaiseCanExecuteChanged();
         ClearCrimeCommand.RaiseCanExecuteChanged();
+        CureConditionsCommand.RaiseCanExecuteChanged();
         RaiseItemCommandStates();
     }
 
@@ -992,6 +1053,13 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         Reference.Add(new ReferenceRow("— Races —", "", "Race id 0 is the engine's placeholder for non-player creatures."));
         for (int i = 0; i < GameTables.Races.Count; i++)
             Reference.Add(new ReferenceRow(GameTables.Races[i], $"id {i}", ""));
+
+        Reference.Add(new ReferenceRow("— Conditions —", "",
+            "The four the game names. Each is a list of effect objects, not a flag, which is why the trainer cures rather than clears a bit."));
+        foreach (var c in ConditionTables.All)
+            Reference.Add(new ReferenceRow(ConditionTables.Name(c),
+                ConditionTables.EffectKind(c) is { } kind ? $"effect kind 0x{kind:X2}" : "its own list",
+                ConditionTables.Effect(c)));
 
         Reference.Add(new ReferenceRow("— Reputation —", "", "Fame runs -100 to +100."));
         foreach (int f in new[] { 100, 80, 50, 20, 1, 0, -1, -20, -50, -80, -100 })

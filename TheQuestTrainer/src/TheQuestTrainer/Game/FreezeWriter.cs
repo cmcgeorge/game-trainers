@@ -14,10 +14,24 @@ public enum FrozenField
 
     /// <summary>Outstanding crime — guards stop having a reason to arrest you.</summary>
     Crime,
+
+    /// <summary>
+    /// Poison, disease, curse and paralysis, kept off the character.
+    ///
+    /// The odd one out, and deliberately so. There is no value to latch: a condition is a list of
+    /// effect objects rather than a number, so this entry re-runs the cure on every tick instead of
+    /// rewriting a field, and <see cref="FreezeWriter.TargetOf"/> means nothing for it. That also
+    /// makes it a *cure* rather than an immunity — the game still inflicts the condition and the
+    /// trainer still takes it away, so a poison inflicted between two ticks costs its turn of health
+    /// before it goes. Anything the game does not consider curable is left alone, exactly as when
+    /// the button is pressed.
+    /// </summary>
+    Conditions,
 }
 
 /// <summary>
-/// Holds frozen fields at a latched value.
+/// What the trainer re-applies on every tick: fields held at a latched value, and — for
+/// <see cref="FrozenField.Conditions"/>, which has no value to hold — a cure re-run.
 ///
 /// The target is captured when the box is ticked and never re-derived from what is on screen: the
 /// refresh overwrites the displayed value with whatever the game currently holds, so a derived
@@ -70,6 +84,9 @@ public sealed class FreezeWriter
                 FrozenField.Mana => actions.SetMana(record, (int)value),
                 FrozenField.Gold => actions.SetGold(record, value),
                 FrozenField.Crime => actions.SetCrime(record, value),
+                // The one entry that ignores its latched value: there is nothing to hold a
+                // condition at, so the cure is simply run again.
+                FrozenField.Conditions => actions.CureConditions(record),
                 _ => ActionResult.Failure($"Unknown field {field}."),
             };
             if (result.Ok) written++;

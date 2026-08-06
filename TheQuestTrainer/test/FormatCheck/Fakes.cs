@@ -436,6 +436,180 @@ public sealed class ItemHeap
     public void SetEngine(uint type, uint engine) => _mem.PokeUInt32(type + ItemLayout.TypeEngine, engine);
 }
 
+/// <summary>
+/// Lays effect objects, their group vectors and disease types into a fake heap, and writes the
+/// effect-kind table into the record, so every condition the trainer reads or cures can be built
+/// without a game.
+///
+/// The geometry mirrors the real thing where it matters: effects stride by their own size plus a
+/// heap header, the group vectors are the same begin/end/capacity triples the record holds, and the
+/// kind table really is consulted — a check can move poison to another group and the reader has to
+/// follow, which is what stops a hard-coded group number from passing.
+/// </summary>
+public sealed class ConditionHeap
+{
+    /// <summary>Where effect objects are laid out.</summary>
+    public const uint EffectBase = 0x0530_0000;
+
+    /// <summary>Where the groups' pointer arrays are laid out, one slice per group.</summary>
+    public const uint VectorBase = 0x0538_0000;
+
+    /// <summary>Where disease type objects live.</summary>
+    public const uint DiseaseBase = 0x0540_0000;
+
+    /// <summary>Where the disease vector's pointer array lives.</summary>
+    public const uint DiseaseVectorBase = 0x0544_0000;
+
+    /// <summary>Where disease ids and names live.</summary>
+    public const uint TextBase = 0x0548_0000;
+
+    /// <summary>Stride between effects: the 20-byte object plus the eight-byte heap header.</summary>
+    public const int EffectStride = ConditionLayout.EffectBytes + 8;
+
+    /// <summary>Bytes reserved for each group's pointer array.</summary>
+    public const int GroupArrayBytes = 64;
+
+    /// <summary>Stride between disease types, which are opaque to the trainer beyond two pointers.</summary>
+    public const int DiseaseStride = 0x20;
+
+    /// <summary>The group each of the three effect kinds is filed under in the shipped build.</summary>
+    public const int PoisonGroup = 23;
+
+    /// <inheritdoc cref="PoisonGroup"/>
+    public const int CurseGroup = 22;
+
+    /// <inheritdoc cref="PoisonGroup"/>
+    public const int ParalysisGroup = 21;
+
+    private readonly FakeMemory _mem;
+    private readonly uint _record;
+    private readonly byte[] _effects = new byte[0x1000];
+    private readonly byte[] _vectors = new byte[GroupArrayBytes * ConditionLayout.EffectGroupSlots];
+    private readonly byte[] _diseases = new byte[0x400];
+    private readonly byte[] _diseaseVector = new byte[0x100];
+    private readonly byte[] _text = new byte[0x400];
+    private int _effectCount, _diseaseCount, _textUsed;
+
+    /// <summary>Maps the heap blocks into <paramref name="mem"/> and writes the shipped kind table.</summary>
+    public ConditionHeap(FakeMemory mem, uint record)
+    {
+        ArgumentNullException.ThrowIfNull(mem);
+        _mem = mem;
+        _record = record;
+        mem.Map(EffectBase, _effects);
+        mem.Map(VectorBase, _vectors);
+        mem.Map(DiseaseBase, _diseases);
+        mem.Map(DiseaseVectorBase, _diseaseVector);
+        mem.Map(TextBase, _text);
+        WriteKindTable(mem, record);
+    }
+
+    /// <summary>
+    /// Writes the effect-kind table the shipped build holds. Called for every fake game, not only
+    /// the ones a condition check builds: a record without it is not a record the game would have.
+    /// </summary>
+    public static void WriteKindTable(FakeMemory mem, uint record)
+    {
+        ArgumentNullException.ThrowIfNull(mem);
+        SetKind(mem, record, ConditionLayout.KindPoison, PoisonGroup);
+        SetKind(mem, record, ConditionLayout.KindCurse, CurseGroup);
+        SetKind(mem, record, ConditionLayout.KindParalysis, ParalysisGroup);
+    }
+
+    /// <summary>Files effect kind <paramref name="kind"/> under <paramref name="group"/>.</summary>
+    public static void SetKind(FakeMemory mem, uint record, int kind, int group)
+    {
+        ArgumentNullException.ThrowIfNull(mem);
+        mem.PokeUInt32(ConditionLayout.EffectGroupSlot(record, kind), (uint)group);
+    }
+
+    /// <summary>Files a kind under a different group, so a check can prove the table is followed.</summary>
+    public void SetKind(int kind, int group) => SetKind(_mem, _record, kind, group);
+
+    /// <summary>Adds an effect object and returns its address.</summary>
+    public uint AddEffect(int magnitude, int duration, byte source, int group)
+    {
+        int at = _effectCount++ * EffectStride;
+        uint address = EffectBase + (uint)at;
+
+        BitConverter.GetBytes((short)magnitude).CopyTo(_effects, at + (int)ConditionLayout.EffectMagnitude);
+        BitConverter.GetBytes(duration).CopyTo(_effects, at + (int)ConditionLayout.EffectDuration);
+        _effects[at + (int)ConditionLayout.EffectGroup] = (byte)group;
+        _effects[at + (int)ConditionLayout.EffectSource] = source;
+        return address;
+    }
+
+    /// <summary>Puts <paramref name="effects"/> in group <paramref name="group"/>, in that order.</summary>
+    public void SetGroup(int group, params uint[] effects)
+    {
+        ArgumentNullException.ThrowIfNull(effects);
+        if (effects.Length * 4 > GroupArrayBytes)
+            throw new ArgumentException("more effects than the fixture reserves room for", nameof(effects));
+
+        int at = group * GroupArrayBytes;
+        Array.Clear(_vectors, at, GroupArrayBytes);
+        for (int i = 0; i < effects.Length; i++)
+            BitConverter.GetBytes(effects[i]).CopyTo(_vectors, at + i * 4);
+
+        uint begin = VectorBase + (uint)at;
+        Vector(ConditionLayout.EffectGroupBegin(_record, group), begin, begin + (uint)effects.Length * 4);
+    }
+
+    /// <summary>Points group <paramref name="group"/> at an arbitrary pair, for the malformed cases.</summary>
+    public void SetGroupRaw(int group, uint begin, uint end) =>
+        Vector(ConditionLayout.EffectGroupBegin(_record, group), begin, end);
+
+    /// <summary>The address of group <paramref name="group"/>'s pointer array.</summary>
+    public static uint GroupArray(int group) => VectorBase + (uint)(group * GroupArrayBytes);
+
+    /// <summary>Adds a disease type and returns its address.</summary>
+    public uint AddDiseaseType(string id, string name)
+    {
+        int at = _diseaseCount++ * DiseaseStride;
+        uint address = DiseaseBase + (uint)at;
+        BitConverter.GetBytes(AddText(id)).CopyTo(_diseases, at + (int)ConditionLayout.DiseaseTypeId);
+        BitConverter.GetBytes(AddText(name)).CopyTo(_diseases, at + (int)ConditionLayout.DiseaseTypeName);
+        return address;
+    }
+
+    /// <summary>Gives the character the diseases named by <paramref name="types"/>.</summary>
+    public void SetDiseases(params uint[] types)
+    {
+        ArgumentNullException.ThrowIfNull(types);
+        Array.Clear(_diseaseVector);
+        for (int i = 0; i < types.Length; i++)
+            BitConverter.GetBytes(types[i]).CopyTo(_diseaseVector, i * 4);
+
+        Vector(_record + ConditionLayout.DiseasesBegin, DiseaseVectorBase,
+               DiseaseVectorBase + (uint)types.Length * 4);
+    }
+
+    /// <summary>Points the disease vector at an arbitrary pair, for the malformed cases.</summary>
+    public void SetDiseasesRaw(uint begin, uint end) =>
+        Vector(_record + ConditionLayout.DiseasesBegin, begin, end);
+
+    /// <summary>Rewrites an existing type's name pointer, so it stops reading back as one.</summary>
+    public void SetDiseaseName(uint type, uint pointer) =>
+        _mem.PokeUInt32(type + ConditionLayout.DiseaseTypeName, pointer);
+
+    /// <summary>Writes a begin/end/capacity triple at <paramref name="slot"/>.</summary>
+    private void Vector(uint slot, uint begin, uint end)
+    {
+        _mem.PokeUInt32(slot, begin);
+        _mem.PokeUInt32(slot + 4, end);
+        _mem.PokeUInt32(slot + 8, end);
+    }
+
+    private uint AddText(string value)
+    {
+        var bytes = Encoding.ASCII.GetBytes(value);
+        uint address = TextBase + (uint)_textUsed;
+        bytes.CopyTo(_text, _textUsed);
+        _textUsed += bytes.Length + 1;
+        return address;
+    }
+}
+
 /// <summary>Assembles a whole fake process: a mapped image, an engine object and its records.</summary>
 public static class FakeGame
 {
@@ -500,7 +674,46 @@ public static class FakeGame
         var prototype = new RecordBuilder(ModuleBase + VTableRva).AsPrototype();
         prototype.Bytes.CopyTo(engine, (int)PrototypeInEngine);
 
+        // The effect-kind table lives past the part of the record RecordBuilder covers, and every
+        // real record has one, so it is written here rather than only by the condition checks: a
+        // fixture without it would make "the trainer cannot find where poison lives" the normal case.
+        ConditionHeap.WriteKindTable(mem, LiveRecord);
+
         return mem;
+    }
+
+    /// <summary>
+    /// A fake game whose character is poisoned, cursed, paralysed and carrying two diseases, with
+    /// one effect in each group that a cure must <i>not</i> take — the racial modifiers a real
+    /// character has — and one penalty granted by a disease, which a cure must take only because the
+    /// disease goes with it.
+    /// </summary>
+    public static (FakeMemory Memory, ConditionHeap Heap) BuildAfflictedGame()
+    {
+        var mem = BuildGame();
+        var heap = new ConditionHeap(mem, LiveRecord);
+
+        heap.SetGroup(ConditionHeap.PoisonGroup,
+            heap.AddEffect(2, 0, source: 6, group: ConditionHeap.PoisonGroup));
+
+        heap.SetGroup(ConditionHeap.CurseGroup,
+            heap.AddEffect(0, 3, source: 2, group: ConditionHeap.CurseGroup),
+            heap.AddEffect(0, 14, source: 3, group: ConditionHeap.CurseGroup));
+
+        heap.SetGroup(ConditionHeap.ParalysisGroup,
+            heap.AddEffect(0, 5, source: 6, group: ConditionHeap.ParalysisGroup));
+
+        // Group 2 is where the game keeps attribute modifiers. A Derth's −5 Strength is source 5,
+        // its race, and no cure removes it; the −3 beside it came from a disease and goes when the
+        // disease does.
+        heap.SetGroup(2,
+            heap.AddEffect(-5, 0, ConditionLayout.SourceRace, group: 2),
+            heap.AddEffect(-3, 0, ConditionLayout.SourceDisease, group: 2));
+
+        heap.SetDiseases(heap.AddDiseaseType("base_dis_greyfever", "Grey Fever"),
+                         heap.AddDiseaseType("base_dis_rot", "Bone Rot"));
+
+        return (mem, heap);
     }
 
     /// <summary>

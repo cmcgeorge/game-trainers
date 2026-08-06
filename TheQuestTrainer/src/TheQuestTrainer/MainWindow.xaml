@@ -129,6 +129,35 @@
                             </StackPanel>
                         </GroupBox>
 
+                        <GroupBox Header="Conditions">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition /><RowDefinition />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Adverse" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2"
+                                           Text="{Binding ConditionSummary}" FontWeight="SemiBold" TextWrapping="Wrap" />
+
+                                <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2"
+                                            Orientation="Horizontal" Margin="0,6,0,0">
+                                    <Button Content="Cure" Command="{Binding CureConditionsCommand}" MinWidth="80"
+                                            ToolTip="Removes poison, disease, curse and paralysis — exactly what the game's own cures remove, and nothing else." />
+                                    <CheckBox Content="Keep clear" Margin="8,0,0,0" VerticalAlignment="Center"
+                                              IsChecked="{Binding FreezeConditions}"
+                                              ToolTip="Re-runs the cure four times a second." />
+                                    <TextBlock Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="12,0,0,0"
+                                               MaxWidth="560" TextWrapping="Wrap"
+                                               Text="Poison, disease, curse and paralysis are the four the game names. Keep clear is a cure on repeat rather than an immunity: the game still inflicts a condition and the trainer takes it away on the next tick, so a poison costs its first turn of health. An effect from a worn item or from your race is not an affliction and is left alone." />
+                                </StackPanel>
+                            </Grid>
+                        </GroupBox>
+
                         <GroupBox Header="Progress">
                             <Grid>
                                 <Grid.ColumnDefinitions>

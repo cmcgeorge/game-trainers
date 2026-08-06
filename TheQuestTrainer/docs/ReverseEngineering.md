@@ -239,13 +239,21 @@ Offsets from the record base. Everything is little-endian.
 | `+0x222` | `u16` | **unspent skill points** | value matched *Available points: 40* |
 | `+0x224` | `u16[21]` | skill values **at character creation**; slot 0 unused | all 8 except the race-locked school, which is 0 |
 | `+0x24E` | `u16[21]` | **base skill values** — the array training raises | write test; §7 |
+| `+0x320` | vector | **carried items**; §15.1 | the encumbrance sum |
+| `+0x334` | `SItem*[14]` ×2 | **equipment**, two weapon sets; §15.5 | the shop's *(equipped)* label |
+| `+0x3A4` | `u8` | which weapon set is live | — |
+| `+0x3B4` | vector | **diseases** — pointers to shared types; §16.4 | the "are you diseased" helper |
 | `+0x3D0` | `i16` | **fame**, −100..+100 | the reputation helper reads `this + 0x3d0` |
 | `+0x3D2` | `i16` | unknown, read `0` | — |
 | `+0x3D4` | `u32` | **crime** (the outstanding bounty) | `"%u"` next to *Crime:* |
 | `+0x3D8` | `u32` | **race id** | `if (5 < …) throw out_of_range` over a six-entry table |
+| `+0x3E8` | `SEngine*` | back-pointer to the engine object | the disease-type lookup goes through it |
+| `+0x404` | vector[25] | **active effects**, one vector per group; §16.2 | the "strip one source" loop |
+| `+0x530` | `u32[]` | effect kind → group; §16.2 | the cure's own indexing |
 
-The whole record is a few kilobytes; the trainer snapshots `0x400` bytes, which covers every field
-above.
+The trainer snapshots the first `0x400` bytes, which covers every scalar above. The three structures
+past that — the item vector, the effect groups and the two tables — are read separately and have
+their own layout classes, because they are vectors of heap pointers rather than fields.
 
 The arrays are all "id-indexed with an unused slot 0", and they tile exactly:
 
@@ -374,7 +382,7 @@ effects. There is nothing to write, and a trainer that claimed otherwise would b
 |---|---|
 | **Maximum health / maximum mana** | Derived from Endurance / Intelligence and level. A live session showing `72/72` and `125/165` contains no `72` or `165` as a stored maximum anywhere in the record. Current health *can* exceed it: writing 500 made the screen read `500/72`. |
 | **Damage `2-4`, Armor `1`** | Summed from the wielded weapon and worn armour, scaled by the relevant skill. |
-| **Resistances (magic, poison, paralysis, disease)** | Derived — the attribute tooltips say so outright: Endurance affects resistances, Intelligence affects magic and paralysis resistance, Personality affects paralysis resistance. The screen's caps (*Maximum is 80%* for magic, *95%* for poison) are applied at display time. |
+| **Resistances (magic, poison, paralysis, disease)** | Derived — the attribute tooltips say so outright: Endurance affects resistances, Intelligence affects magic and paralysis resistance, Personality affects paralysis resistance. The screen's caps (*Maximum is 80%* for magic, *95%* for poison) are applied at display time. What *is* stored is the modifier each worn item, race or spell contributes, as an effect in the groups §16.2 describes — but the total on the screen is summed from those, not held anywhere. |
 | **Outfit** (`Threadbare (6)`) | `FUN_004ed7f0` sums what is worn; `FUN_004ed780` turns the total into a word: `<11` Threadbare, `<21` Shabby, `<41` Plain, `<61` Regular, `<81` Dressy, `<91` Well dressed, `≤95` Fashionable, `>95` Swell. |
 | **The displayed attribute and skill numbers** | Base + racial + equipment, as above. |
 
@@ -490,6 +498,10 @@ The session was left exactly as it was found.
 - **Save editing.** §10 is far enough to be interesting and nowhere near far enough to be safe.
 - **Maximum health and maximum mana.** They do not exist as fields (§8). Raise Endurance or
   Intelligence, or freeze the current value.
+- **Removing an effect that is not an affliction.** The cure takes exactly the three sources the
+  game's own cures take (§16.3). Stripping a racial penalty or an item's downside would be one line
+  more code and a different tool — the game re-derives both, so it would either be undone or take
+  something with it.
 
 ---
 
@@ -519,6 +531,9 @@ image base) are:
 | `0x004ED5B0` | the reputation-word helper → fame at `this + 0x3D0` |
 | `0x004ED780` | the wardrobe-word helper |
 | `0x00735790` | the engine-object pointer in `.data` |
+| `0x0070F29C` | `Poisoned: -%u health per turn, until cured.` → all four conditions at once (§16.1) |
+| `0x004EF590` | the cure every "Cure poison" / "Remove curse" ends in |
+| `0x004EF1A0` | "strip every effect from this source" → the whole group array |
 
 A useful shortcut for finding more: the game's string table is one contiguous run in `.rdata`, and a
 raw file offset converts to a Ghidra address with `VA = fileOffset + 0x1600 + 0x400000`.
@@ -540,6 +555,10 @@ and probe scripts live there and are never committed.
 - The save directory's `u32` at `0x4E` is six bytes larger than `0x52 + 458 × 8`; the discrepancy is
   not understood and the last directory entry is bogus. Both facts are consistent with a terminator
   the parser here simply skips.
+- Most of what §5 once listed as an unidentified gap has since been accounted for: `+0x320`
+  onwards is the pack and the equipment (§15), `+0x3B4` is the disease list and `+0x404` onwards the
+  effect groups (§16). What is still unread there is `+0x278 … +0x31F`, `+0x3A8`, `+0x3C0 … +0x3CF`
+  and `+0x3DC … +0x3E7`; `+0x3A8` and `+0x3C4` are both plainly vectors, and neither was chased.
 
 ---
 
@@ -739,3 +758,250 @@ than a doubt about the mechanism — but it is a gap.
   unnecessary. It would give item type *ids*, which is what a save editor would want.
 - Enchantments are read only far enough to find a wand's charge ceiling. The vector's entries have a
   `u16` at `+4` and a byte at `+0x0D` the book code reads as a skill; the rest is untraced.
+
+---
+
+## 16. Conditions: poison, disease, curse and paralysis
+
+Traced last, and the shape is the same idea as the item graph one level up: nothing about a condition
+is a flag. Poison, curse and paralysis are **lists of effect objects**, disease is a list of pointers
+to shared types, and the character record holds all of it in the region after `+0x400` that §5 stops
+at.
+
+### 16.1 One function names all four
+
+`FUN_00538cf0` builds the character screen's condition tooltips, and it does the whole job in one
+pass — which makes it the single most useful function in this section, because it shows what the game
+considers a condition *and* where each one lives:
+
+```c
+iVar5 = *(int *)(in_ECX + 0x44);                      // the engine object
+
+for (p = *(int **)(iVar5 + 0x42e0); p != *(int **)(iVar5 + 0x42e4); p++)
+    total += *(short *)(*p + 8);                      // poison, summed
+FUN_0043e8a0(…, "Poisoned: -%u health per turn, until cured.", total);
+
+cVar1 = FUN_004ed330(0);                              // any disease at all?
+FUN_0043e4b0("Diseased: you'll suffer negative effects until cured.…");
+
+for (p = *(int **)(iVar5 + 0x42d4); p != *(int **)(iVar5 + 0x42d8); p++)
+    if (turns < *(int *)(*p + 0xc)) turns = *(int *)(*p + 0xc);
+FUN_0043e8a0(…, "Cursed: your attack power has been reduced.\r%i turns left.", turns);
+
+for (p = *(int **)(iVar5 + 0x42c8); p != *(int **)(iVar5 + 0x42cc)) …
+FUN_0043e8a0(…, "Paralyzed: you cannot attack or move.\r%i turns left.…", turns);
+```
+
+Four conditions, four `std::vector`s, and the icon for each is turned on by the same test the tooltip
+uses. There is no fifth: the resource ids in the image are exactly `controls/game/icon-poisoned`,
+`icon-diseased` and `icon-cursed`, and paralysis has the panel entry above.
+
+Subtracting `RecordInEngine` (`0x3DC8`) from those engine offsets puts them in the record:
+
+| Engine | Record | |
+|---|---|---|
+| `+0x417C` | `+0x3B4` | diseases — `std::vector<SDiseaseType*>` |
+| `+0x42C8` | `+0x500` | paralysis effects |
+| `+0x42D4` | `+0x50C` | curse effects |
+| `+0x42E0` | `+0x518` | poison effects |
+
+`FUN_004eddd0` — the "are you poisoned" helper the rest of the game calls, including the one that
+refuses to let you rest — reads `this + 0x518` / `+0x51C` and sums `*(short*)(*p + 8)`, which is the
+same arithmetic against the record rather than the engine. That is what fixes `ECX` as the record and
+not the engine object.
+
+Note what the poison test is: **the sum of the magnitudes must be positive**, not "the list is
+non-empty". `ConditionReader` reproduces that, so a poison that nets to nothing reads as no poison
+rather than as a poison of zero.
+
+### 16.2 The effect groups are one array, and a table says which is which
+
+The three vectors are 12 bytes apart, and they are not special. `FUN_004ef1a0`, which strips every
+effect from one source, gives the whole array away:
+
+```c
+piVar3 = (int *)(in_ECX + 0x410);          // group 1's begin
+local_4 = 1;
+do {
+    … erase every entry whose *(char *)(effect + 0x11) == param_1 …
+    local_4 = local_4 + 1;
+    piVar3 = piVar3 + 3;                   // 12 bytes on
+    if (0x18 < local_4) return;            // stop after group 24
+} while (true);
+```
+
+So there are **25 `std::vector<SEffect*>` in a row at `record + 0x404`**, indices 0..24, and the game
+itself only ever walks 1..24 — the same "id-indexed with an unused slot 0" convention the attribute,
+skill and equipment arrays follow.
+
+Which group holds which kind of effect is a table, not a constant. `FUN_004ef590` — the function
+every "Cure poison", "Remove curse" and "Cure paralysis" ends in — is called as `FUN_004ef590(0x1a)`
+for poison and `FUN_004ef590(0x1c)` for paralysis, and starts:
+
+```c
+iVar3 = *(int *)(in_ECX + 0x530 + param_1 * 4) * 3 + 0x101;
+piVar2 = (int *)(in_ECX + iVar3 * 4);      // &group[table[kind]].begin
+```
+
+`(x * 3 + 0x101) * 4` is `x * 12 + 0x404`, so the table at **`record + 0x530`** maps an effect kind
+onto a group index — and it abuts the group array exactly, since group 24's vector ends at `0x530`.
+The trainer reads that table rather than baking in a group number, because the game does; a harness
+check moves poison to another group and expects the reader to follow.
+
+The table read out of the live session, which is also the list of effect kinds the game has:
+
+| kind | group | what it is | kind | group | what it is |
+|---|---|---|---|---|---|
+| `0x01` | 1 | skill modifier | `0x19` | 24 | serious disease |
+| `0x02` | 2 | attribute modifier | `0x1A` | 23 | **poison** |
+| `0x05` | 3 | health over time | `0x1B` | 22 | **curse** |
+| `0x08` | 4 | unholy health | `0x1C` | 21 | **paralysis** |
+| `0x0A` | 5 | mana over time | `0x21` | 12 | disease resistance |
+| `0x0B` | 6 | armor | `0x22` | 13 | — |
+| `0x0F` | 7 | poison resistance | `0x23` | 14 | — |
+| `0x10` | 8 | paralysis resistance | `0x24` | 15 | magic |
+| `0x11` | 9 | named resistance | `0x26` | 16 | melee |
+| `0x14` | 10 | feather | `0x27` | 17 | magic immunity |
+| `0x16` | 11 | magic resistance | `0x2A` | 18 | — |
+| `0x12` | — | normal weapon resistance | `0x39` | 19 | — |
+| | | | `0x3A` | 20 | outfit |
+
+Entries past `0x3A` are not group numbers — the dwords there read in the millions, so the table ends
+where the kinds do.
+
+### 16.3 The effect object
+
+Twenty bytes, and the whole of it is accounted for by one allocation site. `FUN_004ead80`, which is
+what a tavern's drink does, builds one field by field:
+
+```c
+puVar2 = operator_new(0x14);
+*puVar2 = 0;                                    // +0x00
+*(undefined2 *)(puVar2 + 4) = 0x213;            // +0x10 = 0x13, +0x11 = 0x02
+puVar2[1] = param_2;                            // +0x04
+*(short *)(puVar2 + 2) = (short)iVar9;          // +0x08
+puVar2[3] = iVar10;                             // +0x0C
+*(undefined1 *)((int)puVar2 + 0x12) = 0;        // +0x12
+```
+
+| Offset | | |
+|---|---|---|
+| `+0x00` | ptr | a heap buffer freed alongside the effect; read zero in every effect observed |
+| `+0x04` | `u32` | the type key — what a resistance or a disease is looked up by |
+| `+0x08` | `i16` | **magnitude**: health per turn for poison, the percentage for a resistance, the modifier for an attribute |
+| `+0x0C` | `i32` | **turns remaining**; zero for the ones that last until cured |
+| `+0x10` | `u8` | the group it is filed under |
+| `+0x11` | `u8` | **the source** — see below |
+| `+0x12` | `u8` | the attribute or skill id, for groups 1 and 2 |
+
+`+0x0A..+0x0B` is padding, and the game's own `operator delete` states the size as `0x14`.
+
+**The source byte is the interesting one**, because it is what decides whether a cure may take the
+effect away:
+
+| source | granted by | rebuilt when |
+|---|---|---|
+| 1 | equipment | `FUN_004ece50` strips source 1 and re-applies from the worn slots whenever equipment changes |
+| 2, 3, 6 | a spell, a potion, an affliction | nothing — these are what a cure removes |
+| 4 | a disease | `FUN_004ef880` strips source 4 and re-applies from the disease list whenever it changes |
+| 5 | the character's race | nothing; it is stamped once |
+
+and `FUN_004ef590` removes exactly `{2, 3, 6}`. Everything else is re-derived by the game from
+something that still exists, so removing one would either be undone on the next recalculation or take
+away something a cure was never meant to touch.
+
+The live session is the clean demonstration. *Gerth the Derth* held, with no potions active:
+
+```
+group  1: mag +10 src 5 sub 8    mag +10 src 5 sub 11   mag +10 src 5 sub 10
+group  2: mag  -5 src 5 sub 1    mag  -5 src 5 sub 2    mag  -5 src 5 sub 3    mag +10 src 5 sub 4
+group 11: mag +130 src 5
+group 23: mag  +2  src 6
+```
+
+Group 2 is the Derth's `-5 Strength, -5 Dexterity, -5 Endurance, +10 Intelligence` (attribute ids
+1, 2, 3, 4) and group 1 is its `+10 Healing Magic, +10 Mind Magic, +10 Attack Magic` (skill ids 8,
+11, 10) — the racial block §7 documents, arriving independently through a completely different
+structure. Group 11 is magic resistance, which the screen caps and displays as `+30%`. Group 23 is
+the poison, the only entry in the record with a curable source.
+
+### 16.4 Disease is a list of shared types
+
+`FUN_004ed330` is "are you diseased", optionally by id: an empty argument returns
+`begin != end` and a non-empty one `strcmp`s the id of each element. Curing (`FUN_004ed250`) finds
+the element, erases it, and then calls `FUN_004ef880`, which is `FUN_004ef1a0(4)` — strip every
+disease-granted effect — followed by re-applying from whatever diseases remain.
+
+The elements are pointers to shared `SDiseaseType` objects out of a table hanging off
+`record + 0x3E8` (the record's own back-pointer to the engine), at `+0x28B8`/`+0x28BC` — so the
+character never owns them, and emptying the list costs nothing. The type's name is at `+0x08`: it is
+the `%s` in `You have been cured of %s.` and in the active-effects list's `%s disease`.
+
+That split is why curing a disease is two separate jobs, and why doing only the first would be a bug:
+the list is borrowed pointers, but the penalties the disease granted are ordinary allocated effects
+sitting in the groups above, and nothing re-derives them on its own.
+
+### 16.5 What the trainer does, and the one thing it cannot do
+
+`TrainerActions.CureConditions` is `FUN_004ef590` and `FUN_004ef880` written out, minus one thing:
+
+- For poison, curse and paralysis: read the kind table, read the group, erase every entry whose
+  source is 2, 3 or 6, compact the pointer array, shorten `end`.
+- For disease: write `end = begin` on the list, then strip every source-4 effect from groups 1..24.
+
+**The one thing it cannot do is the `delete`.** The trainer has no safe way to free a block in the
+game's heap, so each cured effect leaks its twenty bytes. Nothing is left dangling — nothing is
+freed, so no pointer can go stale — and the vector's own buffer is untouched and still the game's to
+release; `begin` and the capacity are never written. The cost is twenty bytes per effect removed, in
+a game that allocates and frees these constantly.
+
+The survivors are written *before* the vector is shortened, deliberately. In the instant between the
+two writes the vector holds one duplicated pointer rather than a short vector with a removed effect
+still inside it, so a game reading it mid-cure sees an effect twice for a frame instead of seeing the
+poison it was told had gone.
+
+### 16.6 Confirmed against a live session
+
+Same session again — `TheQuest.exe` v1.9.10, PID 40288, module at `0x00260000`, *Gerth the Derth*,
+who was poisoned at the time and down to 10 health.
+
+| Claim | How |
+|---|---|
+| The kind table is where §16.2 says | `record + 0x530` read `0x1A → 23`, `0x1B → 22`, `0x1C → 21`, and 21 further kinds in the same shape |
+| The groups tile from `record + 0x404` | groups 1, 2, 11 and 23 non-empty at `+0x410`, `+0x41C`, `+0x488`, `+0x518`, exactly `0x404 + 12n` |
+| The effect fields decode | the poison read magnitude 2, duration 0, source 6 — matching the game's own *Poisoned: -2 health per turn, until cured* |
+| The source byte separates affliction from anatomy | the eight racial effects all read source 5; the poison alone read a curable source |
+| The trainer's reader agrees with the game | `Poisoned — 2 health per turn`, nothing else adverse |
+| The cure works | *Cured poison.* — group 23 went from one element to `begin == end`, with `begin` and the capacity unchanged |
+| It touches nothing else | the first `0x400` of the record compared byte-for-byte identical afterwards; the pack, all 18 items, and every attribute and skill unchanged |
+| The racial modifiers survive it | groups 1 and 2 still held 3 and 4 effects, all source 5 |
+| A second cure is a no-op | *Nothing adverse to cure.*, with no writes |
+| Read-only refuses it | the refusal came back and the group was unchanged |
+| The freeze is the same cure on repeat | one `FreezeWriter.Tick` reported one write and left the character clear |
+| The window draws it | driven headless: all four tabs laid out, the Conditions box reading *Poisoned — 2 health per turn* before and *None.* after, the Cure button bound and correctly disabled once clean, no binding errors |
+
+**Not confirmed against a live game**: disease, curse and paralysis. The character was poisoned and
+nothing else, and inducing the other three would have meant playing the session rather than observing
+it. All three are read and cured by the same code the poison exercised, through structures pinned by
+the same disassembly, and `test/FormatCheck` covers each of them — but that is a fixture, not a game.
+Disease is the one to be most careful about: it is the only condition whose cure has a second half
+(the source-4 strip), and that half has never run against a real disease.
+
+**Not confirmed visually**: the game was minimised throughout, so no screenshot was taken of its own
+character screen with the poison icon gone.
+
+### 16.7 Open ends
+
+- The byte at effect `+0x10` matched the group index in every effect observed, so the trainer treats
+  it as such and never reads it. The active-effects screen (`FUN_004c02c0`) switches on a byte it
+  reads four bytes lower on what looks like the same object; that container was not chased down, and
+  it is the one place these notes could not be made to agree.
+- Sources 2, 3 and 6 are all "a cure removes this", but what distinguishes them was not established.
+  The tavern's drunkenness is source 2 and the observed poison was source 6.
+- The remaining effect kinds in §16.2 with no description are named only by their group number;
+  nothing needed them.
+- `SDiseaseType` is read for its name and nothing else. Its own effect templates — the 16-byte
+  entries `FUN_004ea3e0` scans for kind `0x19` to decide "seriously diseased" — are untraced.
+- Nothing was found that expires an effect by counting `+0x0C` down, so it is not known whether
+  writing a duration of zero would make the game free the object itself. If it does, that would be a
+  cure with no leak at all, and it is the first thing to try.

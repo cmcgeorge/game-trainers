@@ -206,6 +206,170 @@ public sealed class TrainerActions
         return ActionResult.Success($"Level {level}; next level at {nextThreshold:N0} experience.", level);
     }
 
+    // ---- conditions -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Cures poison, disease, curse and paralysis — the four adverse conditions the game itself
+    /// names — and returns what it took away.
+    ///
+    /// <b>This is the game's own cure, not a shortcut past it.</b> A condition is not a flag: poison,
+    /// curse and paralysis are lists of heap-allocated effect objects, and the game's "Cure poison",
+    /// "Remove curse" and "Cure paralysis" all end in one function that erases from the matching list
+    /// every entry whose source byte says a cure may take it. This reproduces that function exactly,
+    /// including which sources it leaves alone — an effect granted by a worn item or by the
+    /// character's race is not an affliction and is not removed.
+    ///
+    /// The one thing it cannot reproduce is the <c>delete</c>: the trainer has no safe way to free a
+    /// block in the game's heap, so each cured effect leaks its twenty bytes. The vector's own buffer
+    /// is untouched and the game still owns and frees it; nothing is left dangling, because nothing
+    /// is freed. In exchange, curing costs one or two writes instead of a call into the game.
+    ///
+    /// Disease is handled the way the game handles it: the list is a vector of pointers to *shared*
+    /// type objects, so emptying it costs nothing at all, and the effects the diseases were granting
+    /// are then stripped from every group — which is what the game does immediately after curing one.
+    /// </summary>
+    public ActionResult CureConditions(uint record)
+    {
+        if (ReadOnly) return ActionResult.Failure("Read-only mode is on; nothing was written.");
+
+        var before = ConditionReader.Read(_source, record);
+        if (before is null) return ActionResult.Failure("Could not read the character's conditions.");
+
+        if (!before.AnyCurable)
+            return ActionResult.Success(before.Any
+                ? "Nothing a cure removes — what is left comes from equipment, race or a disease."
+                : "Nothing adverse to cure.");
+
+        if (!Ready(record, out string why)) return ActionResult.Failure(why);
+
+        var cured = new List<string>();
+
+        foreach (var condition in ConditionTables.All)
+        {
+            if (condition == Condition.Disease) continue;
+
+            var group = ConditionReader.ReadGroupOf(_source, record, condition);
+            if (group is null)
+                return ActionResult.Failure(
+                    $"Could not read where this build keeps {ConditionTables.Noun(condition)}.");
+
+            if (!EraseEffects(group, e => e.IsCurable, out int erased, out why))
+                return ActionResult.Failure(why);
+
+            if (erased > 0) cured.Add(ConditionTables.Noun(condition));
+        }
+
+        if (before.Diseases.Count > 0)
+        {
+            if (!CureDiseases(record, out why)) return ActionResult.Failure(why);
+            cured.Add(before.Diseases.Count == 1
+                ? $"“{before.Diseases[0]}”"
+                : $"{before.Diseases.Count} disease(s)");
+        }
+
+        return cured.Count == 0
+            ? ActionResult.Success("Nothing adverse to cure.")
+            : ActionResult.Success($"Cured {Join(cured)}.");
+    }
+
+    /// <summary>
+    /// Empties the disease list and strips what the diseases were granting.
+    ///
+    /// Both halves are needed and the second is the one that is easy to miss: a disease's penalties
+    /// are ordinary effects sitting in the same groups everything else does, tagged as having come
+    /// from a disease, and nothing re-derives them on its own. Dropping the list without stripping
+    /// them would leave the penalties on the character permanently — which is exactly why the game
+    /// rebuilds them the moment the list changes.
+    /// </summary>
+    private bool CureDiseases(uint record, out string why)
+    {
+        if (!TryReadUInt32(record + ConditionLayout.DiseasesBegin, out uint begin))
+        {
+            why = "Could not read the character's disease list.";
+            return false;
+        }
+
+        if (!_source.Write(record + ConditionLayout.DiseasesEnd, BitConverter.GetBytes(begin)))
+        {
+            why = "Could not clear the character's disease list.";
+            return false;
+        }
+
+        for (int index = ConditionLayout.FirstEffectGroup; index <= ConditionLayout.LastEffectGroup; index++)
+        {
+            var group = ConditionReader.ReadGroup(_source, record, index);
+            if (group is null)
+            {
+                why = $"The disease list was cleared but effect group {index} could not be read.";
+                return false;
+            }
+
+            if (!EraseEffects(group, e => e.Source == ConditionLayout.SourceDisease, out _, out why))
+                return false;
+        }
+
+        why = "";
+        return true;
+    }
+
+    /// <summary>
+    /// Removes from one effect group every entry <paramref name="remove"/> accepts, compacting the
+    /// vector the same way the game's own erase does.
+    ///
+    /// The survivors are written before the vector is shortened, deliberately. In the instant
+    /// between the two writes the vector holds one duplicated pointer rather than a short vector
+    /// with a removed effect still inside it, so a game reading it mid-cure sees an effect twice for
+    /// a frame instead of seeing the poison it was told had gone. Neither ordering can produce a
+    /// dangling pointer, because nothing here is freed.
+    /// </summary>
+    private bool EraseEffects(EffectGroup group, Func<ActiveEffect, bool> remove, out int erased, out string why)
+    {
+        erased = 0;
+        why = "";
+
+        var survivors = group.Effects.Where(e => !remove(e)).Select(e => e.Address).ToArray();
+        if (survivors.Length == group.Effects.Count) return true;
+
+        if (survivors.Length > 0)
+        {
+            var bytes = new byte[survivors.Length * 4];
+            for (int i = 0; i < survivors.Length; i++)
+                BitConverter.GetBytes(survivors[i]).CopyTo(bytes, i * 4);
+
+            if (!_source.Write(group.Begin, bytes))
+            {
+                why = $"Could not rewrite effect group {group.Index}.";
+                return false;
+            }
+        }
+
+        uint end = group.Begin + (uint)survivors.Length * 4;
+        if (!_source.Write(group.Slot + 4, BitConverter.GetBytes(end)))
+        {
+            why = $"Could not shorten effect group {group.Index}.";
+            return false;
+        }
+
+        erased = group.Effects.Count - survivors.Length;
+        return true;
+    }
+
+    /// <summary>"a", "a and b", "a, b and c" — the cure's message lists whatever it took away.</summary>
+    private static string Join(IReadOnlyList<string> parts) => parts.Count switch
+    {
+        1 => parts[0],
+        2 => $"{parts[0]} and {parts[1]}",
+        _ => $"{string.Join(", ", parts.Take(parts.Count - 1))} and {parts[^1]}",
+    };
+
+    private bool TryReadUInt32(uint address, out uint value)
+    {
+        var word = new byte[4];
+        if (_source.Read(address, word, 4) != 4) { value = 0; return false; }
+        value = BitConverter.ToUInt32(word, 0);
+        return true;
+    }
+
     // ---- items ------------------------------------------------------------------------------
 
     /// <summary>
