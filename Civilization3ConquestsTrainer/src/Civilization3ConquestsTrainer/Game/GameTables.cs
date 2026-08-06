@@ -11,9 +11,27 @@ public sealed record RaceInfo(int Id, string Leader, string Country, string Adje
 }
 
 /// <summary>One unit type from the loaded rules database.</summary>
-public sealed record UnitTypeInfo(int Id, string Name, int Attack, int Defence, int Movement, int Cost)
+/// <param name="Class">Land, sea or air — see <see cref="Civ3Layout.UnitTypeClass"/>.</param>
+/// <param name="Abilities">
+/// The ability bitfield, tested through <see cref="Civ3Layout.UnitTypeHasAbility"/>. What makes a type
+/// an army or a great leader rather than an ordinary unit.
+/// </param>
+public sealed record UnitTypeInfo(int Id, string Name, int Attack, int Defence, int Movement, int Cost,
+                                  int Class = Civ3Layout.UnitClassLand, int Abilities = 0)
 {
     public string Stats => $"A{Attack} D{Defence} M{Movement}  {Cost} shields";
+
+    /// <summary>Whether this type carries an <c>enum UnitTypeAbilities</c> bit.</summary>
+    public bool Has(int abilityBit) => Civ3Layout.UnitTypeHasAbility(Abilities, abilityBit);
+
+    /// <summary>"land", "sea", "air", or the raw number if the field held something else.</summary>
+    public string ClassName => Class switch
+    {
+        Civ3Layout.UnitClassLand => "land",
+        Civ3Layout.UnitClassSea => "sea",
+        Civ3Layout.UnitClassAir => "air",
+        _ => $"class {Class}",
+    };
 }
 
 /// <summary>
@@ -63,19 +81,53 @@ public sealed class GameTables
     /// <summary>Stride the worker-job table was actually read at (normally <see cref="Civ3Layout.WorkerJobStride"/>).</summary>
     public int WorkerJobStride { get; }
 
+    /// <summary>
+    /// The unit type the loaded ruleset uses for an <b>army</b>, or -1 when it could not be established.
+    ///
+    /// <para>Read from <c>General.BuildArmyUnitID</c> — the same field <c>Unit_form_army</c> reads when
+    /// the game builds one — and then cross-examined: the type it names must exist in the table and must
+    /// actually carry the <c>Army</c> ability. Two unrelated things have to agree before this is
+    /// believed, so a modded ruleset that moved the field produces -1 rather than a wrong answer.</para>
+    /// </summary>
+    public int ArmyUnitTypeId { get; }
+
+    /// <summary>
+    /// The unit type the loaded ruleset uses for a <b>great leader</b>, or -1 when it could not be
+    /// established. Same two-sided check as <see cref="ArmyUnitTypeId"/>, against the <c>Leader</c>
+    /// ability.
+    /// </summary>
+    public int GreatLeaderUnitTypeId { get; }
+
+    /// <summary>
+    /// Whether the unit types' land/sea/air field can be trusted enough to filter the type list with.
+    ///
+    /// <para>The offset is the one <see cref="Civ3Layout.UnitTypeClass"/> field that was not read out of
+    /// the game's code, so it has to earn its use: every type in the loaded ruleset must hold one of the
+    /// three domains, and at least two distinct domains must appear (any real Civ3 ruleset has land and
+    /// sea units, and a field of all-zeros is exactly what a wrong offset most often looks like). When
+    /// this is false the trainer offers every unit type rather than filtering on a field it cannot
+    /// vouch for.</para>
+    /// </summary>
+    public bool UnitClassesUsable { get; }
+
     private GameTables(IReadOnlyList<RaceInfo> races, IReadOnlyList<UnitTypeInfo> unitTypes,
-                       IReadOnlyList<WorkerJobInfo> workerJobs, nuint workerJobsTable, int workerJobStride)
+                       IReadOnlyList<WorkerJobInfo> workerJobs, nuint workerJobsTable, int workerJobStride,
+                       int armyUnitTypeId, int greatLeaderUnitTypeId, bool unitClassesUsable)
     {
         Races = races;
         UnitTypes = unitTypes;
         WorkerJobs = workerJobs;
         WorkerJobsTable = workerJobsTable;
         WorkerJobStride = workerJobStride;
+        ArmyUnitTypeId = armyUnitTypeId;
+        GreatLeaderUnitTypeId = greatLeaderUnitTypeId;
+        UnitClassesUsable = unitClassesUsable;
     }
 
     /// <summary>An empty set, used before a game is located.</summary>
     public static GameTables Empty { get; } = new(
-        Array.Empty<RaceInfo>(), Array.Empty<UnitTypeInfo>(), Array.Empty<WorkerJobInfo>(), 0, Civ3Layout.WorkerJobStride);
+        Array.Empty<RaceInfo>(), Array.Empty<UnitTypeInfo>(), Array.Empty<WorkerJobInfo>(), 0,
+        Civ3Layout.WorkerJobStride, -1, -1, false);
 
     /// <summary>Civilization label for a race id, or a placeholder when it is unknown or unset.</summary>
     public string RaceName(int raceId)
@@ -89,6 +141,24 @@ public sealed class GameTables
     {
         if (typeId < 0) return "(none)";
         return typeId < UnitTypes.Count ? UnitTypes[typeId].Name : $"Type {typeId}";
+    }
+
+    /// <summary>The record for a unit type, or null when the id is unknown or the table was not read.</summary>
+    public UnitTypeInfo? UnitType(int typeId)
+        => typeId >= 0 && typeId < UnitTypes.Count ? UnitTypes[typeId] : null;
+
+    /// <summary>
+    /// The unit types a unit of <paramref name="unitClass"/> may be turned into: its own domain when the
+    /// class field earned its trust, and otherwise the whole table. Never a partial list built on a
+    /// field that might not be the class — offering too much is recoverable, hiding the type someone
+    /// wanted is not.
+    /// </summary>
+    public IReadOnlyList<UnitTypeInfo> TypesInClass(int unitClass)
+    {
+        if (!UnitClassesUsable) return UnitTypes;
+        var list = new List<UnitTypeInfo>();
+        foreach (var t in UnitTypes) if (t.Class == unitClass) list.Add(t);
+        return list.Count > 0 ? list : UnitTypes;
     }
 
     /// <summary>Job name for a job id, empty for an idle unit (<c>-1</c>), or a placeholder.</summary>
@@ -110,7 +180,10 @@ public sealed class GameTables
             var races = ReadRaces(mem, loc.BicData);
             var units = ReadUnitTypes(mem, loc.BicData);
             var (jobs, jobTable, jobStride) = ReadWorkerJobs(mem, loc.BicData);
-            return new GameTables(races, units, jobs, jobTable, jobStride);
+            return new GameTables(races, units, jobs, jobTable, jobStride,
+                ReadSpecialUnitType(mem, loc.BicData, Civ3Layout.BicArmyUnitType, Civ3Layout.UnitAbilityArmy, units),
+                ReadSpecialUnitType(mem, loc.BicData, Civ3Layout.BicGreatLeaderUnitType, Civ3Layout.UnitAbilityLeader, units),
+                ClassesLookReal(units));
         }
         catch (Exception ex) when (ex is IndexOutOfRangeException or ArgumentException or OverflowException)
         {
@@ -160,9 +233,45 @@ public sealed class GameTables
                 ReadInt(mem, u + (nuint)Civ3Layout.UnitTypeAttack),
                 ReadInt(mem, u + (nuint)Civ3Layout.UnitTypeDefence),
                 ReadInt(mem, u + (nuint)Civ3Layout.UnitTypeMovement),
-                ReadInt(mem, u + (nuint)Civ3Layout.UnitTypeCost)));
+                ReadInt(mem, u + (nuint)Civ3Layout.UnitTypeCost),
+                ReadInt(mem, u + (nuint)Civ3Layout.UnitTypeClass),
+                ReadInt(mem, u + (nuint)Civ3Layout.UnitTypeAbilities)));
         }
         return list;
+    }
+
+    /// <summary>
+    /// Reads one of the ruleset's nominated unit types out of <c>BIC.General</c> and refuses to believe
+    /// it unless the type it names carries the ability that role implies.
+    ///
+    /// <para>That second test is the point. The offsets come from arithmetic over the community header
+    /// (one of the two is additionally confirmed by <c>Unit_form_army</c> reading it), but an ability
+    /// bit set on the type the field points at is an <i>independent</i> fact — a wrong offset would have
+    /// to land on a plausible type id whose record also happens to carry the right ability. Failing that
+    /// test returns -1, which switches the feature off rather than acting on a guess.</para>
+    /// </summary>
+    private static int ReadSpecialUnitType(IMemorySource mem, nuint bic, int bicOffset, int requiredAbility,
+                                           IReadOnlyList<UnitTypeInfo> types)
+    {
+        if (!TryReadInt(mem, bic + (nuint)bicOffset, out int id)) return -1;
+        if (id < 0 || id >= types.Count) return -1;
+        return types[id].Has(requiredAbility) ? id : -1;
+    }
+
+    /// <summary>
+    /// Whether the unit types' class field looks like land/sea/air rather than like whatever else may
+    /// live at that offset. See <see cref="UnitClassesUsable"/> for why both halves are needed.
+    /// </summary>
+    private static bool ClassesLookReal(IReadOnlyList<UnitTypeInfo> types)
+    {
+        if (types.Count == 0) return false;
+        int seen = 0;
+        foreach (var t in types)
+        {
+            if (!Civ3Layout.IsPlausibleUnitClass(t.Class)) return false;
+            seen |= 1 << t.Class;
+        }
+        return seen != 0 && (seen & (seen - 1)) != 0;   // at least two distinct domains
     }
 
     /// <summary>

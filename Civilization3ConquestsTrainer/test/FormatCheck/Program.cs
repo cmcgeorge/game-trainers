@@ -103,6 +103,43 @@ Equal("Map inside BIC", Civ3Layout.BicMap, 0x3E64);
 Equal("Race stride", Civ3Layout.RaceStride, 0x974);
 Equal("UnitType stride", Civ3Layout.UnitTypeStride, 0x138);
 
+// The unit-type fields the retype feature reads. UnitTypeAbilities and the two ability bits are the
+// game's own: UnitType_has_ability (0x5F4750) tests +0x88 for indices below 32, and Unit_upgrade and
+// the Build Army gate push 0x12 and 0x13 into it.
+Equal("UnitType.UnitAbilities", Civ3Layout.UnitTypeAbilities, 0x88);
+Equal("UnitType.Unit_Class", Civ3Layout.UnitTypeClass, 0x9C);
+Equal("the Army ability bit", Civ3Layout.UnitAbilityArmy, 0x12);
+Equal("the Leader ability bit", Civ3Layout.UnitAbilityLeader, 0x13);
+Check("the class field sits inside the gap its two anchors leave",
+    Civ3Layout.UnitTypeClass > 0x98 && Civ3Layout.UnitTypeClass < 0xA8);
+Check("every unit-type field the trainer reads is inside one record",
+    Civ3Layout.UnitTypeClass + 4 <= Civ3Layout.UnitTypeStride
+    && Civ3Layout.UnitTypeAbilities + 4 <= Civ3Layout.UnitTypeStride);
+
+// BIC.General's army id is pinned to the absolute address Unit_form_army loads it from
+// (mov edi,[0x9E9A90]), so a mistyped offset cannot quietly point the feature at another field.
+Equal("BIC.General", Civ3Layout.BicGeneral, 0x3CDC);
+Equal("General.BuildArmyUnitID", (uint)Civ3Layout.BicArmyUnitType, 0x9E9A90u - 0x9E5D08u);
+Check("the great-leader id is its immediate neighbour below",
+    Civ3Layout.BicGreatLeaderUnitType + 4 == Civ3Layout.BicArmyUnitType);
+Check("both ids land inside the General block, which ends before the worker-job pointer",
+    Civ3Layout.BicGeneral < Civ3Layout.BicGreatLeaderUnitType
+    && Civ3Layout.BicArmyUnitType < Civ3Layout.BicGeneral + 0x138
+    && Civ3Layout.BicGeneral + 0x138 <= Civ3Layout.BicWorkerJobs);
+
+// The ability test must not silently wrap into the game's second ability word at UnitType+0x130.
+Check("an ability bit reads out of the abilities word",
+    Civ3Layout.UnitTypeHasAbility(1 << Civ3Layout.UnitAbilityArmy, Civ3Layout.UnitAbilityArmy));
+Check("a bit that is not set reads false",
+    !Civ3Layout.UnitTypeHasAbility(1 << Civ3Layout.UnitAbilityArmy, Civ3Layout.UnitAbilityLeader));
+Check("an index past the first word is refused rather than shifted",
+    !Civ3Layout.UnitTypeHasAbility(unchecked((int)0xFFFFFFFF), 32));
+Check("a negative index is refused", !Civ3Layout.UnitTypeHasAbility(-1, -1));
+Check("the three domains are the only plausible classes",
+    Civ3Layout.IsPlausibleUnitClass(Civ3Layout.UnitClassLand)
+    && Civ3Layout.IsPlausibleUnitClass(Civ3Layout.UnitClassAir)
+    && !Civ3Layout.IsPlausibleUnitClass(3) && !Civ3Layout.IsPlausibleUnitClass(-1));
+
 // The worker-job table's address is written as the difference of the two absolute addresses the game's
 // own code uses — `mov esi,[0x9E9B24]` inside get_worker_remaining_turns_to_complete, against
 // p_bic_data at 0x9E5D08 — so a mistyped offset cannot silently point the table somewhere else.
@@ -576,6 +613,63 @@ foreach (int plantedStride in new[] { Civ3Layout.WorkerJobStride, 0x80 })
     Check("a job id past the table has no record", jobTables.WorkerJob(99) == null);
 }
 
+// --- the unit types, and the two roles the ruleset nominates ------------------------------------
+// Neither nominated id is believed on the strength of its offset alone: the type it names has to carry
+// the ability that role implies. That is what these exercise, in both directions.
+
+GameTables TypeTables(int armyId, int leaderId, bool armyAbility = true, bool leaderAbility = true,
+                      Func<int, int>? classOf = null, int stride = Civ3Layout.UnitTypeStride)
+{
+    var m = new FakeModule(0x400000, 0x700000);
+    m.WritePeHeader(GameFacts.KnownTimeDateStamp);
+    m.PlantGame(Civ3Layout.RvaLeaders);
+    m.PlantUnitTypes(0x2D0000, typeCount: 9, stride: stride, armyId, leaderId, armyAbility, leaderAbility, classOf);
+    var l = new GameLocator(m).Locate();
+    return l != null ? GameTables.Read(m, l) : GameTables.Empty;
+}
+
+var typeTables = TypeTables(armyId: 7, leaderId: 8);
+Equal("unit types are recovered", typeTables.UnitTypes.Count, 9);
+Equal("with their names", typeTables.UnitTypeName(4), "Unit4");
+Equal("the ruleset's army type is found", typeTables.ArmyUnitTypeId, 7);
+Equal("and its great-leader type", typeTables.GreatLeaderUnitTypeId, 8);
+Check("the army type really does carry the Army ability",
+    typeTables.UnitType(7)!.Has(Civ3Layout.UnitAbilityArmy));
+Check("a type record is null past the end of the table", typeTables.UnitType(99) == null);
+
+var noAbility = TypeTables(armyId: 7, leaderId: 8, armyAbility: false, leaderAbility: false);
+Equal("an army id whose type lacks the ability is refused", noAbility.ArmyUnitTypeId, -1);
+Equal("and so is the leader id", noAbility.GreatLeaderUnitTypeId, -1);
+Check("even though the types themselves read fine", noAbility.UnitTypes.Count == 9);
+
+var outOfRange = TypeTables(armyId: 999, leaderId: -1);
+Equal("an army id past the table is refused", outOfRange.ArmyUnitTypeId, -1);
+Equal("and a negative one", outOfRange.GreatLeaderUnitTypeId, -1);
+
+// The class field is the one unit-type offset not read out of the game's code, so it has to earn its
+// use: every type in a plausible domain, and more than one domain present.
+Check("a rotating land/sea/air table is usable", typeTables.UnitClassesUsable);
+Equal("a land unit is offered only land types",
+    typeTables.TypesInClass(Civ3Layout.UnitClassLand).All(t => t.Class == Civ3Layout.UnitClassLand), true);
+Check("and fewer than the whole table",
+    typeTables.TypesInClass(Civ3Layout.UnitClassLand).Count < typeTables.UnitTypes.Count);
+
+var oneDomain = TypeTables(armyId: 7, leaderId: 8, classOf: _ => Civ3Layout.UnitClassLand);
+Check("a table with a single domain is not trusted to be the class field", !oneDomain.UnitClassesUsable);
+Equal("so every type is offered instead", oneDomain.TypesInClass(Civ3Layout.UnitClassLand).Count,
+    oneDomain.UnitTypes.Count);
+
+var badClasses = TypeTables(armyId: 7, leaderId: 8, classOf: i => i == 5 ? 99 : i % 3);
+Check("one implausible class disqualifies the whole field", !badClasses.UnitClassesUsable);
+Equal("and the type list stops being filtered", badClasses.TypesInClass(Civ3Layout.UnitClassSea).Count,
+    badClasses.UnitTypes.Count);
+Check("but the army id still works, because it never depended on the class field",
+    badClasses.ArmyUnitTypeId == 7 && badClasses.GreatLeaderUnitTypeId == 8);
+
+Equal("empty tables nominate no army", GameTables.Empty.ArmyUnitTypeId, -1);
+Equal("and no great leader", GameTables.Empty.GreatLeaderUnitTypeId, -1);
+Check("and cannot filter by domain", !GameTables.Empty.UnitClassesUsable);
+
 // =================================================================================================
 Group("Scan value helpers");
 // =================================================================================================
@@ -796,6 +890,93 @@ if (jobsLoc != null)
     idleHost.Writes.Clear();
     Check("finish job declines on an idle unit", !idleRow.FinishJob());
     Equal("and no write reaches the game", idleHost.Writes.Count, 0);
+}
+
+// --- retyping a unit ------------------------------------------------------------------------------
+// One field decides what a unit is, and the game resolves stats, abilities and orders through it every
+// time — so the write is small and the guards around it are what matter: damage has to be cleared
+// (maximum hit points come from the type), the list a row offers has to be stable across polls (a
+// rebuilt ItemsSource closes the dropdown), and a binding echo must not be reported as a rejection.
+
+var retypeModule = new FakeModule(0x400000, 0x700000);
+retypeModule.WritePeHeader(GameFacts.KnownTimeDateStamp);
+retypeModule.PlantGame(Civ3Layout.RvaLeaders);
+retypeModule.PlantUnitTypes(0x2D0000, typeCount: 9, stride: Civ3Layout.UnitTypeStride, armyId: 7, leaderId: 8);
+var retypeLoc = new GameLocator(retypeModule).Locate();
+var retypeTables = retypeLoc != null ? GameTables.Read(retypeModule, retypeLoc) : GameTables.Empty;
+Check("the retype fixture located", retypeLoc != null && retypeTables.UnitTypes.Count == 9);
+
+if (retypeLoc != null)
+{
+    var typeHost = new FakeGameHost();
+    nuint typeBody = 0x80000;
+    typeHost.Seed(typeBody + (nuint)Civ3Layout.UnitCivId, 1);
+    typeHost.Seed(typeBody + (nuint)Civ3Layout.UnitX, 10);
+    typeHost.Seed(typeBody + (nuint)Civ3Layout.UnitY, 10);
+    typeHost.Seed(typeBody + (nuint)Civ3Layout.UnitTypeId, 3);       // a land type: 3 % 3 == 0
+    typeHost.Seed(typeBody + (nuint)Civ3Layout.UnitDamage, 4);
+    typeHost.Seed(typeBody + (nuint)Civ3Layout.UnitJobId, -1);
+
+    var typeRow = new UnitRowViewModel(typeHost, typeBody, 0);
+    Check("a unit row refreshes", typeRow.Refresh(retypeTables, retypeLoc));
+    Equal("the row reads its type", typeRow.TypeId, 3);
+    Equal("and names it from the ruleset", typeRow.TypeName, "Unit3");
+    Check("the offered types are its own domain",
+        typeRow.AvailableTypes.Count > 0 && typeRow.AvailableTypes.All(t => t.Class == Civ3Layout.UnitClassLand));
+
+    // The poll loop calls Refresh twice a second. Handing WPF a fresh list each time would reset the
+    // ComboBox under the user's cursor, so an unchanged list must be the *same* list.
+    var listBefore = typeRow.AvailableTypes;
+    typeRow.Refresh(retypeTables, retypeLoc);
+    Check("an unchanged type list is not rebuilt", ReferenceEquals(listBefore, typeRow.AvailableTypes));
+    typeRow.Refresh(retypeTables, retypeLoc, anyClass: true);
+    Check("widening the domain does rebuild it", !ReferenceEquals(listBefore, typeRow.AvailableTypes));
+    Equal("to the whole table", typeRow.AvailableTypes.Count, retypeTables.UnitTypes.Count);
+
+    typeHost.Writes.Clear();
+    typeRow.TypeId = 6;
+    Check("the new type is written",
+        typeHost.Writes.Any(w => w.Address == typeBody + (nuint)Civ3Layout.UnitTypeId && w.Value == 6));
+    Check("and carried damage is cleared with it",
+        typeHost.Writes.Any(w => w.Address == typeBody + (nuint)Civ3Layout.UnitDamage && w.Value == 0));
+    Equal("the row shows the new type", typeRow.TypeName, "Unit6");
+    Check("and the report says what happened", typeHost.LastReport.Contains("Unit6"));
+
+    // A retype to the army type is legal — the field takes it — but it produces an empty shell, so the
+    // message has to say so rather than let it look like the finished article.
+    typeRow.TypeId = 7;
+    Check("retyping to the army type warns that it is an empty shell",
+        typeHost.LastReport.Contains("ARMY") && typeHost.LastReport.Contains("Make great leader"));
+
+    // A ComboBox pushes its own null selection back as -1 when its item list is replaced. That is not a
+    // user edit: it must snap back silently rather than report an out-of-range rejection.
+    typeHost.Writes.Clear();
+    typeHost.Report("");
+    typeRow.TypeId = -1;
+    Equal("a binding echo writes nothing", typeHost.Writes.Count, 0);
+    Equal("and reports nothing", typeHost.LastReport, "");
+    Equal("leaving the row on its real type", typeRow.TypeId, 7);
+    typeRow.TypeId = 999;
+    Equal("a type id past the ruleset is refused too", typeHost.Writes.Count, 0);
+
+    typeHost.Writes.Clear();
+    Check("make-great-leader reports success", typeRow.MakeGreatLeader(retypeTables));
+    Equal("and writes the ruleset's own leader type", typeRow.TypeId, retypeTables.GreatLeaderUnitTypeId);
+    Check("through the unit's type field",
+        typeHost.Writes.Any(w => w.Address == typeBody + (nuint)Civ3Layout.UnitTypeId
+                                 && w.Value == retypeTables.GreatLeaderUnitTypeId));
+
+    // With no ruleset the feature switches itself off rather than writing -1 into a live unit.
+    typeHost.Writes.Clear();
+    Check("make-great-leader declines when the ruleset was not read",
+        !typeRow.MakeGreatLeader(GameTables.Empty));
+    Equal("and writes nothing", typeHost.Writes.Count, 0);
+
+    typeHost.WritesAllowed = false;
+    typeHost.Writes.Clear();
+    typeRow.TypeId = 2;
+    Equal("a retype is refused when writes are blocked", typeHost.Writes.Count, 0);
+    typeHost.WritesAllowed = true;
 }
 
 // "Finish research" banks points rather than granting a tech: Civ3 compares the accumulated points

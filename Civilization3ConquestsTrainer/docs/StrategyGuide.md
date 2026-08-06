@@ -316,5 +316,7 @@ out-fighting it late.
 ---
 
 *If you are using the trainer alongside this guide: it edits treasury, tax/science/luxury rates,
-culture, era and research points per civilization, and heals / refreshes / promotes units. It does
-not grant technologies or edit gold-per-turn — see `ReverseEngineering.md` for why.*
+culture, era and research points per civilization, and heals / refreshes / promotes / retypes units —
+including turning one into a great leader, so the game will build you an army through its own Build
+Army order. It does not grant technologies, edit gold-per-turn, or create units out of nothing — see
+`ReverseEngineering.md` for why in each case.*

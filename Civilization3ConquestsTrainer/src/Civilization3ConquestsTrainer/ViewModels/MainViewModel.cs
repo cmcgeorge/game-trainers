@@ -79,6 +79,47 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         set { if (SetField(ref _minesOnly, value)) Rescan(); }
     }
 
+    private UnitRowViewModel? _selectedUnit;
+    /// <summary>The row the Units grid has selected, which the per-unit actions work on.</summary>
+    public UnitRowViewModel? SelectedUnit
+    {
+        get => _selectedUnit;
+        set { SetField(ref _selectedUnit, value); RaiseCommands(); }
+    }
+
+    private bool _anyUnitClass;
+
+    /// <summary>
+    /// Lets the <i>Type</i> column offer unit types outside a unit's own land/sea/air domain.
+    ///
+    /// <para>Off by default because the game will happily hold the value: a Trireme rewritten as a
+    /// Warrior is a land unit standing in the ocean, which is a state Civ3 has no move for. Worth having
+    /// as a toggle rather than a rule, though — a mod may classify units in ways the epic game does not,
+    /// and the class field is the one <c>UnitType</c> offset here that was not read out of the game's
+    /// own code.</para>
+    /// </summary>
+    public bool AnyUnitClass
+    {
+        get => _anyUnitClass;
+        set
+        {
+            if (!SetField(ref _anyUnitClass, value)) return;
+            RefreshUnitTypeLists();
+            Status = value
+                ? "The Type column now offers every unit type in the ruleset, including other domains. " +
+                  "Turning a land unit into a ship (or the reverse) leaves it somewhere it cannot legally " +
+                  "be — change it back, or move the unit first."
+                : "The Type column is back to offering each unit its own domain — land, sea or air.";
+        }
+    }
+
+    /// <summary>Rebuilds every row's type list after the domain filter changes.</summary>
+    private void RefreshUnitTypeLists()
+    {
+        if (_location is not { } loc) return;
+        foreach (var u in Units) u.Refresh(_tables, loc, _anyUnitClass);
+    }
+
     public bool IsAttached => _mem is { IsOpen: true };
     public bool IsLocated => _location != null;
 
@@ -229,6 +270,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     public ICommand HealAllUnitsCommand { get; }
     public ICommand RefreshAllMovesCommand { get; }
     public ICommand EliteAllUnitsCommand { get; }
+    public ICommand MakeGreatLeaderCommand { get; }
     public ICommand FinishWorkerJobsCommand { get; }
     public ICommand MaxCityFoodCommand { get; }
     public ICommand MaxCityShieldsCommand { get; }
@@ -249,6 +291,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         HealAllUnitsCommand = new RelayCommand(_ => ForMyUnits(u => u.FullHeal()), _ => IsLocated);
         RefreshAllMovesCommand = new RelayCommand(_ => ForMyUnits(u => u.RefreshMoves()), _ => IsLocated);
         EliteAllUnitsCommand = new RelayCommand(_ => ForMyUnits(u => u.MakeElite()), _ => IsLocated);
+        MakeGreatLeaderCommand = new RelayCommand(_ => MakeGreatLeader(), _ => IsLocated && SelectedUnit != null);
         FinishWorkerJobsCommand = new RelayCommand(_ => FinishWorkerJobs(), _ => IsLocated);
         MaxCityFoodCommand = new RelayCommand(_ => MaxCityFood(), _ => IsLocated);
         MaxCityShieldsCommand = new RelayCommand(_ => MaxCityShields(), _ => IsLocated);
@@ -367,6 +410,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         _suspendRefresh = false;
         Players.Clear();
         Cities.Clear();
+        SelectedUnit = null;
         Units.Clear();
         Map.Clear();
         Reference.Clear();
@@ -400,6 +444,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
             _tables = GameTables.Empty;
             Players.Clear();
             Cities.Clear();
+            SelectedUnit = null;
             Units.Clear();
             Map.Clear();
             Reference.Clear();
@@ -468,11 +513,14 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
             Cities.Add(row);
         }
 
+        // The rows are about to be replaced, so the selection has to go with them — a stale row holds a
+        // body pointer nothing re-validates any more.
+        SelectedUnit = null;
         Units.Clear();
         foreach ((nuint body, int slot) in EnumerateContainer(loc.UnitsContainer))
         {
             var row = new UnitRowViewModel(this, body, slot);
-            if (!row.Refresh(_tables, loc)) continue;
+            if (!row.Refresh(_tables, loc, _anyUnitClass)) continue;
             if (MineOnly && !row.IsMine) continue;
             Units.Add(row);
         }
@@ -572,6 +620,57 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         int n = 0;
         foreach (var u in Units) { if (!u.IsMine) continue; action(u); n++; }
         Status = n == 0 ? "You have no units in the list — click Re-scan." : $"Applied to {n} of your unit(s).";
+    }
+
+    /// <summary>
+    /// Turns the selected unit into the ruleset's great-leader type, so the game itself will build an
+    /// army out of it.
+    ///
+    /// <para><b>Why this route rather than writing an army directly.</b> An army in Civ3 is an ordinary
+    /// unit whose type carries the <c>Army</c> ability, so the Type column can produce one in a single
+    /// write — but it would be an empty shell, and the linkage that puts units inside it (each member's
+    /// <c>Container_Unit</c> field, the army's own member count and top defender) is bookkeeping the
+    /// trainer would have to imitate. A great leader instead hands the whole job back to the game:
+    /// <c>Unit_can_perform_action</c> decides whether to offer <i>Build Army</i> by testing the
+    /// <c>Leader</c> ability on the unit's <b>current</b> type, so a retyped unit qualifies, and
+    /// <c>Unit_form_army</c> then spawns a real army through the same path a leader won in battle
+    /// would.</para>
+    /// </summary>
+    private void MakeGreatLeader()
+    {
+        if (!CanApplyBulk()) return;
+        if (SelectedUnit is not { } unit) { Status = "Select a unit in the grid first."; return; }
+
+        if (_tables.GreatLeaderUnitTypeId < 0)
+        {
+            Status = "This ruleset's great-leader unit type could not be established — either the rules " +
+                     "database was not read, or the type it names does not carry the Leader ability, and " +
+                     "the trainer will not act on a number that fails its own cross-check.";
+            return;
+        }
+
+        var leaderType = _tables.UnitType(_tables.GreatLeaderUnitTypeId)!;
+        var currentType = _tables.UnitType(unit.TypeId);
+        if (!_anyUnitClass && _tables.UnitClassesUsable && currentType != null
+            && currentType.Class != leaderType.Class)
+        {
+            Status = $"{unit.TypeName} is a {currentType.ClassName} unit and {leaderType.Name} is a " +
+                     $"{leaderType.ClassName} one, so this would strand it. Pick a {leaderType.ClassName} " +
+                     "unit instead, or tick \"Any domain\" if you mean it.";
+            return;
+        }
+
+        if (!unit.MakeGreatLeader(_tables)) { Status = "The unit type could not be written."; return; }
+
+        Status = $"Unit {unit.Slot} is now a {leaderType.Name}. Select it in the game and give it the " +
+                 "Build Army order (its own button on the unit panel): Civ3 will consume the leader and " +
+                 "spawn a real army, which you then load by moving units onto its tile and using the " +
+                 "game's own load order. Doing it this way means the game creates the army — the trainer " +
+                 "only changed one number." +
+                 (_tables.ArmyUnitTypeId >= 0
+                     ? ""
+                     : "  (This ruleset's army type failed its cross-check, so if Build Army does not " +
+                       "appear, the ruleset may not have one.)");
     }
 
     /// <summary>
@@ -794,7 +893,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         bool bankJobs = _keepWorkerJobsBanked && WritesAllowed;
         foreach (var u in Units)
         {
-            if (!u.Refresh(_tables, loc)) { dropped = true; continue; }
+            if (!u.Refresh(_tables, loc, _anyUnitClass)) { dropped = true; continue; }
             u.ApplyFreeze();
             if (!u.IsMine) continue;
             // Bank first, hold second: banking is what the next work tick consumes, and the returned
@@ -882,7 +981,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         foreach (var c in new[]
                  {
                      AttachCommand, DetachCommand, AutoLocateCommand, RescanCommand, MaxTreasuryCommand,
-                     HealAllUnitsCommand, RefreshAllMovesCommand, EliteAllUnitsCommand,
+                     HealAllUnitsCommand, RefreshAllMovesCommand, EliteAllUnitsCommand, MakeGreatLeaderCommand,
                      FinishWorkerJobsCommand,
                      MaxCityFoodCommand, MaxCityShieldsCommand, MaxCityCultureCommand,
                      FinishResearchCommand, MaxAllCommand,

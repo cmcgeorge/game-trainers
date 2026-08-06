@@ -107,6 +107,40 @@ Confirmed live end-to-end: with the key at `-12345`, writing `24690` into `Gold_
 treasury decode to exactly `12345`; the key was unchanged; restoring the original encoded value
 returned it to `10`.
 
+### 3.1 The codec, from the game's own side — and why the key moves
+
+`Leader_set_treasury` @ `0x4C9B30` is eleven instructions and settles what §8 used to list as an open
+question:
+
+```
+004C9B38   test esi, esi                ; esi = the amount to store
+004C9B3A   jge  0x4C9B62
+004C9B3C   xor  esi, esi                ;   negative -> clamp the treasury to zero
+004C9B3E   call [0x682314]              ;   WINMM!timeGetTime
+004C9B46   mov  ecx, 0xD431             ;   54321
+004C9B4B   div  ecx
+004C9B4D   sub  edx, 0x8235             ;   key = timeGetTime() % 54321 - 33333
+004C9B55   mov  [edi+0x44], edx         ;   Gold_Decrement
+004C9B58   sub  esi, eax
+004C9B5A   mov  [edi+0x48], esi         ;   Gold_Encoded = amount - key
+...
+004C9B64   call [0x682314]              ; positive: same shape, keyed to the amount itself
+004C9B6C   div  esi                     ;   key = timeGetTime() % amount - 12345
+004C9B6E   sub  edx, 0x3039
+```
+
+**`Gold_Decrement` is re-seeded on every single treasury write**, from the millisecond clock. That is
+the answer to "is the key ever re-seeded mid-game?", and it makes the trainer's re-encode-per-tick
+freeze not merely defensive but *required* — a freeze that replayed a captured `Gold_Encoded` would
+break the moment the game paid for anything.
+
+It also explains the three keys recorded above exactly. At the start of a game the treasury is 10, so
+the positive branch gives `timeGetTime() % 10 - 12345` — a value in `[-12345, -12336]`. The observed
+keys were **-12345, -12342 and -12337**. All three, and the constants `54321 / 33333 / 12345` are the
+same digit-pattern signature the whole scheme is built from.
+
+The same code is inlined into `Unit_upgrade` (§4.8), which is where it was found.
+
 ---
 
 ## 4. Memory model
@@ -485,6 +519,168 @@ set/unset overlay masks) and the animation — so a poked job id would describe 
 
 ---
 
+## 4.8 Changing what a unit *is* — retyping, and where armies come from
+
+Six routines settle this end to end, and all of it is read out of `.text` rather than inferred.
+
+### The type is not a label — the game resolves everything through it
+
+`Unit_has_ability` @ `0x5CB430`:
+
+```
+005CB44A   mov  eax, [esi+0x40]           ; Unit+0x40 = Unit_Body+0x24 = UnitTypeID
+005CB44D   mov  edx, [0x9E99E0]           ; BIC.UnitTypes  <- 0x9E99E0 - 0x9E5D08 = 0x3CD8
+005CB454   lea  ecx, [eax+eax*4] ...      ; x 39, then x 8  ->  stride 0x138
+005CB45F   call 0x5F4750                  ; UnitType_has_ability
+```
+
+and the accessor it calls, in full:
+
+```
+005F4756   cmp  ecx, 0x20
+005F4762   test dword [eax+0x88], edx     ; UnitAbilities, bit n
+005F4778   test dword [eax+0x130], edx    ; Extra_Abilities, bit n-32
+```
+
+`Unit_can_perform_action` @ `0x5D0670` does the same for *orders*, indexing four action words from a
+single base:
+
+```
+005D069A   mov  eax, [esi+0x40]           ; UnitTypeID again
+005D06A9   shr  ebp, 0x1C                 ; the action constant's top nibble picks the word
+005D06B7   mov  ecx, [eax+edx*4+0xA8]     ; Standard / Special / Worker / Air actions
+```
+
+Five things fall out, all **[Confirmed]**:
+
+1. **A unit's abilities, orders, stats and maximum hit points are looked up from `UnitTypeID` every
+   time they are needed.** Nothing is cached on the unit. So writing that one field really does change
+   what a unit *is*, immediately and completely — which is what makes the Units tab's *Type* column a
+   single four-byte write rather than a reconstruction.
+2. `BIC.UnitTypes` at `+0x3CD8` and the `0x138` stride, previously brute-forced against
+   `Table[i].ID == i`, are now the game's own numbers.
+3. `UnitType.UnitAbilities` sits at `+0x88`, and abilities 32 and up live in a second word at `+0x130`
+   — which is the second-to-last field in the record, so it independently re-confirms the stride.
+4. The four action words start at `UnitType+0xA8`. `UCV_Build_Army` is `0x10000040`: word 1
+   (`Special_Actions`, `+0xAC`), bit `0x40`.
+5. `Unit_Body+0x24` as `UnitTypeID` moves from "indexes BIC.UnitTypes" to read-out-of-the-instruction-
+   stream, alongside the `Unit = body − 0x1C` offset the same routines use.
+
+### What a retype does *not* reach
+
+`Leader_spawn_unit` @ `0x575900` is what creates a unit, and reading it says exactly what a retype
+misses — as well as closing the question of whether a trainer could create one:
+
+```
+005759AE   push 0x404                     ; sizeof(Unit) — a heap allocation
+005759B3   call 0x6683E1                  ; operator new
+005759D4   mov  [esi], 0x68ADD0           ; vtable
+005759DA   mov  [esi+0x1C], 0x68ADCC      ; the body's own vtable — body = object + 0x1C
+00575A00   push 0x64 / call 0x4D0E40      ; grow p_units from empty
+00575A31   mov  [ecx+edi*8+4], esi        ; link into the container's item array
+00575CBB   mov  edx, [ebp+0x18C] / inc    ; Leader.Unit_Count++
+00575D7C   inc  word [ecx+edx*2]          ; per-unit-type tally, Leader+0x15F0
+00575D8B   call 0x5F4750 (ability 0x12)   ; if it is an army …
+00575D94   inc  word [ebp+0x188]          ;   … the leader's army tally
+00575DD6   call 0x5A6810                  ; build the animation name from type + Leader.Era + race
+00575DFB   call 0x406810                  ; load it into the unit at Unit+0x27C = Unit_Body+0x260
+```
+
+So:
+
+- **Creating a unit is not a value a trainer can write.** It is a `0x404`-byte heap allocation, a
+  container link (with a growth path), several counters and an animation load. The trainer is data-only
+  (§6), and this is firmly on the other side of that line.
+- **The artwork is chosen at spawn**, from the unit type, its owner's era and its race, and stored
+  *in the unit*. A retyped unit is therefore expected to keep the sprite it was born with while
+  fighting as its new type. This is a code-derived expectation, **not observed on screen**.
+- **The owner's tallies are incremental**, maintained at spawn and despawn rather than counted on
+  demand, so a retype leaves them off by one. The trainer does not correct them: they are AI-facing
+  bookkeeping, and writing `Leader+0x15F0` / `+0x188` to paper over a cosmetic drift is more risk than
+  the drift is worth.
+
+### The game itself never retypes in place
+
+`Unit_upgrade` @ `0x5CF2E0` — the game's own "this unit becomes another type" — spawns a *new* unit and
+destroys the old one:
+
+```
+005CF3B1   call 0x575900                 ; Leader_spawn_unit(type, x, y, …)
+005CF3FF…  rep movsb                     ; copy Custom_Name  (Unit+0x74 = Body+0x58)
+005CF42C   mov  eax, 2 / mov [ebx+0x44]  ; copy Combat_Experience, capped at Veteran
+005CF437   mov  [ebx+0x38], ecx          ; copy RaceID
+005CF474   mov  edx, [esi+0x60]          ; every unit whose Container_Unit …
+005CF47A   cmp  edx, eax                 ;   … is the OLD unit's ID
+005CF4A0   mov  [esi+0x60], eax          ;   is re-homed onto the new one
+005CF4B7   push 0x12 / call 0x5F4750     ; and if the new type has the Army ability …
+005CF4C7   call 0x5CB840                 ;   … Unit_load_into_army
+005CF4EB   call 0x5CA720                 ; Unit_despawn — the original is destroyed
+```
+
+Two more confirmations from that: **`Container_Unit` at `Unit_Body+0x44` holds the *ID* of the unit
+carrying this one** (army member or transport passenger), and **`0x12` is the Army ability bit** — the
+game tests it itself to decide whether passengers should be loaded as an army.
+
+### Armies: one instruction of `Unit_form_army` is the whole feature
+
+```
+005CB5BA   mov  ecx, [esi+0x28]          ; Y
+005CB5C5   mov  edx, [esi+0x24]          ; X
+005CB5CA   mov  edi, [0x9E9A90]          ; <- BIC + 0x3D88 = General.BuildArmyUnitID
+005CB5DF   lea  ecx, [edx*4 + 0xA75698]  ; &leaders[this unit's CivID]
+005CB5E6   call 0x575900                 ; Leader_spawn_unit(army type, same tile)
+005CB5F1   mov  eax, [esi+0x38]
+005CB5F4   mov  [edi+0x38], eax          ; the army inherits the leader's RaceID
+005CB607   call 0x5CA720                 ; Unit_despawn — the leader is consumed
+```
+
+`0x9E9A90 − 0x9E5D08 = 0x3D88`, which is `BIC.General + 0xAC` — **`General.BuildArmyUnitID`, confirmed
+from the instruction stream**, and the `General` block itself is anchored by `FoodPerCitizen` at
+`BIC+0x3DAC` (`General+0xD0`, reading 2 live). Its neighbour `BattleCreatedUnitID` at `+0x3D84` is the
+great-leader type by the same arithmetic.
+
+And the gate that decides whether a unit is *offered* Build Army, inside `Unit_can_perform_action`:
+
+```
+005D095A   call 0x5CB430 (ability 0x13)  ; Leader — tested against the unit's CURRENT type
+005D0961   je   0x5D096C                 ;   no ability -> the strict path -> refuse
+005D0963   test byte [esi+0x1F4], 3      ; leader_kind (Unit_Body+0x1D8)
+005D096A   je   0x5D098A                 ;   0 -> allowed
+005D097D   test byte [esi+0x1F4], 1      ;   otherwise military leaders only
+```
+
+That last detail is what makes the whole feature work without a code patch. An ordinary unit is spawned
+with `leader_kind = 0`, and `0 & 3 == 0` takes the **allowed** branch — the branch that refuses is the
+one for a *scientific* leader, which is the game's own rule. So a unit retyped to the great-leader type
+needs nothing else written to it: the ability test reads its new type, the kind test passes, and the
+order appears.
+
+### What the trainer does with all this
+
+- **The *Type* column** writes `Unit_Body+0x24` and clears `Damage` with it, because maximum hit points
+  come from the type and damage carried over from a larger one would put the unit past dead. The list
+  it offers is filtered to the unit's own land/sea/air domain unless *Any domain* is ticked.
+- ***Make great leader*** writes the ruleset's `BattleCreatedUnitID` onto the selected unit and then
+  stops, deliberately. The player gives the game's own Build Army order, and `Unit_form_army` builds a
+  real army through `Leader_spawn_unit` — correct container linkage, correct tallies, correct artwork,
+  none of it imitated.
+- **Neither type id is hard-coded, and neither is trusted on its offset alone.** `GameTables` reads
+  both out of `BIC.General` and then requires the type each one names to actually carry the matching
+  ability bit (`0x12` army, `0x13` leader). Two unrelated facts have to agree; a mod that moved the
+  field yields -1 and the feature switches itself off rather than acting on a wrong number.
+- **`Container_Unit` is deliberately not written.** Loading a unit into an army by hand would mean
+  setting the member's `+0x44`, the army's member count and its top defender, and `Unit_load_into_army`
+  @ `0x5CB840` demonstrably touches more than that. The great-leader route makes it unnecessary.
+
+`UnitType.Unit_Class` (`+0x9C`, land/sea/air) is the one field here that is **[Inferred]**. It is
+bracketed with no slack between the header's `field_98` anchor and `Standard_Actions` at `+0xA8`, which
+the action indexing above confirms — exactly four fields fit that gap and this is the first. It is
+still checked at run time rather than trusted: every type in the loaded ruleset must hold one of the
+three domains and at least two distinct domains must appear, or the trainer stops filtering and offers
+the whole table.
+
+---
+
 ## 5. The locator
 
 ### Chain A — static globals (the normal path)
@@ -551,6 +747,18 @@ scan normally.
 - `WriteProcessMemory` reaching the game at all (scratch field `-1 → 24301 → -1`)
 - the container shape, and every `Unit_Body` field the trainer surfaces — including `Job_Value` and
   `Job_ID`, and the `body − 0x1C` header offset, all read out of the game's own instruction stream (§4.7)
+- `Unit_Body.UnitTypeID` (`+0x24`) as the field the game resolves stats, abilities, orders and maximum
+  hit points through, live, on every lookup — from `Unit_has_ability` and `Unit_can_perform_action` (§4.8)
+- `Unit_Body.Container_Unit` (`+0x44`) as the *ID* of the unit carrying this one, from the passenger
+  re-homing loop in `Unit_upgrade`
+- `UnitType.UnitAbilities` (`+0x88`), the overflow word `Extra_Abilities` (`+0x130`), the four action
+  words from `+0xA8`, and the ability bits `0x12` (Army) and `0x13` (Leader) — all from the game's own
+  accessors, which also re-derive `BIC.UnitTypes` (`+0x3CD8`) and the `0x138` stride from code
+- `General.BuildArmyUnitID` at `BIC + 0x3D88`, read as an absolute address by `Unit_form_army`, and with
+  it the position of the `General` block
+- the gold codec's key schedule: `Leader_set_treasury` re-seeds `Gold_Decrement` from `timeGetTime()`
+  on **every** treasury write (§3.1), which both answers an open question and accounts for the three
+  keys observed live
 - the worker-job table: `BIC + 0x3E1C`, `TurnToComplete + 0x44`, stride `0x74`, count at `BIC + 0x8B8`
   — from the game's code, plus a live write round-trip of all 13 costs, restored exactly
 - `Leader.GovernmentType` (`+0xA0`) and `BIC.Governments` (`+0x3CD0`), both read by the worker-rate
@@ -575,6 +783,13 @@ through the game's own display:
   still Inferred; and every City field past the anchored prefix (not surfaced at all)
 - all four tile visibility masks
 - `Race.AggressionLevel`
+- `UnitType.Unit_Class` (`+0x9C`) — bracketed with no slack between two confirmed anchors, and
+  validated at run time before it is used to filter anything (§4.8)
+- `General.BattleCreatedUnitID` (`BIC + 0x3D84`) as the great-leader type — the *offset* is its
+  confirmed neighbour minus four, and the *meaning* is cross-checked against the Leader ability rather
+  than assumed
+- that a retyped unit keeps its old sprite. The mechanism is confirmed — the animation is built from
+  the type at spawn and stored in the unit — but the consequence has not been watched on screen
 
 **Not attempted / not shipped:**
 
@@ -593,6 +808,23 @@ through the game's own display:
   but unit types are shared rules data, so the AI's units of the same type are buffed identically.
   Genuine per-unit invincibility would need a code cave and a `JMP` patched into `.text`; the trainer
   is deliberately data-only.
+- **Creating a unit from nothing.** Settled by reading `Leader_spawn_unit` (§4.8) rather than assumed:
+  a unit is a `0x404`-byte heap object the game allocates, links into a container it may have to grow,
+  counts in three separate tallies, and loads an animation into. None of that is reachable with
+  `WriteProcessMemory`. The game's own spawn routine would do it in one call, but reaching it means
+  `VirtualAllocEx` plus a thunk plus `CreateRemoteThread` — running code inside a single-threaded,
+  non-reentrant engine at a moment it did not choose. That is a different risk class from anything
+  here, and it is not attempted.
+
+  The data-only substitute has not been built yet but is real: `City_Body.Order_ID` (`+0x30`) and
+  `Order_Type` (`+0x34`) sit inside the anchored, confirmed City prefix, are currently `[Inferred]` and
+  unsurfaced, and are what the existing *Max shields* action would need in order to make a city build
+  any unit next turn — through the game's own production path, correctly. What is missing is one probe
+  session to learn the `Order_Type` encoding by reading a city building a unit against one building an
+  improvement.
+- **Loading units into an army by hand.** `Container_Unit` is confirmed (§4.8), but the army side of
+  the linkage is not, and `Unit_load_into_army` @ `0x5CB840` touches more than two fields. The
+  great-leader route makes it unnecessary — see §4.8.
 - **A save editor.** See §7.
 
 ---
@@ -657,10 +889,18 @@ uncompressed save, but that path is untested here).
 3. **Tile visibility** — four candidate masks, none confirmed on screen. Decompiling
    `Leader_reveal_tile` @ `0x567100` would say which must be set together.
 4. **Tech storage** — see §6.
-5. **Whether `Gold_Decrement` is ever re-seeded mid-game.** The trainer is written to survive it
-   (it re-encodes against a fresh read every tick), but it has not been observed happening.
-   `Leader_set_treasury` @ `0x4C9B30` would answer it.
+5. ~~**Whether `Gold_Decrement` is ever re-seeded mid-game.**~~ **Answered** — see §3.1.
+   `Leader_set_treasury` @ `0x4C9B30` re-seeds it from `timeGetTime()` on every treasury write, and the
+   three keys observed live are exactly what its arithmetic produces at a starting treasury of 10. The
+   trainer's re-encode-per-tick freeze was the necessary design, not merely the cautious one.
 6. **The save container's record framing**, if a save editor is ever wanted.
+7. **Whether a retyped unit's artwork actually changes on screen** (§4.8). The mechanism says no — the
+   animation is built from the type when the unit is spawned and stored in the unit — and a save and
+   reload ought to correct it, since loading rebuilds the objects. Both halves are one game session's
+   observation away, and neither is claimed in the UI beyond what the code proves.
+8. **`City_Body.Order_ID` / `Order_Type`** (`+0x30` / `+0x34`) — the encoding that would let the
+   trainer set a city's build order and, with the existing shield fill, have the game itself produce
+   any unit next turn. See §6.
 
 ---
 

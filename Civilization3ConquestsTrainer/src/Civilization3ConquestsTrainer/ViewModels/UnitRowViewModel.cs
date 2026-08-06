@@ -21,6 +21,83 @@ public sealed class UnitRowViewModel : ObservableObject
     private string _typeName = "";
     public string TypeName { get => _typeName; private set => SetField(ref _typeName, value); }
 
+    private int _typeId = -1;
+
+    /// <summary>
+    /// Which unit type this is — writable, and the one edit on this row that changes what the unit
+    /// <i>is</i> rather than what state it is in.
+    ///
+    /// <para>The game resolves a unit's stats, abilities, actions and maximum hit points from this field
+    /// every time it needs them, so a Warrior written to the Modern Armor type fights as Modern Armor
+    /// immediately. Two things it does not reach, both documented on
+    /// <see cref="Civ3Layout.UnitTypeId"/>: the on-map artwork (chosen when the unit was spawned) and
+    /// the owner's per-type tallies (maintained at spawn and despawn).</para>
+    ///
+    /// <para>Accumulated damage is cleared as part of the change, because maximum hit points come from
+    /// the type: a unit carrying 3 points of damage that becomes a 2-hit-point type would otherwise be
+    /// past dead without the game ever having been asked.</para>
+    /// </summary>
+    public int TypeId
+    {
+        get => _typeId;
+        set
+        {
+            if (value == _typeId) return;
+
+            // A ComboBox whose item list has just been rebuilt pushes its own null selection back
+            // through the binding as -1. That is not a user edit and must not be reported as a
+            // rejection — snap the control back to the truth and say nothing.
+            if (value < 0 || value >= _typeCount) { OnPropertyChanged(); return; }
+            if (!Reject(false, "")) return;
+
+            string was = _typeName;
+            if (!SetField(ref _typeId, value)) return;
+            _host.WriteInt32(_body + (nuint)Civ3Layout.UnitTypeId, value);
+
+            // Maximum hit points come from the type, so damage carried over from a larger one would
+            // leave the unit below zero without the game ever having been asked about it.
+            if (_damage != 0) Damage = 0;
+
+            TypeName = _typeNameOf(value);
+            _host.Report(
+                $"Unit {Slot} was a {was} and is now a {TypeName}. Its stats, abilities and orders follow the " +
+                "new type at once; any damage it was carrying has been cleared, because maximum hit points come " +
+                "from the type. It keeps its old picture on the map — Civ3 loads a unit's artwork when the unit " +
+                "is created, not when it is drawn." +
+                (value == _armyTypeId
+                    ? "  This is the ruleset's ARMY type, so you now have an army with nothing in it. Prefer " +
+                      "\"Make great leader\" and the game's own Build Army order, which fills it properly."
+                    : ""));
+        }
+    }
+
+    /// <summary>How many unit types the loaded ruleset has, so a typed id can be range-checked.</summary>
+    private int _typeCount;
+
+    /// <summary>The ruleset's army type, or -1 — held only so the retype message can warn about it.</summary>
+    private int _armyTypeId = -1;
+
+    /// <summary>Resolves a type id to its name without the row having to hold the whole table.</summary>
+    private Func<int, string> _typeNameOf = _ => "";
+
+    private IReadOnlyList<UnitTypeInfo> _availableTypes = Array.Empty<UnitTypeInfo>();
+
+    /// <summary>
+    /// What the <i>Type</i> column offers for this unit: by default the types of its own domain, so a
+    /// land unit is not offered a submarine.
+    ///
+    /// <para>Rebuilt only when the domain filter or the ruleset actually changes, never on a poll tick —
+    /// replacing a bound <c>ItemsSource</c> resets the ComboBox underneath whoever is using it.</para>
+    /// </summary>
+    public IReadOnlyList<UnitTypeInfo> AvailableTypes
+    {
+        get => _availableTypes;
+        private set => SetField(ref _availableTypes, value);
+    }
+
+    /// <summary>What <see cref="AvailableTypes"/> was last built from.</summary>
+    private (GameTables? Tables, int Class, bool AnyClass) _typeListKey;
+
     private string _owner = "";
     public string Owner { get => _owner; private set => SetField(ref _owner, value); }
 
@@ -140,7 +217,10 @@ public sealed class UnitRowViewModel : ObservableObject
     }
 
     /// <summary>Re-reads this unit. Returns false if the record no longer looks like a unit (it died).</summary>
-    public bool Refresh(GameTables tables, Civ3Location loc)
+    /// <param name="anyClass">
+    /// Whether the <i>Type</i> column may offer types outside this unit's own land/sea/air domain.
+    /// </param>
+    public bool Refresh(GameTables tables, Civ3Location loc, bool anyClass = false)
     {
         byte[] b = _host.Read(_body, Civ3Layout.UnitRecordProbeBytes);
         // Same full predicate the locator uses, not just an id check — a slot recycled for something
@@ -150,7 +230,14 @@ public sealed class UnitRowViewModel : ObservableObject
         int civ = BitConverter.ToInt32(b, Civ3Layout.UnitCivId);
         IsMine = civ == loc.HumanCivId;
         Owner = tables.RaceName(BitConverter.ToInt32(b, Civ3Layout.UnitRaceId));
-        TypeName = tables.UnitTypeName(BitConverter.ToInt32(b, Civ3Layout.UnitTypeId));
+
+        int type = BitConverter.ToInt32(b, Civ3Layout.UnitTypeId);
+        TypeName = tables.UnitTypeName(type);
+        _typeCount = tables.UnitTypes.Count;
+        _armyTypeId = tables.ArmyUnitTypeId;
+        _typeNameOf = tables.UnitTypeName;
+        if (type != _typeId) { _typeId = type; OnPropertyChanged(nameof(TypeId)); }
+        RebuildTypeList(tables, anyClass);
 
         int x = BitConverter.ToInt32(b, Civ3Layout.UnitX);
         int y = BitConverter.ToInt32(b, Civ3Layout.UnitY);
@@ -182,6 +269,38 @@ public sealed class UnitRowViewModel : ObservableObject
         if (progress != _jobProgress) { _jobProgress = progress; OnPropertyChanged(nameof(JobProgress)); }
 
         return true;
+    }
+
+    /// <summary>
+    /// Rebuilds the type list, but only when what it is built from has changed — the poll loop calls
+    /// <see cref="Refresh"/> twice a second, and handing WPF a new list every time would close the
+    /// dropdown in the user's face.
+    /// </summary>
+    private void RebuildTypeList(GameTables tables, bool anyClass)
+    {
+        // With the filter off the list is the whole table whatever domain this unit is in, so the
+        // domain must drop out of the key too — otherwise retyping across domains rebuilds an
+        // identical list and resets the control for nothing.
+        int unitClass = anyClass ? -1 : tables.UnitType(_typeId)?.Class ?? Civ3Layout.UnitClassLand;
+        var key = (tables, unitClass, anyClass);
+        if (_typeListKey == key && _availableTypes.Count > 0) return;
+        _typeListKey = key;
+        AvailableTypes = anyClass ? tables.UnitTypes : tables.TypesInClass(unitClass);
+    }
+
+    /// <summary>
+    /// Turns this unit into the ruleset's great-leader type, which is the trainer's supported route to
+    /// an army: the game then offers the unit its own <i>Build Army</i> order, and builds the army
+    /// through <c>Unit_form_army</c> exactly as it would for a leader won in battle.
+    ///
+    /// <para>Returns false without writing when the ruleset's leader type could not be established.
+    /// The domain check is the caller's, because widening it is the user's decision.</para>
+    /// </summary>
+    public bool MakeGreatLeader(GameTables tables)
+    {
+        if (tables.GreatLeaderUnitTypeId < 0) return false;
+        TypeId = tables.GreatLeaderUnitTypeId;
+        return _typeId == tables.GreatLeaderUnitTypeId;
     }
 
     /// <summary>Re-applies the freeze. Called from the poll loop.</summary>

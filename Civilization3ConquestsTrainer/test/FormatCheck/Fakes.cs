@@ -181,6 +181,44 @@ public sealed class FakeModule : IMemorySource
     }
 
     /// <summary>
+    /// Plants a unit-type table, plus the two ids <c>BIC.General</c> nominates for the army and
+    /// great-leader roles.
+    ///
+    /// <para>Type <paramref name="armyId"/> is given the Army ability and <paramref name="leaderId"/>
+    /// the Leader ability, so the cross-check in <c>GameTables</c> can be exercised both ways: pointing
+    /// <c>General</c> at a type that lacks the ability must produce -1 rather than that type.</para>
+    /// </summary>
+    public void PlantUnitTypes(uint tableRva, int typeCount, int stride, int armyId, int leaderId,
+                               bool giveArmyAbility = true, bool giveLeaderAbility = true,
+                               Func<int, int>? classOf = null)
+    {
+        classOf ??= i => i % 3;         // land, sea, air in rotation — two domains at least, as required
+        PutInt32(Civ3Layout.RvaBicData + (uint)Civ3Layout.BicUnitTypeCount, typeCount);
+        PutUInt32(Civ3Layout.RvaBicData + (uint)Civ3Layout.BicUnitTypes, (uint)At(tableRva));
+        PutInt32(Civ3Layout.RvaBicData + (uint)Civ3Layout.BicArmyUnitType, armyId);
+        PutInt32(Civ3Layout.RvaBicData + (uint)Civ3Layout.BicGreatLeaderUnitType, leaderId);
+
+        for (int i = 0; i < typeCount; i++)
+        {
+            uint u = tableRva + (uint)(i * stride);
+            PutInt32(u + (uint)Civ3Layout.UnitTypeRecordId, i);
+            PutInt32(u + (uint)Civ3Layout.UnitTypeAttack, i);
+            PutInt32(u + (uint)Civ3Layout.UnitTypeDefence, i + 1);
+            PutInt32(u + (uint)Civ3Layout.UnitTypeMovement, 1);
+            PutInt32(u + (uint)Civ3Layout.UnitTypeCost, 10 * i);
+            PutInt32(u + (uint)Civ3Layout.UnitTypeClass, classOf(i));
+
+            int abilities = 0;
+            if (i == armyId && giveArmyAbility) abilities |= 1 << Civ3Layout.UnitAbilityArmy;
+            if (i == leaderId && giveLeaderAbility) abilities |= 1 << Civ3Layout.UnitAbilityLeader;
+            PutInt32(u + (uint)Civ3Layout.UnitTypeAbilities, abilities);
+
+            foreach (var (b, j) in System.Text.Encoding.ASCII.GetBytes($"Unit{i}").Select((b, j) => (b, j)))
+                _image[u + Civ3Layout.UnitTypeName + j] = b;
+        }
+    }
+
+    /// <summary>
     /// Plants a worker-job table. Unlike the race and unit-type tables this one carries no <c>ID</c>
     /// field, so the stride can only be recovered from every record looking like a job — which is what
     /// planting it at a non-standard stride exercises.

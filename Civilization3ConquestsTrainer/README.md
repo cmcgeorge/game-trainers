@@ -6,8 +6,9 @@ v1.22). It attaches straight to `Civ3Conquests.exe` — no emulator — and **fi
 one click resolves the player, city and unit data with no value searching.
 
 It edits treasury, the tax/science/luxury rates, culture, era and research points per civilization;
-heals, refreshes and promotes units; finishes workers' terrain jobs; and fills city food and shield
-stores — with freeze toggles that survive the turn tick.
+heals, refreshes, promotes and **retypes** units; turns one into a **great leader** so the game will
+build you an army; finishes workers' terrain jobs; and fills city food and shield stores — with freeze
+toggles that survive the turn tick.
 
 Single-player cheat tool for your own game. It never modifies the game's files, and detaching leaves
 nothing patched.
@@ -95,12 +96,40 @@ rebuilds automatically when units are built or killed and when cities are founde
 (*Refresh list* on the toolbar re-lists **processes**, not game data — you should never need it once
 attached.)
 
-**Units** — full heal, refresh movement (once, or held at zero all turn), promote to elite, finish worker
-jobs, per-unit or all at once.
+**Units** — full heal, refresh movement (once, or held at zero all turn), promote to elite, change what
+a unit *is*, make a great leader, finish worker jobs, per-unit or all at once.
 
 Two fields read backwards from the UI and the grid labels them accordingly: the record stores hit
 points **lost** and movement **spent**, so zero is a fresh, undamaged unit. Maximum hit points are not
 stored anywhere — the game derives them from the unit type and veteran level.
+
+The **Type** column turns any unit into any unit type the loaded ruleset defines. This is a real change
+rather than a relabelling: Civ3 looks up a unit's attack, defence, movement, hit points, abilities and
+available orders through that one field every time it needs them, so a Warrior written to Modern Armor
+fights as Modern Armor from that moment. Two honest caveats, both stated in the tooltip. The **picture
+on the map does not change** — a unit's artwork is loaded when the unit is created, from its type, era
+and civilization — and **damage is cleared** as part of the change, because the maximum comes from the
+type and a unit carrying damage from a larger one would otherwise be past dead. By default the list
+offers each unit its own domain (land, sea or air); *Any domain* widens it, with the obvious caveat that
+a ship rewritten as a warrior is a land unit sitting in the ocean.
+
+**Make great leader** is how you get an **army**, and it is worth explaining why it works that way. An
+army in Civ3 is simply a unit whose type carries the Army ability, so the Type column *can* produce one
+in a single write — and what you would get is an empty shell, because what makes an army useful is the
+linkage recording which units are inside it. So the trainer writes the ruleset's great-leader type onto
+the unit you select and stops. Civ3 decides whether to offer the *Build Army* order by testing the
+Leader ability against the unit's current type, so the order appears immediately; give it, and the game
+consumes the leader and spawns a **real army** through its own code. Move units onto its tile and load
+them with the game's own order. Everything after the one number the trainer writes is the game's work.
+
+Both type ids are read out of the loaded ruleset rather than hard-coded, and neither is believed unless
+the type it names actually carries the matching ability — so a mod that moved things switches the
+feature off instead of acting on a wrong number. The References tab reports what it found.
+
+**Creating units from nothing is not offered**, and the notes say why rather than leaving it a mystery:
+a unit is a heap object the game allocates, links into its own container, counts in three tallies and
+loads an animation into. That is not something `WriteProcessMemory` can do, and reaching the game's own
+spawn routine would mean running code inside it — which this trainer does not do.
 
 The per-unit **Heal** toggle re-zeroes damage and spent movement every poll. It **cannot make a unit
 invincible**, and does not claim to: Civ3 resolves an entire battle inside a single call — every

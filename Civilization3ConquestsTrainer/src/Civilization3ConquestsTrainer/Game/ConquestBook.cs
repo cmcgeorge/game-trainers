@@ -105,6 +105,40 @@ public static class ConquestBook
             "them. Promoting to Elite is the one per-unit durability lever that exists, and it is " +
             "worth roughly one extra hit point over a Regular."),
 
+        new("Changing a unit's type works, but not its picture",
+            "A unit stores its type as a single number indexing the loaded ruleset's unit table, and the " +
+            "game looks up everything else through it — attack, defence, movement, maximum hit points, " +
+            "abilities, and which orders the unit is offered — every time it needs them. So writing that " +
+            "field really does change what the unit is, immediately and in full.\n\n" +
+            "One thing does not follow: the artwork. Civ3 chooses a unit's animation when the unit is " +
+            "created, building it from the type, the owner's era and its civilization and storing it in " +
+            "the unit itself. A retyped unit therefore keeps the picture it was born with, even though it " +
+            "fights as its new type. Damage is cleared when the type changes, because the maximum is " +
+            "derived from the type and a unit carrying damage from a bigger type would otherwise be past " +
+            "dead. The owner's internal per-type tallies are not corrected either — the game maintains " +
+            "those when units are created and destroyed, so they drift by one per change.\n\n" +
+            "This is not how the game upgrades a unit, and that is worth knowing: Civ3's own upgrade " +
+            "spawns a brand-new unit of the new type, copies the name, veteran level and passengers " +
+            "across, and destroys the original. The trainer cannot do that — creating a unit is a heap " +
+            "allocation the game performs, not a value a trainer can write."),
+
+        new("Armies: the trainer makes a leader, the game makes the army",
+            "An army in Civ3 is an ordinary unit whose type carries the Army ability, and the ruleset " +
+            "names which type that is. So the Type column can turn any unit into an army in one write — " +
+            "and what you get is an empty shell, because what makes an army useful is the linkage " +
+            "recording which units are inside it, which the game maintains and the trainer does not " +
+            "imitate.\n\n" +
+            "\"Make great leader\" takes the other route. It writes the ruleset's great-leader type onto " +
+            "the selected unit, and the game does the rest: whether to offer the Build Army order is " +
+            "decided by testing the Leader ability against the unit's current type, so a retyped unit " +
+            "qualifies at once. Give it that order in the game and Civ3 consumes the leader and spawns a " +
+            "real army through the same code path a leader won in battle would use. Then move units onto " +
+            "the army's tile and load them with the game's own order. Everything after the one number the " +
+            "trainer writes is the game's own work, which is exactly why this is the supported route.\n\n" +
+            "The two type ids are read out of the loaded ruleset rather than hard-coded, and neither is " +
+            "believed unless the type it names actually carries the matching ability — so a mod that " +
+            "moved things around switches the feature off instead of acting on a wrong number."),
+
         new("Movement is spent, not remaining",
             "The same inversion applies to movement: the field counts points already used this turn, so " +
             "\"Refresh moves\" writes zero. Movement is stored in thirds, so a unit that has spent one " +

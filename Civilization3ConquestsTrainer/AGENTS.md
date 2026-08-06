@@ -42,7 +42,7 @@ Three projects in `Civilization3ConquestsTrainer.sln`: the WPF app, its harness,
     (`IScanHost`, `ScanValue`, `ScanResultViewModel`, `FrozenValueViewModel`) matches the repo's other
     value-scanner trainers.
 - `test/FormatCheck/` — headless harness (console `Exe`, `net8.0-windows` + `UseWPF` because it
-  references the WPF app for the view-model types). **369 checks**, no game and no copyrighted files
+  references the WPF app for the view-model types). **429 checks**, no game and no copyrighted files
   needed.
 
 It **has a `GameLocator`** and **no save editor**. The exe is native, unpacked, fixed-base and
@@ -107,6 +107,49 @@ independently, and `0xA75698 + 32 × 0x20E4 = 0xAB7318` exactly.
 **Two fields read backwards.** `Unit_Body.Damage` is hit points *lost* and `Unit_Body.Moves` is
 movement *spent* — "full heal" and "refresh moves" both write zero. Maximum hit points are not stored
 at all; the game derives them from unit type plus veteran level.
+
+**A unit's type is not a label — everything is resolved through it, live.** `Unit_has_ability`
+(`0x5CB430`) and `Unit_can_perform_action` (`0x5D0670`) both start `mov eax,[esi+0x40]` — that is
+`Unit_Body+0x24`, `UnitTypeID` — and index `BIC.UnitTypes` at `+0x3CD8`, stride `0x138`, to reach the
+ability word at `UnitType+0x88` and the four action words from `UnitType+0xA8`. Nothing is cached on the
+unit, so the Units tab's **Type** column is a single four-byte write and the unit's stats, abilities and
+orders change at once. **Two things it does not reach, and the UI must keep saying so**: the artwork,
+which `Leader_spawn_unit` (`0x575900`) builds from type + era + race *when a unit is created* and stores
+in the unit at `Unit_Body+0x260`; and the owner's incremental tallies (per-type at `Leader+0x15F0`,
+armies at `Leader+0x188`), which the game maintains at spawn and despawn. Damage is cleared as part of a
+retype because maximum hit points come from the type — do not remove that. Note the game itself never
+retypes in place: `Unit_upgrade` (`0x5CF2E0`) spawns a new unit, copies name/veteran/passengers, and
+despawns the original. See `docs/ReverseEngineering.md` §4.8.
+
+**Armies go through a great leader, and that is a deliberate choice, not a limitation.** An army is
+just a unit whose type carries the Army ability (bit `0x12`), so the Type column can make one in a
+single write — and it is an empty shell, because membership lives in `Container_Unit`
+(`Unit_Body+0x44`, confirmed: `Unit_upgrade` re-homes passengers through it) plus army-side bookkeeping
+that `Unit_load_into_army` (`0x5CB840`) maintains and this trainer does not imitate. **Make great
+leader** writes `General.BattleCreatedUnitID` instead and stops: the Build Army gate at `0x5D0956` tests
+the Leader ability against the unit's *current* type and passes `leader_kind == 0`, so the game offers
+the order, and `Unit_form_army` (`0x5CB5B0`) then spawns a real army via `Leader_spawn_unit`. **Neither
+type id may be hard-coded and neither is trusted on its offset alone** — `GameTables` reads both out of
+`BIC.General` (`BuildArmyUnitID` at `BIC+0x3D88` is the game's own absolute address from
+`Unit_form_army`; `BattleCreatedUnitID` is its neighbour at `+0x3D84`) and requires the type each names
+to carry the matching ability bit, yielding -1 and disabling the feature otherwise. `UnitType.Unit_Class`
+(`+0x9C`) is the one Inferred offset here; it is bracketed with no slack but is still validated at run
+time (every type in 0–2, at least two distinct domains) before it filters anything. Do not promote it to
+Confirmed without watching it, and do not drop the fallback.
+
+**Creating a unit is not reachable and the docs say why.** `Leader_spawn_unit` allocates `0x404` bytes,
+links the object into a container it may grow, bumps three tallies and loads an animation. Calling it
+would need `CreateRemoteThread` into a single-threaded engine — a different risk class, and out of scope
+for a data-only trainer. The honest substitute, not yet built, is `City_Body.Order_ID`/`Order_Type`
+(`+0x30`/`+0x34`, inside the confirmed prefix, still Inferred) plus the existing shield fill, which would
+have the game build the unit itself.
+
+**The gold key moves on every write, and this is now proved rather than assumed.**
+`Leader_set_treasury` (`0x4C9B30`) re-seeds `Gold_Decrement` from `timeGetTime()` each time the treasury
+is stored — `% amount - 12345` for a positive amount, `% 54321 - 33333` otherwise. That is why the freeze
+must re-encode against a fresh read of the key rather than replaying bytes, and it accounts exactly for
+the three start-of-game keys the notes record (treasury 10 → keys in `[-12345, -12336]`; observed
+-12345, -12342, -12337). This closes what §8 listed as an open question.
 
 **The `City_Body` gap is real and deliberate.** The C3X header's own `field_XX` anchors agree with
 arithmetic up to `+0x54` and then drift by `0x18`, so population, corruption, incomes, the build queue

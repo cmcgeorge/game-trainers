@@ -145,7 +145,28 @@ public static class Civ3Layout
     public const int UnitY = 0x0C;                    // [Confirmed]
     public const int UnitCivId = 0x18;                // [Confirmed]
     public const int UnitRaceId = 0x1C;               // [Confirmed] agrees with the owner's RaceID
-    public const int UnitTypeId = 0x24;               // [Confirmed] indexes BIC.UnitTypes
+
+    /// <summary>
+    /// [Confirmed] Which unit type this unit is — an index into <c>BIC.UnitTypes</c>, and the field the
+    /// Units tab's <i>Type</i> column writes.
+    ///
+    /// <para>Read out of the game's own code rather than inferred: <c>Unit_has_ability</c>
+    /// (<c>0x5CB430</c>) does <c>mov eax,[esi+0x40]</c> — <c>Unit+0x40</c> is <c>Unit_Body+0x24</c> —
+    /// then indexes <c>BIC.UnitTypes</c> at stride <c>0x138</c> and tests the ability bitfield. So a
+    /// unit's abilities are resolved from <b>whatever this field says right now</b>, which is what makes
+    /// retyping a unit change what it can do rather than only what it is called. The same is true of its
+    /// actions (<c>Unit_can_perform_action</c> @ <c>0x5D0670</c>) and of its maximum hit points
+    /// (<c>Unit_get_max_hp</c> @ <c>0x5CD180</c>).</para>
+    ///
+    /// <para><b>What a write here does not reach.</b> The unit's on-map artwork is chosen when the unit
+    /// is <i>spawned</i> — <c>Leader_spawn_unit</c> (<c>0x575900</c>) builds an animation name from the
+    /// type, the owner's era and its race and loads it into the unit at <c>Unit_Body+0x260</c> — so a
+    /// retyped unit is expected to keep the sprite it was born with until the game rebuilds the object.
+    /// Nor are the owner's incremental tallies (per-type counts at <c>Leader+0x15F0</c>, armies at
+    /// <c>Leader+0x188</c>) corrected, because the game maintains those at spawn and despawn.
+    /// See <c>docs/ReverseEngineering.md</c> §4.8.</para>
+    /// </summary>
+    public const int UnitTypeId = 0x24;
     public const int UnitExperience = 0x28;           // [Confirmed] 0 conscript … 3 elite
     public const int UnitStatus = 0x2C;               // [Inferred]
 
@@ -288,7 +309,13 @@ public static class Civ3Layout
     /// <summary>How many bytes of a <c>Worker_Job</c> record <see cref="ValidateWorkerJob"/> needs.</summary>
     public const int WorkerJobRecordProbeBytes = WorkerJobTurnToComplete + 4;
 
-    public const int UnitTypeStride = 0x138;          // [Confirmed] brute-forced against UnitType[i].ID == i
+    /// <summary>
+    /// [Confirmed] <c>sizeof(UnitType)</c>. Brute-forced against <c>UnitType[i].ID == i</c>, and later
+    /// read straight out of the game's code: both <c>Unit_has_ability</c> (<c>0x5CB430</c>) and
+    /// <c>Unit_upgrade</c> (<c>0x5CF2E0</c>) index the table with <c>imul ecx,ecx,0x138</c> or the
+    /// equivalent <c>lea</c> chain.
+    /// </summary>
+    public const int UnitTypeStride = 0x138;
     public const int UnitTypeName = 0x08;             // [Confirmed] char[32]
     public const int UnitTypeCost = 0x54;             // [Confirmed]
     public const int UnitTypeDefence = 0x58;          // [Confirmed]
@@ -298,6 +325,98 @@ public static class Civ3Layout
     public const int UnitTypeRecordId = 0x5C;
     public const int UnitTypeAttack = 0x60;           // [Confirmed]
     public const int UnitTypeMovement = 0x70;         // [Confirmed]
+
+    /// <summary>
+    /// [Confirmed] The unit type's ability bitfield, indexed by <c>enum UnitTypeAbilities</c> — the
+    /// thing that makes a type an army or a great leader rather than an ordinary unit.
+    ///
+    /// <para>The game's own accessor (<c>UnitType_has_ability</c> @ <c>0x5F4750</c>) is four
+    /// instructions: for an ability index below 32 it does <c>test [eax+0x88], 1&lt;&lt;n</c>, and for
+    /// 32 and above it subtracts 32 and tests <c>[eax+0x130]</c> instead. Both offsets are therefore
+    /// the game's own, and the second doubles as a confirmation of the <c>0x138</c> stride — the
+    /// overflow word is the second-to-last field in the record.</para>
+    /// </summary>
+    public const int UnitTypeAbilities = 0x88;
+
+    /// <summary>
+    /// [Inferred] Land (0), sea (1) or air (2) — used to keep the <i>Type</i> column from offering to
+    /// turn a Trireme into a Warrior while it is sitting in the ocean.
+    ///
+    /// <para>This is the one field here that was not read out of the instruction stream. It is
+    /// <b>bracketed with no slack</b> between two anchors that were: the community header's own
+    /// <c>field_98</c> at <c>+0x98</c>, and <c>Standard_Actions</c> at <c>+0xA8</c>, which
+    /// <c>Unit_can_perform_action</c> (<c>0x5D0670</c>) proves by indexing the four action words from
+    /// there. Exactly four fields fit that gap and this is the header's first. Even so it is checked at
+    /// run time rather than trusted — see <see cref="IsPlausibleUnitClass"/> and
+    /// <c>GameTables.UnitClassesUsable</c>, which fall back to offering every type rather than
+    /// filtering on a field that might not be this one.</para>
+    /// </summary>
+    public const int UnitTypeClass = 0x9C;
+
+    /// <summary>Land units. Air and sea are 1 and 2; see <see cref="UnitTypeClass"/>.</summary>
+    public const int UnitClassLand = 0;
+    public const int UnitClassSea = 1;
+    public const int UnitClassAir = 2;
+
+    /// <summary>
+    /// [Confirmed] The <c>Army</c> ability's bit index. <c>Unit_upgrade</c> pushes <c>0x12</c> at
+    /// <c>0x5CF4B7</c> to decide whether the unit it has just created should have the old unit's
+    /// passengers loaded into it as an army.
+    /// </summary>
+    public const int UnitAbilityArmy = 0x12;
+
+    /// <summary>
+    /// [Confirmed] The <c>Leader</c> ability's bit index — the one that puts <i>Build Army</i> on a
+    /// unit's action list. The gate inside <c>Unit_can_perform_action</c> (<c>0x5D0956</c>) tests
+    /// exactly this, on the unit's <i>current</i> type, which is what makes the great-leader route work
+    /// without a code patch.
+    /// </summary>
+    public const int UnitAbilityLeader = 0x13;
+
+    /// <summary>Whether a unit type carries an ability, given its <see cref="UnitTypeAbilities"/> word.</summary>
+    /// <remarks>
+    /// Only the first 32 abilities live in that word; the game keeps 32 and above in a second word at
+    /// <c>UnitType+0x130</c>. Nothing here needs one, so an out-of-range index answers "no" rather than
+    /// silently shifting by 32 and reading a different ability's bit.
+    /// </remarks>
+    public static bool UnitTypeHasAbility(int abilities, int abilityBit)
+        => abilityBit is >= 0 and < 32 && (abilities & (1 << abilityBit)) != 0;
+
+    /// <summary>Whether a unit type's class field holds one of the three domains the game defines.</summary>
+    public static bool IsPlausibleUnitClass(int unitClass)
+        => unitClass is >= UnitClassLand and <= UnitClassAir;
+
+    // --- BIC.General ---------------------------------------------------------------------------------
+    // The embedded rules block. Its position is fixed by the same arithmetic the worker-job table rests
+    // on, and confirmed at +0xD0 (FoodPerCitizen, reading 2 in a live epic game) among four others.
+
+    /// <summary>[Confirmed] The embedded <c>General</c> block — the loaded ruleset's global settings.</summary>
+    public const int BicGeneral = 0x3CDC;
+
+    /// <summary>
+    /// [Inferred] <c>General.BattleCreatedUnitID</c> — which unit type the ruleset uses for a great
+    /// leader. Its neighbour <see cref="GeneralBuildArmyUnitId"/> is confirmed from the instruction
+    /// stream, which brackets this one immediately below it; and <c>GameTables</c> only believes the id
+    /// it reads here if that type actually carries <see cref="UnitAbilityLeader"/>, so the offset and
+    /// its meaning have to agree before anything uses them.
+    /// </summary>
+    public const int GeneralBattleCreatedUnitId = 0xA8;
+
+    /// <summary>
+    /// [Confirmed] <c>General.BuildArmyUnitID</c> — which unit type the ruleset uses for an army.
+    ///
+    /// <para><c>Unit_form_army</c> (<c>0x5CB5B0</c>) reads it as an absolute address:
+    /// <c>mov edi,[0x9E9A90]</c>, and <c>0x9E9A90 − 0x9E5D08</c> (<c>p_bic_data</c>) is
+    /// <c>0x3D88 = BicGeneral + 0xAC</c>. It then passes that type straight to
+    /// <c>Leader_spawn_unit</c>, so this is literally the type of the army the game builds.</para>
+    /// </summary>
+    public const int GeneralBuildArmyUnitId = 0xAC;
+
+    /// <summary>Where <c>BattleCreatedUnitID</c> sits relative to <c>BIC</c> itself.</summary>
+    public const int BicGreatLeaderUnitType = BicGeneral + GeneralBattleCreatedUnitId;
+
+    /// <summary>Where <c>BuildArmyUnitID</c> sits relative to <c>BIC</c> itself — VA <c>0x9E9A90</c>.</summary>
+    public const int BicArmyUnitType = BicGeneral + GeneralBuildArmyUnitId;
 
     public const int MainScreenPlayerCivId = 0x4DBC;  // [Confirmed]
 
