@@ -87,6 +87,30 @@ Check("Culture.cultural_level lands at Leader+0x1838",
 Equal("Unit_Body.Damage", Civ3Layout.UnitDamage, 0x30);
 Equal("Unit_Body.Moves", Civ3Layout.UnitMoves, 0x34);
 Equal("Unit_Body.Combat_Experience", Civ3Layout.UnitExperience, 0x28);
+Equal("Unit_Body.Status", Civ3Layout.UnitStatus, 0x2C);
+
+// The three sites that pin the status word, expressed the way the game addresses it: through the
+// Unit object, whose body sits 0x1C further on. Fighter_fight ORs 4 in at [eax+0x48],
+// Unit_can_move_to_adjacent_tile TESTs the same byte, and Unit_begin_turn clears it alongside
+// Moves at [esi+0x50] — so the two offsets this feature writes are proved by one pair of
+// instructions and must stay 8 bytes apart.
+Check("Unit_Body.Status is what the game addresses as Unit+0x48",
+    Civ3Layout.UnitStatus + Civ3Layout.BodyOffsetInUnit == 0x48);
+Check("Unit_Body.Moves is what the same routine addresses as Unit+0x50",
+    Civ3Layout.UnitMoves + Civ3Layout.BodyOffsetInUnit == 0x50);
+Equal("USF_USED_ATTACK is bit 2", Civ3Layout.UnitStatusUsedAttack, 0x04);
+Check("a unit probe reaches the status word",
+    Civ3Layout.UnitStatus + 4 <= Civ3Layout.UnitRecordProbeBytes);
+Check("an untouched status word reads as 'has not attacked'", !Civ3Layout.HasUsedAttack(0));
+Check("and one with the bit in reads as 'has attacked'",
+    Civ3Layout.HasUsedAttack(Civ3Layout.UnitStatusUsedAttack)
+    && Civ3Layout.HasUsedAttack(0x145));
+// Bit 0x01 (SKIPPED_FULL_TURN_WITH_DAMAGE) feeds the healing test, 0x08 is air recon and 0x80/0x100
+// are sentry. The game's own new-turn clear takes 0x47 at once; this one takes a single bit, so a
+// mid-turn write cannot change how a damaged unit heals or wake a sentry.
+Equal("clearing the attack bit leaves every other status bit alone",
+    Civ3Layout.ClearUsedAttack(0x1CF), 0x1CB);
+Equal("and is a no-op on a unit that has not attacked", Civ3Layout.ClearUsedAttack(0x1CB), 0x1CB);
 Equal("Unit_Body.Job_Value", Civ3Layout.UnitJobValue, 0x38);
 Equal("Unit_Body.Job_ID", Civ3Layout.UnitJobId, 0x3C);
 Check("the job pair follows Moves with no gap",
@@ -929,6 +953,50 @@ if (jobsLoc != null)
     Equal("the movement hold is refused when writes are blocked", workerHost.Writes.Count, 0);
     workerHost.WritesAllowed = true;
 
+    // "Unlimited attacks": clearing the one bit Civ3 refuses a second attack on. The other bits in
+    // that word belong to the game — sentry, air recon, defensive bombard, and the healing-eligibility
+    // flag — so the write is a read-modify-write of a fresh read, and it must put every one of them
+    // back untouched. It also has to be free on a unit that has not attacked, because the standing
+    // toggle runs it over every one of your units twice a second.
+    var attackHost = new FakeGameHost();
+    nuint attackBody = 0x7C000;
+    attackHost.Seed(attackBody + (nuint)Civ3Layout.UnitCivId, 1);
+    attackHost.Seed(attackBody + (nuint)Civ3Layout.UnitX, 12);
+    attackHost.Seed(attackBody + (nuint)Civ3Layout.UnitY, 30);
+    attackHost.Seed(attackBody + (nuint)Civ3Layout.UnitJobId, -1);
+    attackHost.Seed(attackBody + (nuint)Civ3Layout.UnitStatus, 0x84);   // attacked, and on sentry
+
+    var attackRow = new UnitRowViewModel(attackHost, attackBody, 0);
+    Check("a unit row refreshes", attackRow.Refresh(jobsTables, jobsLoc));
+    Check("and reports that this one has already attacked", attackRow.HasAttacked);
+
+    attackHost.Writes.Clear();
+    Check("clearing the attack reports that it acted", attackRow.ClearAttack());
+    Equal("it writes the status word once", attackHost.Writes.Count, 1);
+    Check("to the status word and nowhere else",
+        attackHost.Writes[0].Address == attackBody + (nuint)Civ3Layout.UnitStatus);
+    Equal("with the attack bit gone and the sentry bit still there", attackHost.Writes[0].Value, 0x80);
+    Check("and the row now says the unit may attack again", !attackRow.HasAttacked);
+
+    attackHost.Writes.Clear();
+    Check("a unit that has not attacked is declined rather than rewritten", !attackRow.ClearAttack());
+    Equal("and issues no write at all", attackHost.Writes.Count, 0);
+
+    attackHost.Seed(attackBody + (nuint)Civ3Layout.UnitStatus, 0x84);
+    attackHost.WritesAllowed = false;
+    attackHost.Writes.Clear();
+    Check("clearing the attack is refused when writes are blocked", !attackRow.ClearAttack());
+    Equal("and nothing reaches the game", attackHost.Writes.Count, 0);
+    attackHost.WritesAllowed = true;
+
+    // A read that fails is a detached or dying process, not a unit with a clear flag — the row must
+    // decline rather than write a status word built out of a zero it never actually read.
+    attackHost.FailReads = true;
+    attackHost.Writes.Clear();
+    Check("a failed read declines instead of writing a guess", !attackRow.ClearAttack());
+    Equal("and issues no write", attackHost.Writes.Count, 0);
+    attackHost.FailReads = false;
+
     // An idle unit reads Job_ID as -1, and there is no job on it to finish. Poking Job_Value anyway
     // would write a number nothing reads, so the action has to decline rather than claim success.
     var idleHost = new FakeGameHost();
@@ -1165,6 +1233,32 @@ blockedRow.StoredFood = 999;
 Equal("a blocked city edit writes nothing", blockedHost.Writes.Count, 0);
 Equal("and the row does not pretend it took", blockedRow.StoredFood, 0);
 Check("and the user is told why", blockedHost.LastReport.Contains("Writes are disabled"));
+
+// =================================================================================================
+Group("Shell toggles that must not arm themselves while detached");
+// =================================================================================================
+// The three standing writes — the movement hold, unlimited attacks and job banking — are instructions
+// to keep writing on every poll, so Teardown clears them and a fresh attach starts unarmed. The other
+// half of that promise lives in the setters: with no process open there is nothing to write to, and a
+// toggle that latched on anyway would come back armed the moment someone attached.
+//
+// This is as far into MainViewModel as the harness can reach without a game: what the toggles do once
+// armed runs against a live process and is confirmed by hand. In particular the rule that unlimited
+// attacks implies the movement hold — HoldingMoves consulting _unlimitedAttacks, without which the
+// feature degrades to a flag write that changes nothing on screen — is NOT pinned here. It is held by
+// the note in AGENTS.md and the comment on HoldingMoves itself.
+
+var shell = new MainViewModel();
+Check("a fresh shell is detached", !shell.IsAttached);
+
+shell.UnlimitedAttacks = true;
+Check("unlimited attacks refuses to arm while detached", !shell.UnlimitedAttacks);
+shell.HoldMyUnitMoves = true;
+Check("so does the movement hold", !shell.HoldMyUnitMoves);
+shell.KeepWorkerJobsBanked = true;
+Check("and so does job banking", !shell.KeepWorkerJobsBanked);
+Check("and the user is told why rather than left with a ticked box",
+    shell.Status.Contains("Writes are disabled") && shell.Status.Contains("not attached"));
 
 // =================================================================================================
 Group("Shell bindings a DataGrid would otherwise swallow");

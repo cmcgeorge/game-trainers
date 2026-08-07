@@ -135,6 +135,14 @@ public sealed class UnitRowViewModel : ObservableObject
         }
     }
 
+    private int _status;
+
+    /// <summary>
+    /// Whether this unit has already attacked this turn — Civ3's own per-turn flag, shown read-only so
+    /// the effect of <see cref="ClearAttack"/> is visible rather than having to be taken on trust.
+    /// </summary>
+    public bool HasAttacked => Civ3Layout.HasUsedAttack(_status);
+
     private int _experience;
     /// <summary>Veteran ladder: 0 conscript, 1 regular, 2 veteran, 3 elite.</summary>
     public int Experience
@@ -252,6 +260,14 @@ public sealed class UnitRowViewModel : ObservableObject
         int exp = BitConverter.ToInt32(b, Civ3Layout.UnitExperience);
         if (exp != _experience) { _experience = exp; OnPropertyChanged(nameof(Experience)); }
 
+        int status = BitConverter.ToInt32(b, Civ3Layout.UnitStatus);
+        if (status != _status)
+        {
+            bool wasAttacked = Civ3Layout.HasUsedAttack(_status);
+            _status = status;
+            if (Civ3Layout.HasUsedAttack(status) != wasAttacked) OnPropertyChanged(nameof(HasAttacked));
+        }
+
         int job = BitConverter.ToInt32(b, Civ3Layout.UnitJobId);
         if (job != _jobId)
         {
@@ -322,6 +338,34 @@ public sealed class UnitRowViewModel : ObservableObject
     /// </summary>
     public void HoldMoves() => _host.WriteInt32(_body + (nuint)Civ3Layout.UnitMoves, 0);
 
+    /// <summary>
+    /// Knocks out the "already attacked this turn" bit, which is the flag Civ3 refuses a second attack
+    /// on. Returns true only when a write actually happened.
+    ///
+    /// <para><b>This is half a mechanism.</b> A unit that has attacked has also spent every movement
+    /// point it had, and the game checks movement first — so clearing this on its own changes nothing
+    /// visible. It is <see cref="HoldMoves"/> that opens the other gate, which is why the shell's
+    /// <i>Unlimited attacks</i> toggle calls both.</para>
+    ///
+    /// <para>Read-modify-write against a <b>fresh</b> read rather than the value cached by
+    /// <see cref="Refresh"/>: the other bits in that word are the game's (sentry, air recon, defensive
+    /// bombard, healing eligibility) and writing back a copy that is even one poll old would undo
+    /// whatever the game set in between. A unit that has not attacked is left alone entirely, so the
+    /// standing toggle costs one read per unit per tick and no writes at all until someone attacks.</para>
+    /// </summary>
+    public bool ClearAttack()
+    {
+        if (!_host.WritesAllowed) return false;
+        if (!_host.ReadInt32(_body + (nuint)Civ3Layout.UnitStatus, out int status)) return false;
+        if (!Civ3Layout.HasUsedAttack(status)) return false;
+
+        int cleared = Civ3Layout.ClearUsedAttack(status);
+        if (!_host.WriteInt32(_body + (nuint)Civ3Layout.UnitStatus, cleared)) return false;
+        _status = cleared;
+        OnPropertyChanged(nameof(HasAttacked));
+        return true;
+    }
+
     /// <summary>Clears all accumulated damage.</summary>
     public void FullHeal() => Damage = 0;
 
@@ -336,9 +380,11 @@ public sealed class UnitRowViewModel : ObservableObject
     /// unit that is not working — there is no job to finish, and a poked <c>Job_Value</c> on an idle unit
     /// would just be a number nothing reads.
     ///
-    /// <para>The improvement appears at the <b>turn boundary</b>, not on the spot: the game applies
-    /// accumulated work during the interturn. And because progress pools across everyone on the tile,
-    /// doing this to one worker of a stack finishes the job for all of them.</para>
+    /// <para>The improvement lands on the worker's <b>next turn of work</b>, not on the spot: Civ3 tests
+    /// whether a job is finished only while a worker is putting a turn into it, and that costs the unit
+    /// its whole move. Handing the movement back and re-issuing the order buys that tick in the same
+    /// turn. And because progress pools across everyone on the tile, doing this to one worker of a stack
+    /// finishes the job for all of them.</para>
     /// </summary>
     public bool FinishJob()
     {

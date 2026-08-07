@@ -45,7 +45,7 @@ Three projects in `Civilization3ConquestsTrainer.sln`: the WPF app, its harness,
     (`IScanHost`, `ScanValue`, `ScanResultViewModel`, `FrozenValueViewModel`) matches the repo's other
     value-scanner trainers.
 - `test/FormatCheck/` — headless harness (console `Exe`, `net8.0-windows` + `UseWPF` because it
-  references the WPF app for the view-model types). **452 checks**, no game and no copyrighted files
+  references the WPF app for the view-model types). **479 checks**, no game and no copyrighted files
   needed.
 
 It **has a `GameLocator`** and **no save editor**. The exe is native, unpacked, fixed-base and
@@ -120,6 +120,24 @@ independently, and `0xA75698 + 32 × 0x20E4 = 0xAB7318` exactly.
 **Two fields read backwards.** `Unit_Body.Damage` is hit points *lost* and `Unit_Body.Moves` is
 movement *spent* — "full heal" and "refresh moves" both write zero. Maximum hit points are not stored
 at all; the game derives them from unit type plus veteran level.
+
+**"One attack per turn" is one bit, and getting past it takes two writes — do not split them.**
+`Unit_Body.Status` (`+0x2C`, now `[Confirmed]`, previously Inferred) carries `USF_USED_ATTACK` (`0x04`).
+`Fighter_fight` (`0x4AC060`) sets it at `0x4AC355` (`or dword [eax+0x48],4`);
+`Unit_can_move_to_adjacent_tile` (`0x5C4620`) tests it at `0x5C4748` and returns `AMV_REQUIRES_BLITZ`
+(8) unless `Unit_has_ability(UTA_Blitz)`. **Clearing it alone is invisible**, because attacking also
+spends the unit's whole move and `AMV_NO_MOVES` is checked first — which is why `UnlimitedAttacks`
+implies the movement hold (`HoldingMoves`) rather than asking the user to tick two boxes. The safety
+argument is that `Unit_begin_turn` (`0x5D65B0`) does exactly these two writes for itself at `0x5D6D39`:
+`mov eax,[esi+0x48]` / `mov dword [esi+0x50],0` / `and al,0xB8` / `mov [esi+0x48],eax` — so the toggle
+leaves nothing to restore, and that same pair re-confirms `Moves` at `+0x34` from a second routine.
+**Clear only `0x04`, never the game's whole `0x47` mask**: bit `0x01`
+(`SKIPPED_FULL_TURN_WITH_DAMAGE`) feeds the healing test in that same routine. `ClearAttack`
+read-modify-writes against a **fresh** read, not the cached `Refresh` value, so a poll landing while the
+game sets sentry or air recon cannot stamp those back out; and it must stay write-free on a unit that
+has not attacked, since the toggle runs it per unit per tick. `FormatCheck` pins all of that — but
+**not** the `HoldingMoves` implication itself, which no headless check can reach; that one is held by
+this note and by the comment on the property. See `docs/ReverseEngineering.md` §4.9.
 
 **A unit's type is not a label — everything is resolved through it, live.** `Unit_has_ability`
 (`0x5CB430`) and `Unit_can_perform_action` (`0x5D0670`) both start `mov eax,[esi+0x40]` — that is

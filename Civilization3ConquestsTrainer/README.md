@@ -96,8 +96,9 @@ rebuilds automatically when units are built or killed and when cities are founde
 (*Refresh list* on the toolbar re-lists **processes**, not game data — you should never need it once
 attached.)
 
-**Units** — full heal, refresh movement (once, or held at zero all turn), promote to elite, change what
-a unit *is*, make a great leader, finish worker jobs, per-unit or all at once.
+**Units** — full heal, refresh movement (once, or held at zero all turn), attack as many times a turn as
+you like, promote to elite, change what a unit *is*, make a great leader, finish worker jobs, per-unit or
+all at once.
 
 Two fields read backwards from the UI and the grid labels them accordingly: the record stores hit
 points **lost** and movement **spent**, so zero is a fresh, undamaged unit. Maximum hit points are not
@@ -130,6 +131,20 @@ feature off instead of acting on a wrong number. The References tab reports what
 a unit is a heap object the game allocates, links into its own container, counts in three tallies and
 loads an animation into. That is not something `WriteProcessMemory` can do, and reaching the game's own
 spawn routine would mean running code inside it — which this trainer does not do.
+
+**Unlimited attacks** lets every unit of yours attack as many times in a turn as you can give it the
+order. Civ3 normally allows one attack per unit per turn unless the unit's type has the **Blitz**
+ability, and it enforces that with two gates rather than one: attacking sets an "already attacked this
+turn" flag on the unit, and it also spends every movement point the unit had. Movement is checked first,
+so clearing the flag alone would appear to do nothing — the toggle does both writes, twice a second, to
+your units only.
+
+Both fields are ones **the game clears for itself at the start of a unit's turn** — the same two
+offsets, written by one four-instruction sequence in the game's own new-turn routine — so this is a turn
+boundary arriving early rather than invented state, and there is nothing to put back on detach. What it
+hands back is the *right* to attack, not the outcome: the attacker still takes damage and can still
+lose. It also implies the movement hold, so you do not need both boxes ticked. See
+[`docs/ReverseEngineering.md`](docs/ReverseEngineering.md) §4.9 for the instructions this rests on.
 
 The per-unit **Heal** toggle re-zeroes damage and spent movement every poll. It **cannot make a unit
 invincible**, and does not claim to: Civ3 resolves an entire battle inside a single call — every

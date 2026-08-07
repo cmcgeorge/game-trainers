@@ -139,6 +139,23 @@ public static class ConquestBook
             "believed unless the type it names actually carries the matching ability — so a mod that " +
             "moved things around switches the feature off instead of acting on a wrong number."),
 
+        new("One attack per turn is one bit, and it takes two writes to get past it",
+            "Civ3 allows a unit one attack per turn unless its type carries the Blitz ability, and it " +
+            "enforces that with a flag rather than a rule: beginning a battle sets an \"already attacked " +
+            "this turn\" bit on the attacker, and the routine that decides whether a unit may move onto " +
+            "an adjacent tile refuses the next attack whenever that bit is set on a unit without Blitz. " +
+            "That refusal is what you see as a unit the game will not let you attack with again.\n\n" +
+            "Clearing the bit on its own would appear to do nothing, because attacking also spends every " +
+            "movement point the unit had and the game checks movement first. So \"Unlimited attacks\" " +
+            "clears the flag and re-zeroes spent movement together — which happens to be the same pair of " +
+            "fields the game writes for itself at the start of every unit's turn, in a single " +
+            "four-instruction sequence in its own new-turn routine. Nothing is invented and nothing " +
+            "needs restoring: it is a " +
+            "turn boundary arriving early, on your units only.\n\n" +
+            "It hands back the right to attack, not the result. The attacker still takes damage and can " +
+            "still lose, for the same reason Heal cannot make a unit invincible — a whole battle is " +
+            "resolved inside one call. Pair it with Heal if you want a unit to keep going regardless."),
+
         new("Movement is spent, not remaining",
             "The same inversion applies to movement: the field counts points already used this turn, so " +
             "\"Refresh moves\" writes zero. Movement is stored in thirds, so a unit that has spent one " +

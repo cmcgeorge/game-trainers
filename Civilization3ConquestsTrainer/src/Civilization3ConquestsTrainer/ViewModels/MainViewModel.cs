@@ -174,7 +174,14 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         {
             if (value && !WritesAllowed) { ReportBlocked(); OnPropertyChanged(); return; }
             if (!SetField(ref _holdMyUnitMoves, value)) return;
-            if (!value) { Status = "Movement hold off — your units spend movement normally again."; return; }
+            if (!value)
+            {
+                Status = _unlimitedAttacks
+                    ? "Movement hold off — but Unlimited attacks is still on, and it holds movement too. " +
+                      "Untick that as well to spend movement normally again."
+                    : "Movement hold off — your units spend movement normally again.";
+                return;
+            }
 
             ApplyMovementHold();
             Status = "Holding your units' spent movement at zero every poll. For a worker this also means " +
@@ -186,8 +193,77 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     /// <summary>Re-zeroes movement on every unit that is still yours. Called from the poll loop.</summary>
     private void ApplyMovementHold()
     {
-        if (!_holdMyUnitMoves || !WritesAllowed) return;
+        if (!HoldingMoves) return;
         foreach (var u in Units) if (u.IsMine) u.HoldMoves();
+    }
+
+    /// <summary>
+    /// Whether spent movement is being held at zero — by the movement hold itself, or by
+    /// <see cref="UnlimitedAttacks"/>, which needs the same write to be of any use.
+    ///
+    /// <para><b>Do not drop <c>_unlimitedAttacks</c> from this condition.</b> Attacking spends the
+    /// unit's whole move and Civ3 tests movement before it tests the attack flag, so an unlimited-attacks
+    /// toggle that did not also hold movement would write a bit nothing could act on and appear to do
+    /// nothing at all. No headless check can catch that — the harness cannot reach past the setters
+    /// without a live process — so this comment and the note in <c>AGENTS.md</c> are the guard.</para>
+    /// </summary>
+    private bool HoldingMoves => (_holdMyUnitMoves || _unlimitedAttacks) && WritesAllowed;
+
+    private bool _unlimitedAttacks;
+
+    /// <summary>
+    /// Lets every unit of yours attack as many times in a turn as you can give it the order.
+    ///
+    /// <para>Civ3 puts two gates in the way of a second attack and this opens both. <c>Fighter_fight</c>
+    /// (<c>0x4AC060</c>) sets <c>USF_USED_ATTACK</c> on the attacker as the battle begins, and
+    /// <c>Unit_can_move_to_adjacent_tile</c> (<c>0x5C4620</c>) refuses the next attack with
+    /// <c>AMV_REQUIRES_BLITZ</c> whenever that bit is set on a unit whose type lacks the Blitz ability.
+    /// Attacking also spends the unit's whole move, and movement is tested first. So the toggle clears
+    /// the bit <i>and</i> re-zeroes spent movement, which is exactly the pair of writes
+    /// <c>Unit_begin_turn</c> (<c>0x5D65B0</c>) makes for itself at every turn boundary — the same two
+    /// fields, in one four-instruction sequence at <c>0x5D6D39</c>.</para>
+    ///
+    /// <para>Your units only, and nothing is left behind: the game would clear both fields on its own at
+    /// the start of the unit's next turn.</para>
+    /// </summary>
+    public bool UnlimitedAttacks
+    {
+        get => _unlimitedAttacks;
+        set
+        {
+            if (value && !WritesAllowed) { ReportBlocked(); OnPropertyChanged(); return; }
+            if (!SetField(ref _unlimitedAttacks, value)) return;
+            if (!value)
+            {
+                Status = _holdMyUnitMoves
+                    ? "Unlimited attacks off — one attack per unit per turn again. The movement hold is " +
+                      "still on, so your units keep their movement."
+                    : "Unlimited attacks off — your units attack once per turn and spend movement normally again.";
+                return;
+            }
+
+            int n = ApplyAttackReset();
+            ApplyMovementHold();
+            Status = "Unlimited attacks on" +
+                     (n == 0
+                         ? ". None of your units has attacked yet this turn; from now on none of them stays spent."
+                         : $", and {n} of your units had already attacked — they can go again.") +
+                     " Movement is handed back with the attack, because attacking spends the lot and Civ3 " +
+                     "checks movement first. Select the unit again in the game and attack with it as often " +
+                     "as you like.";
+        }
+    }
+
+    /// <summary>
+    /// Clears the "already attacked this turn" flag on every unit that is still yours; returns how many
+    /// units actually needed it. Called from the poll loop.
+    /// </summary>
+    private int ApplyAttackReset()
+    {
+        if (!_unlimitedAttacks || !WritesAllowed) return 0;
+        int n = 0;
+        foreach (var u in Units) if (u.IsMine && u.ClearAttack()) n++;
+        return n;
     }
 
     private bool _keepWorkerJobsBanked;
@@ -393,9 +469,11 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         RestoreWorkerJobCosts();
         if (_instantWorkerJobs) { _instantWorkerJobs = false; OnPropertyChanged(nameof(InstantWorkerJobs)); }
 
-        // The other two leave nothing behind in the game, but they are standing instructions to keep
-        // writing — so a fresh attach should start with none of them armed.
+        // The other three leave nothing behind in the game — every field they touch is one the game
+        // rewrites at the start of the unit's next turn anyway — but they are standing instructions to
+        // keep writing, so a fresh attach should start with none of them armed.
         if (_holdMyUnitMoves) { _holdMyUnitMoves = false; OnPropertyChanged(nameof(HoldMyUnitMoves)); }
+        if (_unlimitedAttacks) { _unlimitedAttacks = false; OnPropertyChanged(nameof(UnlimitedAttacks)); }
         if (_keepWorkerJobsBanked) { _keepWorkerJobsBanked = false; OnPropertyChanged(nameof(KeepWorkerJobsBanked)); }
 
         _poll.Stop();
@@ -874,6 +952,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
             foreach (var c in Cities) c.ApplyFreeze();
             foreach (var u in Units) u.ApplyFreeze();
             ApplyJobBanking();
+            ApplyAttackReset();
             ApplyMovementHold();
             return;
         }
@@ -889,16 +968,20 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         // The movement hold is applied inside this loop rather than after it, so it reaches only rows
         // that just re-validated — a unit killed this tick has left a dangling body pointer behind, and
         // it stays in the collection until the rebuild below.
-        bool holdMoves = _holdMyUnitMoves && WritesAllowed;
+        bool holdMoves = HoldingMoves;
         bool bankJobs = _keepWorkerJobsBanked && WritesAllowed;
+        bool clearAttacks = _unlimitedAttacks && WritesAllowed;
         foreach (var u in Units)
         {
             if (!u.Refresh(_tables, loc, _anyUnitClass)) { dropped = true; continue; }
             u.ApplyFreeze();
             if (!u.IsMine) continue;
             // Bank first, hold second: banking is what the next work tick consumes, and the returned
-            // movement is what lets that tick happen this turn rather than the next.
+            // movement is what lets that tick happen this turn rather than the next. Clearing the
+            // attack flag belongs with the hold for the same reason — one of them without the other
+            // is a gate opened onto a gate that is still shut.
             if (bankJobs) u.FinishJob();
+            if (clearAttacks) u.ClearAttack();
             if (holdMoves) u.HoldMoves();
         }
 

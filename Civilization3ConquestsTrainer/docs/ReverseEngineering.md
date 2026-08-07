@@ -223,6 +223,7 @@ and every unit's `RaceID` matching its owner's):
 | `+0x18` / `+0x1C` | `CivID` / `RaceID` | |
 | `+0x24` | `UnitTypeID` | indexes `BIC.UnitTypes` |
 | `+0x28` | `Combat_Experience` | conscript → elite |
+| `+0x2C` | **`Status`** | per-turn flag bits; `0x04` is "has attacked this turn" — see §4.9 |
 | `+0x30` | **`Damage`** | hit points **lost**, not remaining |
 | `+0x34` | **`Moves`** | movement **spent** this turn, not left |
 | `+0x38` | **`Job_Value`** | worker-turns **done**, counting **up** toward the job's cost — see §4.7 |
@@ -718,6 +719,89 @@ still checked at run time rather than trusted: every type in the loaded ruleset 
 three domains and at least two distinct domains must appear, or the trainer stops filtering and offers
 the whole table.
 
+## 4.9 Attacking more than once — one bit, two gates
+
+Civ3 lets a unit attack **once per turn** unless its type carries the **Blitz** ability. That rule is
+not a special case buried in the combat code: it is one bit on the unit, tested by the routine that
+decides whether a move onto an adjacent tile is legal at all. Three sites define the whole life cycle,
+and together they make `Unit_Body.Status` (`+0x2C`) **[Confirmed]** — it was previously Inferred,
+carried over from the community header and never read out of the game.
+
+Every address below is a `Unit*`, so body offsets arrive `0x1C` larger: `Unit+0x48` is
+`Unit_Body+0x2C` (`Status`) and `Unit+0x50` is `Unit_Body+0x34` (`Moves`).
+
+**Set — `Fighter_fight` @ `0x4AC060`.** As a battle begins, the attacker is stamped:
+
+```
+0x4AC355   83 48 48 04      or  dword ptr [eax+0x48], 4        ; attacker->Status |= USF_USED_ATTACK
+```
+
+**Tested — `Unit_can_move_to_adjacent_tile` @ `0x5C4620`.** This is the function whose return value the
+UI turns into "that unit cannot do that". It carries the `AdjacentMoveValidity` enum, in which
+`AMV_REQUIRES_BLITZ` is **8**:
+
+```
+0x5C4748   f6 46 48 04      test byte ptr [esi+0x48], 4        ; already attacked this turn?
+0x5C474C   74 24            jz   +0x24                         ; no  → carry on
+0x5C474E   6a 02            push 2                             ; UTA_Blitz
+0x5C4750   8b ce            mov  ecx, esi
+0x5C4752   e8 d9 6c 00 00   call 0x5CB430                      ; Unit_has_ability
+0x5C4757   84 c0            test al, al
+0x5C4759   75 17            jnz  +0x17                         ; has Blitz → allowed
+                            …                                  ; otherwise: return 8
+```
+
+The same test guards three separate `return 8` paths in that one function — `0x5C4748` (the target tile
+holds a city), `0x5C4986` (the target is not a hidden-nationality unit) and `0x5C49F4` (everything else,
+including the amphibious branch) — each reading:
+
+```c
+if (((*(byte *)(param_1 + 0x48) & 4) != 0) && (Unit_has_ability(2) == '\0'))
+    return 8;                                  /* AMV_REQUIRES_BLITZ */
+```
+
+Three independent paths, one condition: there is no shape of attack that slips past the flag, and
+equally no second flag to find.
+
+`Unit_can_perform_command` (`0x5D0670`) tests the same bit at three more sites, so the same flag also
+governs which orders a spent unit is offered, not only whether the move itself is legal.
+
+**Cleared — `Unit_begin_turn` @ `0x5D65B0`.** This is the part that decides how the feature should be
+built. The routine ends with four instructions:
+
+```
+0x5D6D39   8b 46 48                  mov   eax, [esi+0x48]     ; Status
+0x5D6D3C   c7 46 50 00 00 00 00      mov   dword [esi+0x50], 0 ; Moves = 0
+0x5D6D43   24 b8                     and   al, 0xB8            ; clear 0x01|0x02|0x04|0x40
+0x5D6D45   89 46 48                  mov   [esi+0x48], eax
+```
+
+So **the two fields "unlimited attacks" writes are the two fields the game writes for itself at the
+start of every unit's turn, in that one sequence.** The trainer is not inventing state; it is
+moving a turn boundary that the game will reach anyway. Nothing has to be restored on detach, which is
+why this toggle needs no counterpart to `RestoreWorkerJobCosts`. As a bonus the same pair re-confirms
+`Moves` at `+0x34` from a second, unrelated routine.
+
+**Both gates have to be opened, and this is the part that is easy to get wrong.** Attacking also spends
+the attacker's *entire* remaining movement, and movement is tested before the blitz check —
+`AMV_NO_MOVES` is 2, `AMV_REQUIRES_BLITZ` is 8. So clearing the bit on its own changes nothing
+observable, and the existing *Hold my units' moves at 0* on its own already gives unlimited attacks
+**to Blitz units only**. The toggle therefore does both writes, and its tooltip says so rather than
+asking the player to tick two boxes and work out why one of them is load-bearing.
+
+**Only one bit is cleared, though the game clears four.** `0xB8` is `~0x47`, which knocks out
+`USF_SKIPPED_FULL_TURN_WITH_DAMAGE` (`0x01`), `0x02`, `USF_USED_ATTACK` (`0x04`) and
+`USF_USED_DEFENSIVE_BOMBARD` (`0x40`) together. Copying that mask mid-turn would be wrong: bit `0x01`
+feeds the healing test at the top of the same routine, so clearing it partway through a turn would
+quietly change how much a damaged unit recovers. The trainer clears `0x04` and read-modify-writes
+against a **fresh** read, so sentry (`0x80`/`0x100`) and air recon (`0x08`) survive a poll that lands in
+the middle of the game setting them.
+
+**What it does not do.** It hands back the *right* to attack, not the outcome — the attacker still takes
+damage and can still lose, for the same reason the damage freeze cannot make a unit invincible:
+`Fighter_begin` (`0x4AB470`) resolves a whole battle inside one call. Nor does it reach the AI: the
+flag is cleared on the human player's own units only.
+
 ---
 
 ## 5. The locator
@@ -788,6 +872,10 @@ scan normally.
   `Job_ID`, and the `body − 0x1C` header offset, all read out of the game's own instruction stream (§4.7)
 - `Unit_Body.UnitTypeID` (`+0x24`) as the field the game resolves stats, abilities, orders and maximum
   hit points through, live, on every lookup — from `Unit_has_ability` and `Unit_can_perform_action` (§4.8)
+- `Unit_Body.Status` (`+0x2C`) and the meaning of bit `0x04`, from all three sites in its life cycle:
+  `Fighter_fight` sets it, `Unit_can_move_to_adjacent_tile` returns `AMV_REQUIRES_BLITZ` on it, and
+  `Unit_begin_turn` clears it alongside `Moves` — which also re-confirms `Moves` at `+0x34` a second
+  time, from an unrelated routine (§4.9). This was previously Inferred.
 - `Unit_Body.Container_Unit` (`+0x44`) as the *ID* of the unit carrying this one, from the passenger
   re-homing loop in `Unit_upgrade`
 - `UnitType.UnitAbilities` (`+0x88`), the overflow word `Extra_Abilities` (`+0x130`), the four action
@@ -940,6 +1028,13 @@ uncompressed save, but that path is untested here).
 8. **`City_Body.Order_ID` / `Order_Type`** (`+0x30` / `+0x34`) — the encoding that would let the
    trainer set a city's build order and, with the existing shield fill, have the game itself produce
    any unit next turn. See §6.
+9. **Whether repeated attacks look like anything else on screen** (§4.9). The gate is closed from all
+   three sides in the game's own code — set, tested, cleared — and the two fields written are the two
+   the game writes at every turn boundary, so the mechanism is not in doubt. What has *not* been watched
+   is the surrounding presentation: whether the unit is put back into the selection cycle after the flag
+   is cleared, or has to be picked off the map by hand, and whether a stack that has already fought
+   redraws its "no orders left" state. Neither changes what the write does; both are one game session's
+   observation away, and the UI claims nothing about either.
 
 ---
 
@@ -950,6 +1045,8 @@ The git-ignored `.docs/` workspace holds the tools:
 ```
 .docs/c3x/                    the C3X CSV and header, downloaded
 .docs/ghidra-scripts/         ApplyC3XSymbols.java — labels the exe from the CSV's Steam column
+                              Civ3Probe.java — decompiles a list of addresses, and lists every bit
+                              operation on [reg+0x48] (how §4.9's three sites were found)
 .docs/probe/                  a read-only console probe (plus one explicit write-test mode)
 ```
 

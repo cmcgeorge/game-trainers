@@ -138,6 +138,15 @@ public static class Civ3Layout
     /// <summary>A body pointer points past the object's <c>Base</c>, so the tag is 0x14 behind it.</summary>
     public const int BodyToTag = 0x14;
 
+    /// <summary>
+    /// [Confirmed] How far a <c>Unit_Body</c> sits into its <c>Unit</c>. The game's own routines take a
+    /// <c>Unit*</c> and address body fields through it, so every offset transcribed from the
+    /// instruction stream arrives 0x1C larger than the one this file records —
+    /// <c>get_worker_remaining_turns_to_complete</c> spells the conversion out with
+    /// <c>lea esi,[eax-0x1C]</c>.
+    /// </summary>
+    public const int BodyOffsetInUnit = 0x1C;
+
     // --- Unit_Body --------------------------------------------------------------------------------
 
     public const int UnitId = 0x04;                   // [Confirmed] equals the slot index
@@ -168,12 +177,58 @@ public static class Civ3Layout
     /// </summary>
     public const int UnitTypeId = 0x24;
     public const int UnitExperience = 0x28;           // [Confirmed] 0 conscript … 3 elite
-    public const int UnitStatus = 0x2C;               // [Inferred]
+
+    /// <summary>
+    /// [Confirmed] Per-turn status bits. The one that matters here is
+    /// <see cref="UnitStatusUsedAttack"/>: it is what stops a unit attacking twice in one turn.
+    ///
+    /// <para>Read out of the game's own code at three sites, which between them set the bit, test it and
+    /// clear it. <c>Fighter_fight</c> (<c>0x4AC060</c>) does <c>or dword [eax+0x48],4</c> at
+    /// <c>0x4AC355</c> on the attacker as a battle begins. <c>Unit_can_move_to_adjacent_tile</c>
+    /// (<c>0x5C4620</c>) does <c>test byte [esi+0x48],4</c> at <c>0x5C4748</c> and, when the bit is set
+    /// and <c>Unit_has_ability(UTA_Blitz)</c> comes back false, returns <c>AMV_REQUIRES_BLITZ</c> — the
+    /// refusal the player sees as a unit that will not attack again. (<c>Unit+0x48</c> is
+    /// <c>Unit_Body+0x2C</c>: the body sits <c>0x1C</c> past the object.)</para>
+    ///
+    /// <para><b>The game clears this bit itself, every turn.</b> <c>Unit_begin_turn</c>
+    /// (<c>0x5D65B0</c>) ends with one four-instruction sequence at <c>0x5D6D39</c> —
+    /// <c>mov eax,[esi+0x48]</c> / <c>mov dword [esi+0x50],0</c> / <c>and al,0xB8</c> /
+    /// <c>mov [esi+0x48],eax</c> — which zeroes <see cref="UnitMoves"/> and knocks out bits
+    /// <c>0x01|0x02|0x04|0x40</c> together. So "attack again" writes nothing the game does not write for
+    /// itself at every turn boundary; it only writes it sooner. That same sequence also re-confirms
+    /// <see cref="UnitMoves"/> at <c>+0x34</c> from a second, unrelated routine.</para>
+    /// </summary>
+    public const int UnitStatus = 0x2C;
+
+    /// <summary>
+    /// <c>USF_USED_ATTACK</c> — set on a unit that has already attacked this turn, and the only bit of
+    /// <see cref="UnitStatus"/> this trainer writes.
+    ///
+    /// <para>The game's own new-turn clear is wider (<c>0x47</c>: this bit plus <c>0x01</c>
+    /// <c>SKIPPED_FULL_TURN_WITH_DAMAGE</c>, <c>0x02</c>, and <c>0x40</c>
+    /// <c>USED_DEFENSIVE_BOMBARD</c>), and that width is deliberately <b>not</b> copied. Bit
+    /// <c>0x01</c> feeds the healing test at the top of <c>Unit_begin_turn</c>, so clearing it in the
+    /// middle of a turn would quietly change how much a damaged unit recovers — a side effect nobody
+    /// asked for. Clearing one bit is the whole feature.</para>
+    /// </summary>
+    public const int UnitStatusUsedAttack = 0x04;
+
+    /// <summary>Whether a unit's status word says it has already attacked this turn.</summary>
+    public static bool HasUsedAttack(int status) => (status & UnitStatusUsedAttack) != 0;
+
+    /// <summary>The same status word with the "already attacked" bit knocked out, and nothing else changed.</summary>
+    public static int ClearUsedAttack(int status) => status & ~UnitStatusUsedAttack;
 
     /// <summary>[Confirmed] Hit points <i>lost</i>, not remaining — "full heal" writes 0 here.</summary>
     public const int UnitDamage = 0x30;
 
-    /// <summary>[Confirmed] Movement <i>used</i> this turn — "refresh moves" writes 0 here.</summary>
+    /// <summary>
+    /// [Confirmed] Movement <i>used</i> this turn — "refresh moves" writes 0 here.
+    ///
+    /// <para>Confirmed twice over: alongside the other unit fields in §4.3, and again by
+    /// <c>Unit_begin_turn</c>'s <c>mov dword [esi+0x50],0</c> at <c>0x5D6D3C</c> (<c>Unit+0x50</c> is
+    /// <c>Unit_Body+0x34</c>), which is the game zeroing spent movement at the start of a unit's turn.</para>
+    /// </summary>
     public const int UnitMoves = 0x34;
 
     /// <summary>
