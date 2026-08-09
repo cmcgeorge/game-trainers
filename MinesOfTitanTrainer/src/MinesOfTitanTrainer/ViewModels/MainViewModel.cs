@@ -84,6 +84,13 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         _poll.Tick += (_, _) => PollTick();
 
         RefreshProcesses();
+        TryAutoAttach();
+    }
+
+    /// <summary>On startup, attach automatically when the pre-selected process looks like a game emulator, so a running game is picked up without a manual click. Stays a no-op (just the populated process list) when nothing emulator-looking is running, rather than attaching to some unrelated process and scanning it fruitlessly.</summary>
+    private void TryAutoAttach()
+    {
+        if (!IsAttached && SelectedProcess?.IsEmulator == true) Attach();
     }
 
     // --- process management --------------------------------------------------

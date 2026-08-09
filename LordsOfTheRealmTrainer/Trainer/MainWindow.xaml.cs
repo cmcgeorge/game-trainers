@@ -61,20 +61,17 @@ public partial class MainWindow : Window
 
         Closed += (_, _) => { _tick.Stop(); _memory.Dispose(); };
         UpdateAttachUi();
+        TryAutoAttach();
     }
 
-    private ValueType SelectedType => RbInt16.IsChecked == true ? ValueType.Int16 : ValueType.Int32;
-
-    // ---- Attach -------------------------------------------------------------
-
-    private void OnAttachClick(object sender, RoutedEventArgs e)
+    /// <summary>On startup, attach automatically when a DOSBox process is already running,
+    /// so a running game is picked up without a manual click. Stays a no-op when nothing
+    /// emulator-looking is running, rather than attaching to some unrelated process.</summary>
+    private void TryAutoAttach()
     {
         var candidates = DosBoxMemory.FindCandidates();
         if (candidates.Length == 0)
-        {
-            SetStatus("No DOSBox-X process found. Start the game first.", error: true);
-            return;
-        }
+            return;   // nothing to auto-attach to on startup
 
         int pid = candidates[0].Id;
         if (candidates.Length > 1)
@@ -117,6 +114,21 @@ public partial class MainWindow : Window
         _ticksSinceVerify = 0;
         _tick.Start();
         UpdateAttachUi();
+    }
+
+    private ValueType SelectedType => RbInt16.IsChecked == true ? ValueType.Int16 : ValueType.Int32;
+
+    // ---- Attach -------------------------------------------------------------
+
+    private void OnAttachClick(object sender, RoutedEventArgs e)
+    {
+        var candidates = DosBoxMemory.FindCandidates();
+        if (candidates.Length == 0)
+        {
+            SetStatus("No DOSBox-X process found. Start the game first.", error: true);
+            return;
+        }
+        TryAutoAttach();
     }
 
     private void OnDetachClick(object sender, RoutedEventArgs e) => Detach("Detached.");

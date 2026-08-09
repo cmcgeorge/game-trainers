@@ -17,6 +17,7 @@ public partial class MainWindow : Window
         Closed += (_, _) => { _timer.Stop(); _engine.Dispose(); };
         SetCheatsEnabled(false);
         Log("Ready. Start Shogun in DOSBox-X, get in-game, then click Attach.");
+        TryAutoAttach();
     }
 
     // ---- attach / status ----
@@ -33,7 +34,14 @@ public partial class MainWindow : Window
             Log("Detached.");
             return;
         }
+        TryAutoAttach();
+    }
 
+    /// <summary>On startup, attach automatically when a DOSBox process is already running,
+    /// so a running game is picked up without a manual click. Stays a no-op when nothing
+    /// emulator-looking is running, rather than attaching to some unrelated process.</summary>
+    private void TryAutoAttach()
+    {
         string msg = _engine.Attach();
         Log(msg);
         StatusText.Text = msg;

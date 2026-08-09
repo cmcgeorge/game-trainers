@@ -28,8 +28,23 @@ public partial class MainWindow : Window
         _timer.Tick += Timer_Tick;
         _timer.Start();
 
-        Loaded += (_, _) => PopulateProcesses();
+        Loaded += OnWindowLoaded;
         Closed += (_, _) => { _timer.Stop(); _game.Dispose(); };
+    }
+
+    private async void OnWindowLoaded(object sender, RoutedEventArgs e)
+    {
+        PopulateProcesses();
+        await TryAutoAttachAsync();
+    }
+
+    /// <summary>On startup, attach automatically when a DOSBox process is already running,
+    /// so a running game is picked up without a manual click. Stays a no-op when nothing
+    /// emulator-looking is running, rather than attaching to some unrelated process.</summary>
+    private async Task TryAutoAttachAsync()
+    {
+        if (ProcessCombo.SelectedItem is null) return;
+        await DoAttachAsync();
     }
 
     // ---- Process list ----
@@ -62,6 +77,13 @@ public partial class MainWindow : Window
             Log("Select a DOSBox process first.");
             return;
         }
+        await DoAttachAsync();
+    }
+
+    private async Task DoAttachAsync()
+    {
+        if (ProcessCombo.SelectedItem is not ProcessItem item)
+            return;
 
         AttachButton.IsEnabled = false;
         SetStatus(false, "Scanning...");

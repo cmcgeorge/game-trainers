@@ -164,6 +164,17 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
         _freezeTimer.Start();
 
         RefreshProcesses();
+        TryAutoAttach();
+    }
+
+    /// <summary>On startup, attach automatically when the pre-selected process looks like a game
+    /// emulator, so a running game is picked up without a manual click. Stays a no-op (just the
+    /// populated process list) when nothing emulator-looking is running, rather than attaching to
+    /// some unrelated process and scanning it fruitlessly.</summary>
+    private void TryAutoAttach()
+    {
+        if (!Attached && Selected is not null)
+            Attach();
     }
 
     // ---------------------------------------------------------------- attach

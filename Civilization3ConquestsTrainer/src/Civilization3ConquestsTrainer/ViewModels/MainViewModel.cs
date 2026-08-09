@@ -379,6 +379,13 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         _poll.Tick += (_, _) => PollTick();
 
         RefreshProcesses();
+        TryAutoAttach();
+    }
+
+    /// <summary>On startup, attach automatically when the pre-selected process looks like the game. Stays a no-op (just the populated process list) when the game is not running, rather than attaching to some unrelated process and scanning it fruitlessly.</summary>
+    private void TryAutoAttach()
+    {
+        if (!IsAttached && SelectedProcess?.IsLikelyTarget == true) Attach();
     }
 
     // --- process management ---------------------------------------------------------------------

@@ -59,6 +59,13 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
 
         RefreshProcesses();
         Status = "Start Legend of Grimrock, load or begin a game, then pick grimrock and press Attach.";
+        TryAutoAttach();
+    }
+
+    /// <summary>On startup, attach automatically when the pre-selected process is the game. Stays a no-op (just the populated process list) when the game is not running, rather than attaching to some unrelated process and scanning it fruitlessly.</summary>
+    private void TryAutoAttach()
+    {
+        if (!IsAttached && SelectedProcess?.Match == ProcessMatch.Exact) Attach();
     }
 
     // --- attach ------------------------------------------------------------------------------------
