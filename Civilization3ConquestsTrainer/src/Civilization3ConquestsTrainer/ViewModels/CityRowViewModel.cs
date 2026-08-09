@@ -143,6 +143,18 @@ public sealed class CityRowViewModel : ObservableObject
         _host.WriteInt32(_body + (nuint)Civ3Layout.CityStoredProduction, _freezeShields);
     }
 
+    /// <summary>
+    /// Lightweight check that the record behind this row still exists — the same probe
+    /// <see cref="Refresh"/> uses, but without raising any property changes. Called from the
+    /// suspended-refresh branch in <see cref="MainViewModel"/> so a city that was captured or razed
+    /// while the user was editing a cell does not receive writes to freed or reused memory.
+    /// </summary>
+    public bool IsAlive(Civ3Location loc)
+    {
+        byte[] b = _host.Read(_body, Civ3Layout.CityTrustedPrefixEnd);
+        return Civ3Layout.ValidateCity(b, Slot, loc.MapWidth, loc.MapHeight);
+    }
+
     /// <summary>A city stores a civ id; the label wants that civ's race, which lives on its leader.</summary>
     private int LeaderRaceOf(int civId, Civ3Location loc)
     {

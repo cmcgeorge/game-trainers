@@ -464,8 +464,13 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     /// <summary>Returns the shell to its detached state. Safe to call from any partially-attached state.</summary>
     private void Teardown()
     {
-        // Before anything else, and before _tables is dropped: the job costs are the only thing this
-        // trainer leaves changed in the game between clicks, and Detach promises it leaves nothing.
+        // Before anything else: cancel any in-flight map sweep so it does not write through this host
+        // after the process is torn down. The sweep's own session guard catches this too, but the
+        // token is immediate where the reference check is per-tile.
+        Map.CancelSweep();
+
+        // And before _tables is dropped: the job costs are the only thing this trainer leaves changed
+        // in the game between clicks, and Detach promises it leaves nothing.
         RestoreWorkerJobCosts();
         if (_instantWorkerJobs) { _instantWorkerJobs = false; OnPropertyChanged(nameof(InstantWorkerJobs)); }
 
@@ -946,14 +951,27 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         // While a grid cell is open for editing, keep applying freezes but do not refresh: a
         // refresh raises PropertyChanged on the bound property, and WPF pushes that straight into
         // the open TextBox, wiping out whatever the user has typed so far.
+        //
+        // The standing writes (banking, attack reset, movement hold) are inlined here rather than
+        // calling the helper methods, because each one needs an IsAlive guard: a unit that died or a
+        // city that was captured while the user was editing a cell has a dangling body pointer that
+        // Refresh would have caught — but Refresh is suppressed, so the probe has to happen here.
         if (_suspendRefresh)
         {
             foreach (var p in Players) p.ApplyFreeze();
-            foreach (var c in Cities) c.ApplyFreeze();
-            foreach (var u in Units) u.ApplyFreeze();
-            ApplyJobBanking();
-            ApplyAttackReset();
-            ApplyMovementHold();
+            foreach (var c in Cities) { if (c.IsAlive(loc)) c.ApplyFreeze(); }
+            bool susHoldMoves = HoldingMoves;
+            bool susBankJobs = _keepWorkerJobsBanked && WritesAllowed;
+            bool susClearAttacks = _unlimitedAttacks && WritesAllowed;
+            foreach (var u in Units)
+            {
+                if (!u.IsAlive(loc)) continue;
+                u.ApplyFreeze();
+                if (!u.IsMine) continue;
+                if (susBankJobs) u.FinishJob();
+                if (susClearAttacks) u.ClearAttack();
+                if (susHoldMoves) u.HoldMoves();
+            }
             return;
         }
 

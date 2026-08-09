@@ -281,10 +281,26 @@ public sealed class PlayerRowViewModel : ObservableObject
             return;
         }
 
-        _luxury = lux; _science = sci; _tax = gold;
-        _host.WriteInt32(_record + (nuint)Civ3Layout.LeaderLuxurySlider, lux);
-        _host.WriteInt32(_record + (nuint)Civ3Layout.LeaderScienceSlider, sci);
-        _host.WriteInt32(_record + (nuint)Civ3Layout.LeaderGoldSlider, gold);
+        // Attempt all three writes before committing the cache. A mid-sequence failure leaves the
+        // game partially rebalanced, and the UI must not show a split the game never received — so
+        // any writes that landed are rolled back to the old values and the cache stays as it was.
+        int oldLux = _luxury, oldSci = _science, oldGold = _tax;
+        bool w1 = _host.WriteInt32(_record + (nuint)Civ3Layout.LeaderLuxurySlider, lux);
+        bool w2 = _host.WriteInt32(_record + (nuint)Civ3Layout.LeaderScienceSlider, sci);
+        bool w3 = _host.WriteInt32(_record + (nuint)Civ3Layout.LeaderGoldSlider, gold);
+
+        if (w1 && w2 && w3)
+        {
+            _luxury = lux; _science = sci; _tax = gold;
+        }
+        else
+        {
+            if (w1) _host.WriteInt32(_record + (nuint)Civ3Layout.LeaderLuxurySlider, oldLux);
+            if (w2) _host.WriteInt32(_record + (nuint)Civ3Layout.LeaderScienceSlider, oldSci);
+            if (w3) _host.WriteInt32(_record + (nuint)Civ3Layout.LeaderGoldSlider, oldGold);
+            _host.Report("One of the three rate writes failed — the change was rolled back.");
+        }
+
         OnPropertyChanged(nameof(LuxuryRate));
         OnPropertyChanged(nameof(ScienceRate));
         OnPropertyChanged(nameof(TaxRate));

@@ -259,6 +259,7 @@
                         <CheckBox Margin="4,6" IsChecked="{Binding ConfirmedRisk}"
                                   Content="I understand these offsets are unconfirmed and I have a backup save"/>
                         <Button Content="Reveal map" HorizontalAlignment="Left" Command="{Binding RevealMapCommand}"/>
+                        <Button Content="Hide map" HorizontalAlignment="Left" Margin="0,4" Command="{Binding HideMapCommand}"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>

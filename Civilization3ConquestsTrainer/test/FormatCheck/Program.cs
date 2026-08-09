@@ -497,6 +497,26 @@ movedNoCode.WritePeHeader(GameFacts.KnownTimeDateStamp);
 movedNoCode.PlantGame(MovedLeaders, humanCivId: 3, playerCount: 8);
 Check("a moved array with no code idiom is not found", new GameLocator(movedNoCode).Locate() == null);
 
+// Chain B must validate each candidate base rather than picking the lowest one at the modal stride.
+// A lower false base that collects stray votes at the same stride must not win over a higher valid
+// one — which is exactly what the old code (modal stride → lowest base, no validation) would do.
+const uint DecoyLeaders = 0x300000;                        // lower, in .data, no valid leaders
+const uint RealLeaders2 = 0x350000;                       // higher, in .data, with valid leaders
+var withDecoy = new FakeModule(0x400000, 0x700000);
+withDecoy.WritePeHeader(0xDEADBEEF);                      // unknown build so chain A fails
+withDecoy.PlantGame(RealLeaders2, humanCivId: 3, playerCount: 8);
+// Plant the decoy's array walk three times — more votes than the real one.
+withDecoy.PlantArrayWalk(FakeModule.TextRva + 0x2000, (uint)withDecoy.At(DecoyLeaders), Civ3Layout.LeaderStride);
+withDecoy.PlantArrayWalk(FakeModule.TextRva + 0x2100, (uint)withDecoy.At(DecoyLeaders), Civ3Layout.LeaderStride);
+withDecoy.PlantArrayWalk(FakeModule.TextRva + 0x2200, (uint)withDecoy.At(DecoyLeaders), Civ3Layout.LeaderStride);
+// Plant the real array walk once — fewer votes, but it validates.
+withDecoy.PlantArrayWalk(FakeModule.TextRva + 0x2300, (uint)withDecoy.At(RealLeaders2), Civ3Layout.LeaderStride);
+var decoyLocator = new GameLocator(withDecoy);
+var decoyLoc = decoyLocator.Locate();
+Check("chain B picks the validated base over a lower false base with more votes", decoyLoc != null);
+Equal("and the validated base is the real one, not the decoy", decoyLoc?.Leaders, withDecoy.At(RealLeaders2));
+Equal("reported via the signature chain", decoyLoc?.Chain, LocateChain.SignatureScan);
+
 // =================================================================================================
 Group("Reference data");
 // =================================================================================================
@@ -867,6 +887,36 @@ host.Writes.Clear();
 player.Treasury = 1;
 Equal("no write reaches the game when writes are blocked", host.Writes.Count, 0);
 
+// A mid-sequence write failure must roll back the writes that landed and not commit the cache, so
+// the UI never shows a rebalance the game never received. The fake host fails writes to one specific
+// address (the science slider), letting the other two land and then be undone.
+var failSliderHost = new FakeGameHost();
+nuint failRecord = 0x90000;
+failSliderHost.Seed(failRecord + (nuint)Civ3Layout.LeaderGoldDecrement, -12345);
+failSliderHost.Seed(failRecord + (nuint)Civ3Layout.LeaderGoldEncoded, 12445);
+failSliderHost.Seed(failRecord + (nuint)Civ3Layout.LeaderLuxurySlider, 2);
+failSliderHost.Seed(failRecord + (nuint)Civ3Layout.LeaderScienceSlider, 4);
+failSliderHost.Seed(failRecord + (nuint)Civ3Layout.LeaderGoldSlider, 4);
+var failPlayer = new PlayerRowViewModel(failSliderHost, failRecord, 1, isHuman: true);
+failPlayer.Refresh(GameTables.Empty);
+Equal("sliders start at 2/4/4", (failPlayer.LuxuryRate, failPlayer.ScienceRate, failPlayer.TaxRate), (2, 4, 4));
+
+failSliderHost.FailWriteAt = failRecord + (nuint)Civ3Layout.LeaderScienceSlider;
+failSliderHost.Writes.Clear();
+failPlayer.LuxuryRate = 6;
+// Setting luxury to 6 rebalances to (6, 2, 2). The luxury and gold writes land; the science write
+// fails. The landed writes are rolled back and the cache stays at (2, 4, 4).
+Equal("cache is not committed on partial failure",
+    (failPlayer.LuxuryRate, failPlayer.ScienceRate, failPlayer.TaxRate), (2, 4, 4));
+Check("the landed luxury write is rolled back",
+    failSliderHost.Writes.Any(w => w.Address == failRecord + (nuint)Civ3Layout.LeaderLuxurySlider && w.Value == 2));
+Check("the landed gold write is rolled back",
+    failSliderHost.Writes.Any(w => w.Address == failRecord + (nuint)Civ3Layout.LeaderGoldSlider && w.Value == 4));
+Check("the cell values match the rollback",
+    failSliderHost.ReadInt32(failRecord + (nuint)Civ3Layout.LeaderLuxurySlider, out int luxBack) && luxBack == 2
+    && failSliderHost.ReadInt32(failRecord + (nuint)Civ3Layout.LeaderGoldSlider, out int goldBack) && goldBack == 4);
+Check("the failure is reported", failSliderHost.LastReport.Contains("rolled back"));
+
 // =================================================================================================
 Group("Unit and city rows");
 // =================================================================================================
@@ -1234,6 +1284,37 @@ Equal("a blocked city edit writes nothing", blockedHost.Writes.Count, 0);
 Equal("and the row does not pretend it took", blockedRow.StoredFood, 0);
 Check("and the user is told why", blockedHost.LastReport.Contains("Writes are disabled"));
 
+// --- IsAlive: the lightweight probe the suspended-refresh branch uses ------------------------------
+// While a grid cell is open for editing, the poll loop skips Refresh (which would wipe the user's
+// typing via PropertyChanged) but still applies freezes and standing writes. IsAlive is the guard
+// that stops those writes reaching a unit that died or a city that was captured mid-edit: it runs
+// the same validation probe as Refresh but raises no property changes.
+var aliveUnitHost = new FakeGameHost();
+nuint aliveUnitBody = 0x84000;
+aliveUnitHost.Seed(aliveUnitBody + (nuint)Civ3Layout.UnitId, 5);
+aliveUnitHost.Seed(aliveUnitBody + (nuint)Civ3Layout.UnitX, 20);
+aliveUnitHost.Seed(aliveUnitBody + (nuint)Civ3Layout.UnitY, 30);
+aliveUnitHost.Seed(aliveUnitBody + (nuint)Civ3Layout.UnitCivId, 3);
+aliveUnitHost.Seed(aliveUnitBody + (nuint)Civ3Layout.UnitExperience, 1);
+aliveUnitHost.Seed(aliveUnitBody + (nuint)Civ3Layout.UnitDamage, 0);
+var aliveUnit = new UnitRowViewModel(aliveUnitHost, aliveUnitBody, 5);
+Check("a valid unit is alive", aliveUnit.IsAlive(loc!));
+aliveUnitHost.Seed(aliveUnitBody + (nuint)Civ3Layout.UnitId, 99);      // wrong slot → recycled
+Check("a unit with a wrong slot id is not alive", !aliveUnit.IsAlive(loc!));
+
+var aliveCityHost = new FakeGameHost();
+nuint aliveCityBody = 0x88000;
+aliveCityHost.Seed(aliveCityBody + (nuint)Civ3Layout.CityId, 7);
+aliveCityHost.Seed(aliveCityBody + (nuint)Civ3Layout.CityX, 20);       // int16 in lower 2 bytes
+aliveCityHost.Seed(aliveCityBody + (nuint)Civ3Layout.CityCivId, 3);    // byte in first byte
+aliveCityHost.Seed(aliveCityBody + (nuint)Civ3Layout.CityStoredFood, 50);
+aliveCityHost.Seed(aliveCityBody + (nuint)Civ3Layout.CityStoredProduction, 60);
+aliveCityHost.Seed(aliveCityBody + (nuint)Civ3Layout.CityCulturalLevel, 3);
+var aliveCity = new CityRowViewModel(aliveCityHost, aliveCityBody, 7);
+Check("a valid city is alive", aliveCity.IsAlive(loc!));
+aliveCityHost.Seed(aliveCityBody + (nuint)Civ3Layout.CityId, 99);      // wrong slot → captured/razed
+Check("a city with a wrong slot id is not alive", !aliveCity.IsAlive(loc!));
+
 // =================================================================================================
 Group("Shell toggles that must not arm themselves while detached");
 // =================================================================================================
@@ -1297,6 +1378,45 @@ else
     Check($"every editable CellTemplate binding updates its source on the spot" +
           (swallowed.Count > 0 ? $" — these do not: {string.Join(", ", swallowed)}" : ""),
         swallowed.Count == 0);
+}
+
+// =================================================================================================
+Group("Map tab: session guard on the tile sweep");
+// =================================================================================================
+// The reveal/hide sweep runs off the UI thread and captures the Civ3Location reference at the start.
+// If the session is torn down mid-sweep (detach or reattach), the captured reference is stale and
+// writing through it would corrupt the new process. The sweep checks ReferenceEquals(_loc, loc)
+// before every tile's writes and stops on mismatch.
+
+if (loc != null)
+{
+    var mapHost = new FakeGameHost();
+    var mapVm = new MapViewModel(mapHost);
+    mapVm.Adopt(loc, GameTables.Empty);
+    mapVm.ConfirmedRisk = true;
+
+    // Before Clear: the sweep runs, finds no valid tile pointers (all zeros from the fake host),
+    // and skips every tile — (0, TileCount) — but it does NOT break on the session guard.
+    var beforeResult = mapVm.Sweep(loc, 0x100000, System.Threading.CancellationToken.None, true);
+    Equal("before clear, the sweep processes all tiles", beforeResult.Skipped, loc.TileCount);
+    Equal("and writes nothing to empty tiles", beforeResult.Written, 0);
+    Equal("no writes were issued", mapHost.Writes.Count, 0);
+
+    // After Clear: _loc is null, so ReferenceEquals(_loc, loc) is false and the sweep breaks on
+    // the first iteration — (0, 0) — without even skipping the first tile.
+    mapVm.Clear();
+    mapHost.Writes.Clear();
+    var afterResult = mapVm.Sweep(loc, 0x100000, System.Threading.CancellationToken.None, true);
+    Equal("after clear, the sweep stops immediately (0 written, 0 skipped)", afterResult, (0, 0));
+    Equal("and no writes were issued", mapHost.Writes.Count, 0);
+
+    // Cancellation: the token stops the sweep even when the session is still live.
+    mapVm.Adopt(loc, GameTables.Empty);
+    mapVm.ConfirmedRisk = true;
+    using var cts = new System.Threading.CancellationTokenSource();
+    cts.Cancel();
+    var cancelledResult = mapVm.Sweep(loc, 0x100000, cts.Token, true);
+    Equal("a cancelled token stops the sweep immediately", cancelledResult, (0, 0));
 }
 
 static string? FindUp(string relativePath)

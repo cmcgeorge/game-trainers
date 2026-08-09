@@ -269,6 +269,9 @@ public sealed class FakeGameHost : IGameHost
     /// <summary>When true every read fails, so the rows' short-read guards become reachable.</summary>
     public bool FailReads { get; set; }
 
+    /// <summary>When set, writes to this address fail — for testing partial-write rollback.</summary>
+    public nuint? FailWriteAt { get; set; }
+
     public void Seed(nuint address, int value) => _cells[address] = value;
 
     public byte[] Read(nuint address, int count)
@@ -290,6 +293,7 @@ public sealed class FakeGameHost : IGameHost
     public bool WriteInt32(nuint address, int value)
     {
         if (!WritesAllowed) return false;
+        if (FailWriteAt is { } failAddr && address == failAddr) return false;
         _cells[address] = value;
         Writes.Add((address, value));
         return true;

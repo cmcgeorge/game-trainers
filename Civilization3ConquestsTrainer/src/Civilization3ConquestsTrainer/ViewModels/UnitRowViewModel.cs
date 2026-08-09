@@ -328,6 +328,18 @@ public sealed class UnitRowViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Lightweight check that the record behind this row still exists — the same probe
+    /// <see cref="Refresh"/> uses, but without raising any property changes. Called from the
+    /// suspended-refresh branch in <see cref="MainViewModel"/> so a unit that died while the user
+    /// was editing a cell does not receive writes to freed or reused memory.
+    /// </summary>
+    public bool IsAlive(Civ3Location loc)
+    {
+        byte[] b = _host.Read(_body, Civ3Layout.UnitRecordProbeBytes);
+        return Civ3Layout.ValidateUnit(b, Slot, loc.MapWidth, loc.MapHeight);
+    }
+
+    /// <summary>
     /// Re-zeroes spent movement and nothing else — the empire-wide movement hold, as distinct from the
     /// per-row <see cref="Freeze"/>, which also clears damage.
     ///

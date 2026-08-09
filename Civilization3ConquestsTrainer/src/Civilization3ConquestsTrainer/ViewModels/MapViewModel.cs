@@ -1,11 +1,12 @@
+using System.Threading;
 using System.Windows.Input;
 using Civilization3ConquestsTrainer.Game;
 
 namespace Civilization3ConquestsTrainer.ViewModels;
 
 /// <summary>
-/// The Map tab: what the locator recovered about the world, and the one map-wide action the trainer
-/// offers — revealing the terrain.
+/// The Map tab: what the locator recovered about the world, and the two map-wide actions the trainer
+/// offers — revealing and hiding the terrain.
 ///
 /// <para>Reveal is deliberately gated behind an explicit confirmation rather than being a one-click
 /// "max" button like the others. The <c>Map</c> header itself is confirmed (its width, height and
@@ -20,6 +21,7 @@ public sealed class MapViewModel : ObservableObject
 {
     private readonly IGameHost _host;
     private Civ3Location? _loc;
+    private CancellationTokenSource? _sweepCts;
 
     private string _summary = "Not located.";
     public string Summary { get => _summary; private set => SetField(ref _summary, value); }
@@ -32,7 +34,14 @@ public sealed class MapViewModel : ObservableObject
     public bool ConfirmedRisk
     {
         get => _confirmedRisk;
-        set { if (SetField(ref _confirmedRisk, value)) (RevealMapCommand as RelayCommand)?.RaiseCanExecuteChanged(); }
+        set
+        {
+            if (SetField(ref _confirmedRisk, value))
+            {
+                (RevealMapCommand as RelayCommand)?.RaiseCanExecuteChanged();
+                (HideMapCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            }
+        }
     }
 
     private bool _isRevealing;
@@ -43,19 +52,22 @@ public sealed class MapViewModel : ObservableObject
         private set
         {
             if (!SetField(ref _isRevealing, value)) return;
-            OnPropertyChanged(nameof(CanReveal));
+            OnPropertyChanged(nameof(CanSweep));
             (RevealMapCommand as RelayCommand)?.RaiseCanExecuteChanged();
+            (HideMapCommand as RelayCommand)?.RaiseCanExecuteChanged();
         }
     }
 
-    public bool CanReveal => _loc is { TileCount: > 0 } && ConfirmedRisk && !_isRevealing;
+    public bool CanSweep => _loc is { TileCount: > 0 } && ConfirmedRisk && !_isRevealing;
 
     public ICommand RevealMapCommand { get; }
+    public ICommand HideMapCommand { get; }
 
     public MapViewModel(IGameHost host)
     {
         _host = host;
-        RevealMapCommand = new RelayCommand(_ => RevealMap(), _ => CanReveal);
+        RevealMapCommand = new RelayCommand(_ => RunSweep(true), _ => CanSweep);
+        HideMapCommand = new RelayCommand(_ => RunSweep(false), _ => CanSweep);
     }
 
     /// <summary>Takes on a freshly located game.</summary>
@@ -75,30 +87,46 @@ public sealed class MapViewModel : ObservableObject
             _host.ReadInt32(loc.Map + (nuint)Civ3Layout.MapTiles, out int tiles);
             TilePointerNote = $"Map struct at 0x{(ulong)loc.Map:X}, tile array at 0x{(uint)tiles:X8}.";
         }
-        OnPropertyChanged(nameof(CanReveal));
+        OnPropertyChanged(nameof(CanSweep));
         (RevealMapCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (HideMapCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }
 
-    /// <summary>Forgets the located game.</summary>
+    /// <summary>Forgets the located game, cancelling any in-flight sweep first.</summary>
     public void Clear()
     {
+        CancelSweep();
         _loc = null;
         Summary = "Not located.";
         TilePointerNote = "";
         ConfirmedRisk = false;
-        OnPropertyChanged(nameof(CanReveal));
+        OnPropertyChanged(nameof(CanSweep));
         (RevealMapCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        (HideMapCommand as RelayCommand)?.RaiseCanExecuteChanged();
     }
 
     /// <summary>
-    /// Sets the human player's bit in each tile's visibility masks. Every tile is validated by its own
-    /// 'TILE' tag before anything is written to it, so a wrong tile-array pointer stops the sweep
-    /// rather than spraying writes across the heap.
-    ///
-    /// Runs off the UI thread and reads the whole tile-pointer array in one go: a large map holds
-    /// hundreds of thousands of tiles, and doing this inline would freeze the window for minutes.
+    /// Cancels an in-flight sweep. Called from <see cref="MainViewModel.Teardown"/> so a detach
+    /// mid-sweep does not leave a background task writing through a host whose process has changed.
     /// </summary>
-    private async void RevealMap()
+    public void CancelSweep() => _sweepCts?.Cancel();
+
+    /// <summary>
+    /// Sets or clears the human player's bit in each tile's visibility masks. Every tile is validated
+    /// by its own 'TILE' tag before anything is written to it, so a wrong tile-array pointer stops the
+    /// sweep rather than spraying writes across the heap.
+    ///
+    /// <para>Runs off the UI thread and reads the whole tile-pointer array in one go: a large map holds
+    /// hundreds of thousands of tiles, and doing this inline would freeze the window for minutes.</para>
+    ///
+    /// <para>The sweep is session-guarded: it captures the <see cref="Civ3Location"/> reference at the
+    /// start and checks <see cref="ReferenceEquals"/> against <c>_loc</c> before every tile's writes. If
+    /// the session is torn down (detach) or a new session is adopted mid-sweep, the captured reference
+    /// is stale and the sweep stops — its tile addresses belong to the old process, and writing them
+    /// through the new host would corrupt the new game. A <see cref="CancellationToken"/> from
+    /// <see cref="CancelSweep"/> provides the same guarantee for the teardown path.</para>
+    /// </summary>
+    private async void RunSweep(bool reveal)
     {
         if (_loc is not { } loc || !_host.WritesAllowed || _isRevealing) return;
 
@@ -109,28 +137,43 @@ public sealed class MapViewModel : ObservableObject
             return;
         }
 
+        _sweepCts = new CancellationTokenSource();
+        CancellationToken ct = _sweepCts.Token;
         IsRevealing = true;
-        _host.Report($"Revealing {loc.TileCount:N0} tiles…");
+        _host.Report($"{(reveal ? "Revealing" : "Hiding")} {loc.TileCount:N0} tiles…");
         try
         {
-            var result = await Task.Run(() => Sweep(loc, (nuint)tileArray));
+            var result = await Task.Run(() => Sweep(loc, (nuint)tileArray, ct, reveal));
             _host.Report(result.Written == 0
                 ? "No tile validated its 'TILE' tag — nothing was written. The tile layout does not match."
-                : $"Set the visibility bit on {result.Written:N0} tiles ({result.Skipped:N0} skipped). " +
-                  "Scroll or end a turn to force a redraw. If nothing changed on screen, the visibility " +
-                  "offsets are wrong for this build — they are marked Inferred for exactly this reason.");
+                : $"{(reveal ? "Set" : "Cleared")} the visibility bit on {result.Written:N0} tiles " +
+                  $"({result.Skipped:N0} skipped). Scroll or end a turn to force a redraw. " +
+                  "If nothing changed on screen, the visibility offsets are wrong for this build — " +
+                  "they are marked Inferred for exactly this reason.");
+        }
+        catch (OperationCanceledException)
+        {
+            _host.Report("The sweep was cancelled — the session was torn down mid-sweep.");
         }
         catch (Exception ex)
         {
-            _host.Report("Reveal failed: " + ex.Message);
+            _host.Report((reveal ? "Reveal" : "Hide") + " failed: " + ex.Message);
         }
         finally
         {
+            _sweepCts?.Dispose();
+            _sweepCts = null;
             IsRevealing = false;
         }
     }
 
-    private (int Written, int Skipped) Sweep(Civ3Location loc, nuint tileArray)
+    /// <summary>
+    /// The tile-level sweep. <paramref name="reveal"/> sets the human civ's bit; clearing it hides
+    /// the map back to fog of war. Internal so the test harness can drive it over a fake host and
+    /// verify the session guard.
+    /// </summary>
+    internal (int Written, int Skipped) Sweep(Civ3Location loc, nuint tileArray,
+                                               CancellationToken ct, bool reveal)
     {
         int mask = 1 << loc.HumanCivId;
         int written = 0, skipped = 0;
@@ -141,6 +184,11 @@ public sealed class MapViewModel : ObservableObject
 
         for (int i = 0; i < loc.TileCount; i++)
         {
+            if (ct.IsCancellationRequested) break;
+            // If the session was torn down or a new one adopted mid-sweep, the loc we captured is
+            // stale — its tile addresses belong to the old process. Stop before writing.
+            if (!ReferenceEquals(_loc, loc)) break;
+
             uint tilePtr = BitConverter.ToUInt32(pointers, i * 4);
             if (!Civ3Layout.LooksLikeHeapPointer(tilePtr)) { skipped++; continue; }
 
@@ -151,7 +199,7 @@ public sealed class MapViewModel : ObservableObject
             foreach (int off in Civ3Layout.TileVisibilityMasks)
             {
                 if (!_host.ReadInt32(tile + (nuint)off, out int current)) continue;
-                _host.WriteInt32(tile + (nuint)off, current | mask);
+                _host.WriteInt32(tile + (nuint)off, reveal ? current | mask : current & ~mask);
             }
             written++;
         }

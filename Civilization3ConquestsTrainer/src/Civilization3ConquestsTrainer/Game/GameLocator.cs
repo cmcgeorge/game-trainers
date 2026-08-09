@@ -234,8 +234,10 @@ public sealed class GameLocator
     /// <summary>
     /// Re-derives the leader array base by finding the compiler's array-walk idiom in <c>.text</c>:
     /// <c>add reg32, sizeof(Leader)</c> shortly followed by <c>cmp reg32, one-past-end</c>. Every hit
-    /// whose implied base lands in a data section votes; the modal stride wins and the lowest base in
-    /// that cluster is the array itself (higher ones are offsets of a field within the first record).
+    /// whose implied base lands in a data section votes; candidates are then tried stride-by-stride
+    /// (most-voted first) and base-by-base (most-voted, then lowest address), each validated against
+    /// the full leader predicate, and the best is returned — so a false base that collects stray votes
+    /// at the same stride cannot win over the real array.
     /// </summary>
     private (nuint Base, int Stride)? DeriveLeadersFromCode(PeImage pe, uint rdataStart, uint rdataEnd)
     {
@@ -271,12 +273,32 @@ public sealed class GameLocator
         }
         if (votes.Count == 0) return null;
 
-        // Pick the most-voted stride, then the lowest base among that stride's candidates.
-        int bestStride = votes.GroupBy(v => v.Key.Stride)
-                              .OrderByDescending(g => g.Sum(v => v.Value))
-                              .First().Key;
-        uint bestBase = votes.Where(v => v.Key.Stride == bestStride).Min(v => v.Key.Base);
-        return ((nuint)bestBase, bestStride);
+        // Try each stride by total vote count, then each base within that stride by vote count
+        // (descending) and then by ascending address, validating each candidate against the full
+        // leader predicate. Picking the modal stride and the numerically lowest base without
+        // validating — which is what the old code did — lets a lower false base at the same stride
+        // win over a higher valid one, because a false base that happens to sit at a lower address
+        // in the same data section can collect the same stride votes from an unrelated loop.
+        var strideGroups = votes.GroupBy(v => v.Key.Stride)
+                                .OrderByDescending(g => g.Sum(v => v.Value));
+        int bestValidated = 0;
+        (nuint Base, int Stride)? best = null;
+        foreach (var sg in strideGroups)
+        {
+            int stride = sg.Key;
+            foreach (var bc in sg.OrderByDescending(v => v.Value).ThenBy(v => v.Key.Base))
+            {
+                int validated = CountLeadingValidLeaders((nuint)bc.Key.Base, stride, rdataStart, rdataEnd);
+                if (validated > bestValidated)
+                {
+                    bestValidated = validated;
+                    best = ((nuint)bc.Key.Base, stride);
+                }
+                if (bestValidated >= GameFacts.MaxPlayers) break;
+            }
+            if (bestValidated >= GameFacts.MaxPlayers) break;
+        }
+        return best;
     }
 
     /// <summary>
