@@ -1,0 +1,284 @@
+<Window x:Class="RedBaronTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:RedBaronTrainer.ViewModels"
+        Title="Red Baron Trainer" Height="720" Width="900" MinHeight="520" MinWidth="720">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
+        <Style TargetType="TextBlock" x:Key="Hint">
+            <Setter Property="Foreground" Value="#555" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="MinWidth" Value="90" />
+        </Style>
+
+        <Style TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Padding" Value="8" />
+        </Style>
+    </Window.Resources>
+
+    <DockPanel Margin="10">
+
+        <!-- attachment bar -->
+        <Border DockPanel.Dock="Top" BorderBrush="#CCC" BorderThickness="0,0,0,1" Padding="0,0,0,8" Margin="0,0,0,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="{Binding Attachment}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding GameFolderDisplay}" Style="{StaticResource Hint}" Margin="0,2,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                    <Button Content="Attach" Command="{Binding AttachCommand}" />
+                    <Button Content="Reload" Command="{Binding ReloadCommand}" />
+                    <Button Content="Detach" Command="{Binding DetachCommand}" />
+                    <Button Content="Browse..." Command="{Binding BrowseGameFolderCommand}" Margin="0" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- status bar -->
+        <Border DockPanel.Dock="Bottom" Background="#F3F3F3" Padding="8,6" Margin="0,8,0,0">
+            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" />
+        </Border>
+
+        <TabControl>
+
+            <!-- ============================================================ realism -->
+            <TabItem Header="Realism">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Style="{StaticResource Hint}">
+                            The Realism Panel is thirteen 16-bit values. Turning off
+                            <Run FontWeight="SemiBold">Limited ammunition</Run>,
+                            <Run FontWeight="SemiBold">Limited fuel</Run> and
+                            <Run FontWeight="SemiBold">Aircraft may be damaged</Run>
+                            is the cheat: the sim then stops counting rounds, stops burning fuel and stops applying
+                            hits. Combat level drives career scoring and is deliberately left alone by the
+                            "No limits" preset.
+                        </TextBlock>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="Novice" Command="{Binding ApplyPresetCommand}" CommandParameter="novice" />
+                            <Button Content="Expert" Command="{Binding ApplyPresetCommand}" CommandParameter="expert" />
+                            <Button Content="No limits" Command="{Binding ApplyPresetCommand}" CommandParameter="invulnerable" MinWidth="110" />
+                        </StackPanel>
+                        <TextBlock Style="{StaticResource Hint}">
+                            <Run Text="Loaded from: " /><Run Text="{Binding RealismSource, Mode=OneWay}" FontStyle="Italic" />
+                        </TextBlock>
+                    </StackPanel>
+
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                        <TextBlock Text="Read from" Style="{StaticResource Hint}" Margin="0,0,0,2" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="MREAL.PRF" Command="{Binding ReadRealismFromMissionFileCommand}" MinWidth="110" />
+                            <Button Content="CREAL.PRF" Command="{Binding ReadRealismFromCareerFileCommand}" MinWidth="110" />
+                        </StackPanel>
+                        <TextBlock Text="Write to" Style="{StaticResource Hint}" Margin="0,0,0,2" />
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="Running game" Command="{Binding ApplyRealismToGameCommand}" MinWidth="120" />
+                            <Button Content="MREAL.PRF (single missions)" Command="{Binding ApplyRealismToMissionFileCommand}" MinWidth="190" />
+                            <Button Content="CREAL.PRF (careers)" Command="{Binding ApplyRealismToCareerFileCommand}" MinWidth="150" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <ListView ItemsSource="{Binding Realism}" BorderThickness="1">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="230" />
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center" />
+                                    <CheckBox Grid.Column="1" IsChecked="{Binding IsOn, Mode=TwoWay}"
+                                              Content="on" VerticalAlignment="Center"
+                                              Visibility="{Binding IsToggle, Converter={StaticResource BoolToVis}}" />
+                                    <ComboBox Grid.Column="1" ItemsSource="{Binding Choices}"
+                                              SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
+                                              VerticalAlignment="Center" Margin="0,0,8,0"
+                                              Visibility="{Binding IsChoice, Converter={StaticResource BoolToVis}}" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Description}" Foreground="#666"
+                                               TextWrapping="Wrap" VerticalAlignment="Center" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </DockPanel>
+            </TabItem>
+
+            <!-- ============================================================== pilots -->
+            <TabItem Header="Pilots">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Style="{StaticResource Hint}">
+                            The ten career slots of ROSTER.DAT as the shell holds them, plus the career currently
+                            being flown. Only the 18-byte name field is edited: the rest of each 90-byte record is
+                            documented but not fully decoded, and this trainer will not write bytes whose meaning it
+                            cannot show you. A name must be 1 to 17 printable characters — blanking one would make
+                            the shell treat the slot as free and reuse it. Available while the main menu or
+                            aerodrome is on screen, not in flight.
+                        </TextBlock>
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="Write names" Command="{Binding ApplyPilotNamesCommand}" MinWidth="120" />
+                    </StackPanel>
+                    <ListView ItemsSource="{Binding Pilots}">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <!-- The name box is deliberately outside the Expander: in the default
+                                     Expander template the header lives inside the expand ToggleButton,
+                                     so clicking into a TextBox there would toggle the panel and shift
+                                     the layout out from under the cursor mid-edit. -->
+                                <Grid Margin="0,2">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal">
+                                        <TextBlock Text="{Binding SlotLabel}" Width="110" VerticalAlignment="Center" />
+                                        <TextBox Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                 Width="200" MaxLength="17" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                    <Expander Grid.Row="1" Header="Raw record" Margin="110,2,0,0" FontSize="11">
+                                        <TextBox Text="{Binding HexDump, Mode=OneWay}" IsReadOnly="True"
+                                                 FontFamily="Consolas" FontSize="11" Margin="12,4,0,4"
+                                                 BorderThickness="0" Background="Transparent" />
+                                    </Expander>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </DockPanel>
+            </TabItem>
+
+            <!-- =========================================================== simulator -->
+            <TabItem Header="Simulator">
+                <StackPanel Margin="8">
+                    <GroupBox Header="Stick and rudder">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource Hint}">
+                                RB.EXE keeps a flag that says whether it is reading the game port at all - the same
+                                one the in-flight Alt-J toggle drives. If the sim decided at start-up that no stick
+                                was attached, this is what it turned off.
+                            </TextBlock>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Currently:" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBlock VerticalAlignment="Center" Margin="0,0,16,0" FontWeight="SemiBold">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="disabled" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding JoystickEnabled}" Value="True">
+                                                    <Setter Property="Text" Value="enabled" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <Button Content="Toggle" Command="{Binding ToggleJoystickCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox Header="Not attached to the simulator">
+                        <GroupBox.Style>
+                            <Style TargetType="GroupBox">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSimulator}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </GroupBox.Style>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0">
+                            These controls need RB.EXE, the flight simulator, to be the program running in the
+                            emulator. Start a mission and the trainer will pick it up on its own - it re-locates
+                            whenever the game chains between its two executables.
+                        </TextBlock>
+                    </GroupBox>
+                </StackPanel>
+            </TabItem>
+
+            <!-- ================================================ joystick diagnostics -->
+            <TabItem Header="Joystick">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top">
+                        <TextBlock Style="{StaticResource Hint}">
+                            Red Baron does not ask the BIOS about the joystick. It times the one-shots on port 0x201
+                            itself and gives up after 400 ticks, so it only sees a stick when the emulator drives
+                            that port <Run FontStyle="Italic">and</Run> the emulated CPU is slow enough for the count
+                            to land under the limit. Both halves are checked here.
+                        </TextBlock>
+                        <TextBlock Text="{Binding JoystickSummary}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                        <TextBlock Text="Windows joystick slots (the same API SDL asks)" FontWeight="SemiBold" Margin="0,4,0,4" />
+                    </StackPanel>
+
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="Re-check" Command="{Binding RefreshDiagnosticsCommand}" />
+                    </StackPanel>
+
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="2*" />
+                        </Grid.RowDefinitions>
+
+                        <DataGrid Grid.Row="0" ItemsSource="{Binding HostJoysticks}" AutoGenerateColumns="False"
+                                  IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="ID" Binding="{Binding Id}" Width="40" />
+                                <DataGridCheckBoxColumn Header="Present" Binding="{Binding Present}" Width="60" />
+                                <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="*" />
+                                <DataGridTextColumn Header="Axes" Binding="{Binding Axes}" Width="50" />
+                                <DataGridTextColumn Header="Buttons" Binding="{Binding Buttons}" Width="60" />
+                                <DataGridTextColumn Header="X" Binding="{Binding X}" Width="70" />
+                                <DataGridTextColumn Header="Y" Binding="{Binding Y}" Width="70" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <TextBlock Grid.Row="1" Text="Emulator configuration" FontWeight="SemiBold" Margin="0,10,0,4" />
+
+                        <DataGrid Grid.Row="2" ItemsSource="{Binding ConfigFindings}" AutoGenerateColumns="False"
+                                  IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="" Binding="{Binding Severity}" Width="50" />
+                                <DataGridTextColumn Header="Setting" Binding="{Binding Setting}" Width="170" />
+                                <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="110" />
+                                <DataGridTextColumn Header="Why it matters" Binding="{Binding Explanation}" Width="*">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextWrapping" Value="Wrap" />
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </DockPanel>
+            </TabItem>
+
+        </TabControl>
+    </DockPanel>
+</Window>

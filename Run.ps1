@@ -130,6 +130,19 @@
     falls back to sweeping the heap for the per-level experience table every
     character carries -- no value searching either way. 'TheQuest' is enough to
     pick it; note that a bare 'Quest' also matches QuestForGlory1Trainer.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer RedBaron
+    Builds and launches the Red Baron trainer. Start the game with BARON.COM in
+    DOSBox; the trainer attaches on its own and follows the game between its two
+    executables (PS.EXE for the menus and career, RB.EXE for the flight sim), so
+    the live tab changes as you start and end missions. No value searching -- it
+    resolves each data group by anchored sweep in a few milliseconds, and finds
+    the game folder by reading the mount lines out of the emulator's own .conf.
+    Its Joystick tab diagnoses the "controller not detected" problem: Red Baron
+    times the game port itself, so it needs 'cycles=fixed 12000' (not max) and
+    'joysticktype=2axis' (not auto) in dosbox.conf, and a pad on Windows joystick
+    slot 0.
 #>
 [CmdletBinding()]
 param(

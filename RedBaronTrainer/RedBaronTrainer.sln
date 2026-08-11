@@ -1,0 +1,48 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RedBaronTrainer", "src\RedBaronTrainer\RedBaronTrainer.csproj", "{3A1D6F70-5B84-4C2E-9E15-8B7C21D0A4F3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FormatCheck", "test\FormatCheck\FormatCheck.csproj", "{9C2B8E11-47D6-4A53-B0F8-1E6D93A7C520}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GameTrainers.Common", "..\GameTrainers.Common\GameTrainers.Common.csproj", "{FC613122-ED75-44F0-B76E-EBB3D6C8C131}"
+EndProject
+Global
+    GlobalSection(SolutionConfigurationPlatforms) = preSolution
+        Debug|Any CPU = Debug|Any CPU
+        Debug|x64 = Debug|x64
+        Release|Any CPU = Release|Any CPU
+        Release|x64 = Release|x64
+    EndGlobalSection
+    GlobalSection(ProjectConfigurationPlatforms) = postSolution
+        {3A1D6F70-5B84-4C2E-9E15-8B7C21D0A4F3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {3A1D6F70-5B84-4C2E-9E15-8B7C21D0A4F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {3A1D6F70-5B84-4C2E-9E15-8B7C21D0A4F3}.Debug|x64.ActiveCfg = Debug|x64
+        {3A1D6F70-5B84-4C2E-9E15-8B7C21D0A4F3}.Debug|x64.Build.0 = Debug|x64
+        {3A1D6F70-5B84-4C2E-9E15-8B7C21D0A4F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {3A1D6F70-5B84-4C2E-9E15-8B7C21D0A4F3}.Release|Any CPU.Build.0 = Release|Any CPU
+        {3A1D6F70-5B84-4C2E-9E15-8B7C21D0A4F3}.Release|x64.ActiveCfg = Release|x64
+        {3A1D6F70-5B84-4C2E-9E15-8B7C21D0A4F3}.Release|x64.Build.0 = Release|x64
+        {9C2B8E11-47D6-4A53-B0F8-1E6D93A7C520}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {9C2B8E11-47D6-4A53-B0F8-1E6D93A7C520}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {9C2B8E11-47D6-4A53-B0F8-1E6D93A7C520}.Debug|x64.ActiveCfg = Debug|Any CPU
+        {9C2B8E11-47D6-4A53-B0F8-1E6D93A7C520}.Debug|x64.Build.0 = Debug|Any CPU
+        {9C2B8E11-47D6-4A53-B0F8-1E6D93A7C520}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {9C2B8E11-47D6-4A53-B0F8-1E6D93A7C520}.Release|Any CPU.Build.0 = Release|Any CPU
+        {9C2B8E11-47D6-4A53-B0F8-1E6D93A7C520}.Release|x64.ActiveCfg = Release|Any CPU
+        {9C2B8E11-47D6-4A53-B0F8-1E6D93A7C520}.Release|x64.Build.0 = Release|Any CPU
+        {FC613122-ED75-44F0-B76E-EBB3D6C8C131}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {FC613122-ED75-44F0-B76E-EBB3D6C8C131}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {FC613122-ED75-44F0-B76E-EBB3D6C8C131}.Debug|x64.ActiveCfg = Debug|x64
+        {FC613122-ED75-44F0-B76E-EBB3D6C8C131}.Debug|x64.Build.0 = Debug|x64
+        {FC613122-ED75-44F0-B76E-EBB3D6C8C131}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {FC613122-ED75-44F0-B76E-EBB3D6C8C131}.Release|Any CPU.Build.0 = Release|Any CPU
+        {FC613122-ED75-44F0-B76E-EBB3D6C8C131}.Release|x64.ActiveCfg = Release|x64
+        {FC613122-ED75-44F0-B76E-EBB3D6C8C131}.Release|x64.Build.0 = Release|x64
+    EndGlobalSection
+    GlobalSection(SolutionProperties) = preSolution
+        HideSolutionNode = FALSE
+    EndGlobalSection
+EndGlobal
