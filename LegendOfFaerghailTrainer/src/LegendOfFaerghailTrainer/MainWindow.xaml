@@ -1,0 +1,427 @@
+<Window x:Class="LegendOfFaerghailTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:game="clr-namespace:LegendOfFaerghailTrainer.Game"
+        xmlns:vm="clr-namespace:LegendOfFaerghailTrainer.ViewModels"
+        Title="Legend of Faerghail Trainer" Height="820" Width="1180"
+        WindowStartupLocation="CenterScreen" Closed="OnClosed">
+
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+            <Setter Property="MinWidth" Value="76"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="3,2"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,10,0,4"/>
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+
+        <!-- The character editor, reused by both the Party and Roster tabs. -->
+        <DataTemplate x:Key="CharacterEditor" DataType="{x:Type vm:CharacterViewModel}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="10,0,0,0">
+                    <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" Margin="0,2,0,0" Foreground="#555"/>
+
+                    <TextBlock Text="Identity" Style="{StaticResource SectionHeader}"/>
+                    <UniformGrid Columns="4">
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Name" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <TextBox Text="{Binding Name, UpdateSourceTrigger=LostFocus}" Width="110" MaxLength="10"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Rnk" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <TextBox Text="{Binding Level, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Race" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <ComboBox ItemsSource="{x:Static game:RaceBook.Names}"
+                                      SelectedIndex="{Binding RaceIndex}" Width="110"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Trade" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <ComboBox ItemsSource="{x:Static game:ClassBook.Names}"
+                                      SelectedIndex="{Binding ClassIndex}" Width="110"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Sex" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <ComboBox SelectedIndex="{Binding SexIndex}" Width="110">
+                                <ComboBoxItem Content="Female"/>
+                                <ComboBoxItem Content="Male"/>
+                            </ComboBox>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Ethos" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <ComboBox SelectedIndex="{Binding AlignmentIndex}" Width="110">
+                                <ComboBoxItem Content="Lawful"/>
+                                <ComboBoxItem Content="Chaotic"/>
+                            </ComboBox>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="State" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <ComboBox ItemsSource="{x:Static game:StatusBook.Names}"
+                                      SelectedIndex="{Binding StatusIndex}" Width="110"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Armour %" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <TextBox Text="{Binding ArmourPercent, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                        </StackPanel>
+                    </UniformGrid>
+
+                    <TextBlock Text="Vitals, purse and progress" Style="{StaticResource SectionHeader}"/>
+                    <UniformGrid Columns="4">
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="HP" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <TextBox Text="{Binding CurHp, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                            <TextBlock Text=" / " Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding MaxHp, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Magic" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <TextBox Text="{Binding CurMagic, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                            <TextBlock Text=" / " Style="{StaticResource FieldLabel}"/>
+                            <TextBox Text="{Binding MaxMagic, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Gold" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <TextBox Text="{Binding Gold, UpdateSourceTrigger=LostFocus}" Width="100"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Rations" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <TextBox Text="{Binding Rations, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="XP" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <TextBox Text="{Binding Experience, UpdateSourceTrigger=LostFocus}" Width="110"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Max load" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <TextBox Text="{Binding MaxWeight, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                            <TextBlock Text=" lb" Style="{StaticResource FieldLabel}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                            <TextBlock Text="Carrying" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <TextBlock Text="{Binding CarriedWeight}" Style="{StaticResource FieldLabel}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,2"
+                                    ToolTip="A second 32-bit counter at record +0x76 that appears on no character-sheet page. Shown, never written.">
+                            <TextBlock Text="+0x76" Style="{StaticResource FieldLabel}" Width="58"/>
+                            <TextBlock Text="{Binding UnknownCounter}" Style="{StaticResource FieldLabel}" Foreground="#777"/>
+                        </StackPanel>
+                    </UniformGrid>
+
+                    <TextBlock Text="Freeze" Style="{StaticResource SectionHeader}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <CheckBox Content="Hit points" IsChecked="{Binding FreezeHp}" Margin="0,0,16,0"/>
+                        <CheckBox Content="Magic points" IsChecked="{Binding FreezeMagic}" Margin="0,0,16,0"/>
+                        <CheckBox Content="Gold" IsChecked="{Binding FreezeGold}" Margin="0,0,16,0"/>
+                        <CheckBox Content="Rations" IsChecked="{Binding FreezeRations}"/>
+                    </StackPanel>
+
+                    <TextBlock Text="Attributes" Style="{StaticResource SectionHeader}"/>
+                    <ItemsControl ItemsSource="{Binding Attributes}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><UniformGrid Columns="5"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,2">
+                                    <TextBlock Text="{Binding Name}" Style="{StaticResource FieldLabel}" Width="86"/>
+                                    <TextBox Text="{Binding Value, UpdateSourceTrigger=LostFocus}" Width="52"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="Abilities (%)" Style="{StaticResource SectionHeader}"/>
+                    <ItemsControl ItemsSource="{Binding Abilities}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><UniformGrid Columns="3"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" Margin="0,2" ToolTip="{Binding Description}">
+                                    <TextBlock Text="{Binding Name}" Style="{StaticResource FieldLabel}" Width="106"/>
+                                    <TextBox Text="{Binding Value, UpdateSourceTrigger=LostFocus}" Width="52"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="Languages" Style="{StaticResource SectionHeader}"/>
+                    <ItemsControl ItemsSource="{Binding Languages}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><UniformGrid Columns="4"/></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding Name}" IsChecked="{Binding Value}" Margin="0,2"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="Quick actions" Style="{StaticResource SectionHeader}"/>
+                    <WrapPanel>
+                        <Button Content="Full heal" Click="OnFullHeal"/>
+                        <Button Content="Max attributes" Click="OnMaxAttributes"/>
+                        <Button Content="Max abilities" Click="OnMaxAbilities"/>
+                        <Button Content="All languages" Click="OnAllLanguages"/>
+                        <Button Content="Refill spells / repair gear" Click="OnRestock" MinWidth="180"/>
+                    </WrapPanel>
+
+                    <TextBlock Text="Inventory" Style="{StaticResource SectionHeader}"/>
+                    <DataGrid ItemsSource="{Binding Items}" AutoGenerateColumns="False" CanUserAddRows="False"
+                              HeadersVisibility="Column" MaxHeight="220" MinHeight="120">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding SlotLabel}" IsReadOnly="True" Width="34"/>
+                            <DataGridTemplateColumn Header="Item" Width="220">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <!-- ToolTip resolves the stored id even when it is outside
+                                             the table, where the picker itself shows blank. -->
+                                        <ComboBox ItemsSource="{x:Static game:ItemBook.All}"
+                                                  DisplayMemberPath="Name" SelectedValuePath="Id"
+                                                  SelectedValue="{Binding ItemId, UpdateSourceTrigger=PropertyChanged}"
+                                                  ToolTip="{Binding ItemName}"
+                                                  BorderThickness="0" Background="Transparent"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridCheckBoxColumn Header="In use" Binding="{Binding Equipped, UpdateSourceTrigger=PropertyChanged}" Width="60"/>
+                            <DataGridTextColumn Header="Condition %" Binding="{Binding Condition, UpdateSourceTrigger=LostFocus}" Width="90"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <TextBlock Text="Spells (uses left today)" Style="{StaticResource SectionHeader}"/>
+                    <DataGrid ItemsSource="{Binding Spells}" AutoGenerateColumns="False" CanUserAddRows="False"
+                              HeadersVisibility="Column" MaxHeight="220" MinHeight="120">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding SlotLabel}" IsReadOnly="True" Width="34"/>
+                            <DataGridTemplateColumn Header="Spell" Width="220">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <ComboBox ItemsSource="{x:Static game:SpellBook.All}"
+                                                  DisplayMemberPath="Name" SelectedValuePath="Id"
+                                                  SelectedValue="{Binding SpellId, UpdateSourceTrigger=PropertyChanged}"
+                                                  ToolTip="{Binding SpellName}"
+                                                  BorderThickness="0" Background="Transparent"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="Uses" Binding="{Binding Uses, UpdateSourceTrigger=LostFocus}" Width="60"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </StackPanel>
+            </ScrollViewer>
+        </DataTemplate>
+    </Window.Resources>
+
+    <DockPanel>
+        <!-- attach bar -->
+        <Border DockPanel.Dock="Top" Padding="10,8" Background="#F3F3F3" BorderBrush="#DDD" BorderThickness="0,0,0,1">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Emulator" Style="{StaticResource FieldLabel}"/>
+                    <ComboBox ItemsSource="{Binding Processes}" SelectedItem="{Binding SelectedProcess}"
+                              DisplayMemberPath="Display" Width="330" Margin="0,0,6,0"
+                              IsEnabled="{Binding IsDetached}"
+                              ToolTip="Locked while attached — the speed hotkeys and every read and write go to the process the trainer attached to."/>
+                    <Button Content="Refresh" Command="{Binding RefreshProcessesCommand}"/>
+                    <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                    <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                    <Separator Margin="10,0" Width="1"/>
+                    <TextBlock Text="Emulator speed" Style="{StaticResource FieldLabel}"/>
+                    <Button Content="Slower" Command="{Binding SlowerCommand}"
+                            ToolTip="Sends Ctrl+F11 to DOSBox — the game has no speed limiter of its own."/>
+                    <Button Content="Faster" Command="{Binding FasterCommand}"
+                            ToolTip="Sends Ctrl+F12 to DOSBox."/>
+                    <TextBlock Text="steps" Style="{StaticResource FieldLabel}"/>
+                    <TextBox Text="{Binding SpeedSteps, UpdateSourceTrigger=LostFocus}" Width="40"/>
+                </StackPanel>
+                <TextBlock Text="{Binding Status}" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                <TextBlock Text="{Binding LocateDetail}" Margin="0,2,0,0" Foreground="#666"
+                           FontFamily="Consolas" FontSize="11" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <TabControl Margin="8">
+            <TabItem Header="Party">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="250"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <DockPanel Grid.Column="0">
+                        <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+                            <TextBlock Text="Whole party" Style="{StaticResource SectionHeader}"/>
+                            <Button Content="Heal everyone" Command="{Binding HealPartyCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                            <Button Content="Max everyone" Command="{Binding MaxPartyCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                            <Button Content="Refill spells / repair gear" Command="{Binding RestockPartyCommand}" Margin="0,2" HorizontalAlignment="Stretch"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,2">
+                                <Button Content="Give gold" Command="{Binding GoldToPartyCommand}" Width="110"/>
+                                <TextBox Text="{Binding GoldToGive, UpdateSourceTrigger=LostFocus}" Width="90"/>
+                            </StackPanel>
+                        </StackPanel>
+                        <ListBox ItemsSource="{Binding Party}" SelectedItem="{Binding SelectedPartyMember}"
+                                 DisplayMemberPath="ListLabel"/>
+                    </DockPanel>
+                    <ContentControl Grid.Column="1" Content="{Binding SelectedPartyMember}"
+                                    ContentTemplate="{StaticResource CharacterEditor}"/>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Saved characters">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="250"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <DockPanel Grid.Column="0">
+                        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Margin="0,0,0,6" Foreground="#555"
+                                   Text="The tavern's roster (ROST\ROST, up to 32 characters). Editing one here changes the copy the tavern recruits from, not the companion already in your party."/>
+                        <ListBox ItemsSource="{Binding Roster}" SelectedItem="{Binding SelectedRosterEntry}"
+                                 DisplayMemberPath="ListLabel"/>
+                    </DockPanel>
+                    <ContentControl Grid.Column="1" Content="{Binding SelectedRosterEntry}"
+                                    ContentTemplate="{StaticResource CharacterEditor}"/>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Reference">
+                <TabControl>
+                    <TabItem Header="Items">
+                        <DataGrid ItemsSource="{Binding Reference.Items}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="50"/>
+                                <DataGridTextColumn Header="Item" Binding="{Binding Name}" Width="220"/>
+                                <DataGridTextColumn Header="Shop price" Binding="{Binding Note}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Spells">
+                        <DataGrid ItemsSource="{Binding Reference.Spells}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="50"/>
+                                <DataGridTextColumn Header="Spell" Binding="{Binding Name}" Width="220"/>
+                                <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Races and trades">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <DataGrid Grid.Column="0" ItemsSource="{Binding Reference.Races}" AutoGenerateColumns="False" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="40"/>
+                                    <DataGridTextColumn Header="Race" Binding="{Binding Name}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <DataGrid Grid.Column="1" ItemsSource="{Binding Reference.Classes}" AutoGenerateColumns="False" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="40"/>
+                                    <DataGridTextColumn Header="Trade" Binding="{Binding Name}" Width="110"/>
+                                    <DataGridTextColumn Header="Note" Binding="{Binding Note}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </TabItem>
+                    <TabItem Header="Abilities, states, languages">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <DataGrid Grid.Column="0" ItemsSource="{Binding Reference.Abilities}" AutoGenerateColumns="False" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Offset" Binding="{Binding Id}" Width="60"/>
+                                    <DataGridTextColumn Header="Ability" Binding="{Binding Name}" Width="120"/>
+                                    <DataGridTextColumn Header="What it does" Binding="{Binding Note}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <DataGrid Grid.Column="1" ItemsSource="{Binding Reference.Statuses}" AutoGenerateColumns="False" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="40"/>
+                                    <DataGridTextColumn Header="State" Binding="{Binding Name}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <DataGrid Grid.Column="2" ItemsSource="{Binding Reference.Languages}" AutoGenerateColumns="False" IsReadOnly="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Id" Binding="{Binding Id}" Width="40"/>
+                                    <DataGridTextColumn Header="Language" Binding="{Binding Name}" Width="120"/>
+                                    <DataGridTextColumn Header="Byte" Binding="{Binding Note}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+
+            <TabItem Header="About">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12">
+                        <TextBlock Text="Legend of Faerghail Trainer" FontSize="17" FontWeight="Bold"/>
+                        <TextBlock TextWrapping="Wrap" Margin="0,6,0,0">
+                            A live-memory trainer for the DOS conversion of Legend of Faerghail
+                            (Electronic Design Hannover / reLINE Software GmbH, build stamped 19.06.1990),
+                            running under DOSBox or DOSBox-X.
+                        </TextBlock>
+
+                        <TextBlock Text="How it finds the party" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock TextWrapping="Wrap">
+                            There is nothing to search for. LOF.EXE is a Microsoft C large-model build, so every
+                            global sits at a fixed offset inside one data group; the trainer sweeps the emulator for
+                            the character sheet's "Negotiating ability...." caption (which lives at DGROUP:0xF371 and
+                            occurs exactly once), checks at least two of four further literals land on their own
+                            offsets, then follows the game's own far pointers at DS:0x0030 and DS:0x3FF6 to the six
+                            party slots and the thirty-two saved-character slots. As a cross-check it confirms the
+                            two arrays are adjacent, exactly 32 x 410 + 2 bytes apart.
+                        </TextBlock>
+
+                        <TextBlock Text="Why the game runs too fast" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock TextWrapping="Wrap">
+                            Legend of Faerghail has no frame limiter — it redraws and polls the keyboard as fast as
+                            the CPU allows — so DOSBox's default cycles=auto makes the wilderness scroll past faster
+                            than you can steer. The Slower / Faster buttons send DOSBox's own Ctrl+F11 / Ctrl+F12
+                            cycle hotkeys at the emulator window (each tap is about 10%); around 3000 cycles plays
+                            comfortably. Setting "cycles=fixed 3000" in dosbox.conf does the same thing permanently.
+                        </TextBlock>
+
+                        <TextBlock Text="What it does not do" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock TextWrapping="Wrap">
+                            No teleport: the party's map position was not identified. No save-file editing: this
+                            hard-disk release refuses to load a saved game at all — including one it has just written
+                            itself — so a save editor could not be round-tripped through the game and is deliberately
+                            absent. Edit the live party instead and the changes stick for the session.
+                        </TextBlock>
+
+                        <TextBlock Text="Notes" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock TextWrapping="Wrap">
+                            Game assets are copyrighted and are not distributed with this trainer — supply your own
+                            legally obtained copy. The reference tables shown here were read out of your own LOF.EXE's
+                            data tables during development, not copied from a walkthrough.
+                        </TextBlock>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

@@ -112,6 +112,17 @@
     there is nothing to scan for, because everything has a name.
 
 .EXAMPLE
+    .\Run.ps1 -Trainer LegendOfFaerghail
+    Builds and launches the Legend of Faerghail trainer. Start the game with START.BAT in
+    DOSBox (LOF.EXE refuses to run on its own), recruit at least one companion in the
+    tavern, then Attach -- the trainer resolves the game's data group by anchored sweep and
+    follows its own far pointers to the party and the saved-character roster in about 40 ms,
+    with no value searching. Note that the game has no speed limiter of its own: the trainer's
+    Slower button sends DOSBox's Ctrl+F11 cycle hotkey, or set 'cycles=fixed 3000' in
+    dosbox.conf. 'LegendOfFaerghail' is enough to be unique; a bare 'Legend' also matches
+    LegendOfGrimrock1Trainer.
+
+.EXAMPLE
     .\Run.ps1 -Trainer TheQuest
     Builds and launches The Quest trainer. Another native Win32 target, so no
     DOSBox: start TheQuest.exe, load or begin a game, then Attach. The trainer
