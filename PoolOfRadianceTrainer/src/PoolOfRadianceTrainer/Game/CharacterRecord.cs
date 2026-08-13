@@ -180,6 +180,19 @@ public sealed class CharacterRecord
     /// <summary>Best guess of whether this record is a monster rather than a player character.</summary>
     public bool LooksLikeMonster => Race == 0 || Class == 17;
 
+    /// <summary>
+    /// Does this record hold a creature the game could actually be fighting with, as opposed to a
+    /// scratch buffer that happens to match the record *shape*? The signature scan can straddle a
+    /// live record (a stray name string a few bytes ahead of a real monster reads as a record of
+    /// its own), and such overlaps decode to impossible combat numbers: AC/THAC0 are stored as
+    /// <c>60 - value</c>, so the zero-filled bytes of a scratch buffer decode to AC 60 / THAC0 60.
+    /// Real creatures sit comfortably inside AD&amp;D's ranges and never read above their max HP.
+    /// </summary>
+    public bool LooksLikeLiveCombatant =>
+        HpMax > 0 && HpCurrent <= HpMax &&
+        ArmorClass is >= -12 and <= 12 &&
+        Thac0 is >= 0 and <= 26;
+
     /// <summary>The single most-representative "level" — the highest non-zero class level.</summary>
     public int EffectiveLevel
     {

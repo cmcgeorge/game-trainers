@@ -16,6 +16,10 @@ public sealed class LocatedCharacter
 
     public bool IsMonster => Record.LooksLikeMonster;
 
+    /// <summary>A monster record the game is really fighting with (see
+    /// <see cref="CharacterRecord.LooksLikeLiveCombatant"/>), not a look-alike scratch buffer.</summary>
+    public bool IsLiveMonster => Record.LooksLikeMonster && Record.LooksLikeLiveCombatant;
+
     public override string ToString() => $"{Record.Name} @ 0x{(ulong)Address:X}";
 }
 
@@ -81,6 +85,76 @@ public static class CharacterLocator
 
         // Party members cluster together (adjacent-ish addresses); monsters live in the
         // combat arena. Sort by address so the party reads top-to-bottom in game order.
+        hits.Sort((a, b) => a.Address.CompareTo(b.Address));
+
+        // DOSBox can map the same guest data at two different host addresses (e.g. the active
+        // heap copy and a stale backup buffer).  After sorting, the lowest address is the live
+        // copy; drop every later hit whose 285 bytes are byte-for-byte identical to an earlier one.
+        var seenContent = new HashSet<string>();
+        var deduped = new List<LocatedCharacter>(hits.Count);
+        foreach (var h in hits)
+            if (seenContent.Add(Convert.ToHexString(h.Record.Bytes)))
+                deduped.Add(h);
+        return deduped;
+    }
+
+    // --- combat-arena sweep --------------------------------------------------
+    // Monster records exist only while a battle is on screen, and the game builds them fresh
+    // (at fresh addresses) for every encounter, so the enemy list can't come from the one-off
+    // full scan — it has to be re-found as the battle runs. A full 250 MiB walk is far too slow
+    // to repeat on the poll timer, but the arena is always allocated in the same DOS heap as the
+    // party, so sweeping a window around the party records is both cheap and sufficient.
+
+    /// <summary>Bytes swept either side of the party by <see cref="FindCombatants"/>. 512 KiB
+    /// covers the whole 640 KiB DOS conventional-memory area the game's heap lives in.</summary>
+    public const int ArenaRadius = 0x80000;
+
+    private const int SweepChunk = 1 << 16;   // 64 KiB per read: one unreadable page costs little
+
+    /// <summary>Length of the scratch buffer <see cref="FindCombatants"/> requires.</summary>
+    public const int SweepBufferSize = SweepChunk + PorFormat.RecordSize;
+
+    /// <summary>
+    /// Re-finds the live monster records in the combat arena — the window reaching
+    /// <see cref="ArenaRadius"/> bytes either side of the party — so the combat panel can follow a
+    /// battle without a full re-scan. Only records that decode as a monster *and* as a plausible
+    /// live combatant are returned, so a stale look-alike buffer never shows up as an enemy.
+    /// Results are address-ordered (the order the game built the encounter in).
+    /// <paramref name="buffer"/> is a reusable scratch buffer of <see cref="SweepBufferSize"/> bytes.
+    /// </summary>
+    public static List<LocatedCharacter> FindCombatants(ProcessMemory mem, nuint partyLow, nuint partyHigh, byte[] buffer)
+    {
+        ArgumentNullException.ThrowIfNull(buffer);
+        if (buffer.Length < SweepBufferSize)
+            throw new ArgumentException($"buffer must be at least {SweepBufferSize} bytes.", nameof(buffer));
+
+        var hits = new List<LocatedCharacter>();
+        nuint start = partyLow > (nuint)ArenaRadius ? partyLow - (nuint)ArenaRadius : 0;
+        nuint end = partyHigh + (nuint)ArenaRadius;
+        if (end < partyHigh) end = nuint.MaxValue;   // guard the (impossible) wrap
+
+        for (nuint addr = start; addr < end;)
+        {
+            int want = (int)Math.Min((nuint)SweepChunk, end - addr);
+            // Read an extra record's worth so a record straddling a chunk edge is still seen.
+            int read = mem.Read(addr, buffer, Math.Min(want + PorFormat.RecordSize, buffer.Length));
+
+            for (int i = 0; i + PorFormat.RecordSize <= read; i++)
+            {
+                if (!CharacterSignature.Looks(buffer, i)) continue;
+                var record = new CharacterRecord(buffer, i);
+                if (!record.LooksLikeMonster || !record.LooksLikeLiveCombatant) continue;
+                hits.Add(new LocatedCharacter(addr + (nuint)i, record));
+            }
+
+            // Unreadable pages are normal at the window's edges (the party can sit near the end of
+            // a region); skip that chunk rather than abandoning the sweep. A short read only
+            // advances past what was actually scanned.
+            addr += read >= want ? (nuint)want
+                  : read > PorFormat.RecordSize ? (nuint)(read - PorFormat.RecordSize + 1)
+                  : (nuint)want;
+        }
+
         hits.Sort((a, b) => a.Address.CompareTo(b.Address));
         return hits;
     }

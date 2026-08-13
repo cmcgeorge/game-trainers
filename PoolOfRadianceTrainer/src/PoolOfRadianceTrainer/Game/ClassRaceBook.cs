@@ -4,6 +4,20 @@ public sealed record ClassInfo(string Name, string HitDie, string PrimeStat, int
 public sealed record RaceInfo(string Name, string ClassOptions, string Notes);
 public sealed record XpRow(int Level, int Cleric, int Fighter, int Mage, int Thief);
 
+/// <summary>Per-level progression bonuses beyond XP: hit dice, spell slots (L1/L2/L3),
+/// thief backstab multiplier, and milestone notes. From the AD&amp;D 1e PHB as implemented
+/// in Pool of Radiance. Reference only.</summary>
+public sealed record LevelProgressionRow(
+    int Level,
+    string FighterHd,
+    string ClericHd,
+    string ClericSpells,
+    string MageHd,
+    string MageSpells,
+    string ThiefHd,
+    string ThiefBackstab,
+    string Notes);
+
 /// <summary>
 /// Reference tables for AD&amp;D-as-implemented in Pool of Radiance: classes, races,
 /// the training-hall level caps, and the XP-to-reach-level tables. From the game Rule Book
@@ -50,6 +64,22 @@ public static class ClassRaceBook
         new(7, 0,      70_000, 0,      42_500),
         new(8, 0,      125_000,0,      70_000),    // Fighter caps at 8
         new(9, 0,      0,      0,      110_000),   // Thief caps at 9
+    };
+
+    /// <summary>Per-level progression: hit dice, spell slots (L1/L2/L3), thief backstab multiplier.
+    /// Spells shown as "L1/L2/L3" slot counts; "—" means the class is capped or has no spells at
+    /// that level. From the AD&amp;D 1e PHB tables as implemented in Pool of Radiance.</summary>
+    public static readonly IReadOnlyList<LevelProgressionRow> LevelProgression = new List<LevelProgressionRow>
+    {
+        new(1, "1d10", "1d8", "0/—/—",  "1d4", "1/—/—",  "1d6", "x2", "Starting level"),
+        new(2, "2d10", "2d8", "1/—/—",  "2d4", "2/—/—",  "2d6", "x2", ""),
+        new(3, "3d10", "3d8", "2/1/—",  "3d4", "2/1/—",  "3d6", "x2", "Cleric & Mage gain 2nd-level spells"),
+        new(4, "4d10", "4d8", "2/2/—",  "4d4", "3/2/—",  "4d6", "x2", ""),
+        new(5, "5d10", "5d8", "2/2/1",  "5d4", "3/2/1",  "5d6", "x3", "Cleric & Mage gain 3rd-level spells (Fireball!); Thief backstab x3"),
+        new(6, "6d10", "6d8", "3/3/1",  "6d4", "4/3/2",  "6d6", "x3", "Cleric & Mage level cap"),
+        new(7, "7d10", "—",   "—",      "—",   "—",      "7d6", "x3", ""),
+        new(8, "8d10", "—",   "—",      "—",   "—",      "8d6", "x3", "Fighter level cap"),
+        new(9, "—",    "—",   "—",      "—",   "—",      "9d6", "x4", "Thief level cap; backstab x4"),
     };
 
     /// <summary>Exceptional-strength (fighters only) to-hit/damage bonuses, from AD&amp;D 1e.</summary>

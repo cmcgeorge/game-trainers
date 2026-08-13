@@ -62,22 +62,44 @@ public sealed class MapFlipYConverter : IMultiValueConverter
     };
 }
 
-/// <summary>Maps a <see cref="FloorKind"/> to a translucent fill for the map schematic.</summary>
+/// <summary>
+/// Maps a <see cref="FloorKind"/> to a translucent fill for the map schematic. The indoor kinds are
+/// washes over the grid (the walls carry the information); the wilderness kinds are opaque enough to
+/// read as a terrain map, since out there the terrain *is* the map.
+/// </summary>
 public sealed class FloorBrushConverter : IValueConverter
 {
-    private static readonly Brush Water = new SolidColorBrush(Color.FromArgb(0xB0, 0x5B, 0x9B, 0xD5));
-    private static readonly Brush Stone = new SolidColorBrush(Color.FromArgb(0x80, 0xCF, 0xCF, 0xC2));
+    private static readonly Brush Water     = Freeze(0xB0, 0x5B, 0x9B, 0xD5);
+    private static readonly Brush Stone     = Freeze(0x80, 0xCF, 0xCF, 0xC2);
 
-    static FloorBrushConverter()
+    private static readonly Brush Unknown   = Freeze(0x30, 0x6B, 0x70, 0x7C);
+    private static readonly Brush Plains    = Freeze(0xC0, 0x8F, 0xA8, 0x55);
+    private static readonly Brush Swamp     = Freeze(0xC0, 0x5E, 0x6E, 0x3C);
+    private static readonly Brush Forest    = Freeze(0xC0, 0x2E, 0x6B, 0x38);
+    private static readonly Brush Hills     = Freeze(0xC0, 0x8A, 0x6E, 0x45);
+    private static readonly Brush Mountains = Freeze(0xC0, 0x7E, 0x76, 0x74);
+    private static readonly Brush River     = Freeze(0xC0, 0x4E, 0x9B, 0xD5);
+    private static readonly Brush DeepWater = Freeze(0xC0, 0x1E, 0x46, 0x8C);
+
+    private static Brush Freeze(byte a, byte r, byte g, byte b)
     {
-        Water.Freeze();
-        Stone.Freeze();
+        var brush = new SolidColorBrush(Color.FromArgb(a, r, g, b));
+        brush.Freeze();
+        return brush;
     }
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
     {
-        FloorKind.Water => Water,
-        FloorKind.Stone => Stone,
+        FloorKind.Water     => Water,
+        FloorKind.Stone     => Stone,
+        FloorKind.Unknown   => Unknown,
+        FloorKind.Plains    => Plains,
+        FloorKind.Swamp     => Swamp,
+        FloorKind.Forest    => Forest,
+        FloorKind.Hills     => Hills,
+        FloorKind.Mountains => Mountains,
+        FloorKind.River     => River,
+        FloorKind.DeepWater => DeepWater,
         _ => Brushes.Transparent,
     };
 
@@ -88,19 +110,22 @@ public sealed class FloorBrushConverter : IValueConverter
 /// <summary>Maps a <see cref="WallKind"/> to an edge-segment brush (transparent when no wall).</summary>
 public sealed class WallBrushConverter : IValueConverter
 {
-    private static readonly Brush Wall = new SolidColorBrush(Color.FromRgb(0xE0, 0xB3, 0x41));
-    private static readonly Brush Door = new SolidColorBrush(Color.FromRgb(0x5F, 0xA3, 0x5C));
+    private static readonly Brush Wall       = new SolidColorBrush(Color.FromRgb(0xE0, 0xB3, 0x41));
+    private static readonly Brush Door       = new SolidColorBrush(Color.FromRgb(0x5F, 0xA3, 0x5C));
+    private static readonly Brush SecretDoor = new SolidColorBrush(Color.FromRgb(0xC0, 0x60, 0xC0));
 
     static WallBrushConverter()
     {
         Wall.Freeze();
         Door.Freeze();
+        SecretDoor.Freeze();
     }
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) => value switch
     {
-        WallKind.Wall => Wall,
-        WallKind.Door => Door,
+        WallKind.Wall       => Wall,
+        WallKind.Door       => Door,
+        WallKind.SecretDoor => SecretDoor,
         _ => Brushes.Transparent,
     };
 

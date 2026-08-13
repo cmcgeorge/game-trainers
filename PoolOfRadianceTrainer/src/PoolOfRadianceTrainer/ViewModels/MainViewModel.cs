@@ -15,6 +15,7 @@ public sealed class ProcessEntry
     public string Name { get; }
     public bool IsEmulator { get; }
     public string Display => $"{Name}  (pid {Id})";
+    public override string ToString() => Display;
 
     public ProcessEntry(int id, string name, bool isEmulator)
     {
@@ -48,6 +49,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public IReadOnlyList<ClassInfo> ClassRef => ClassRaceBook.Classes;
     public IReadOnlyList<RaceInfo> RaceRef => ClassRaceBook.Races;
     public IReadOnlyList<XpRow> XpTable => ClassRaceBook.XpTable;
+    public IReadOnlyList<LevelProgressionRow> LevelProgression => ClassRaceBook.LevelProgression;
     public IReadOnlyList<WalkthroughSection> Guide => Walkthrough.Sections;
 
     public MemorySearchViewModel MemorySearch { get; } = new();
@@ -163,6 +165,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public ICommand RandomizeIconColorsPartyCommand { get; }
     public ICommand KillEnemyCommand { get; }
     public ICommand KillAllEnemiesCommand { get; }
+    public ICommand WeakenEnemyCommand { get; }
+    public ICommand WeakenAllEnemiesCommand { get; }
 
     public MainViewModel()
     {
@@ -175,8 +179,12 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         MaxEverythingPartyCommand = new RelayCommand(_ => ForEachParty(c => c.MaxEverything()), _ => Party.Count > 0);
         MaxMoneyPartyCommand = new RelayCommand(_ => ForEachParty(c => c.MaxMoney()), _ => Party.Count > 0);
         RandomizeIconColorsPartyCommand = new RelayCommand(_ => ForEachParty(c => c.RandomizeIconColors()), _ => Party.Count > 0);
-        KillEnemyCommand = new RelayCommand(_ => SelectedEnemy?.KillNow(), _ => SelectedEnemy != null);
-        KillAllEnemiesCommand = new RelayCommand(_ => { foreach (var e in Enemies) e.KillNow(); }, _ => Enemies.Count > 0);
+        KillEnemyCommand = new RelayCommand(_ => { SelectedEnemy?.KillNow(); NoteKill(1); }, _ => SelectedEnemy != null);
+        KillAllEnemiesCommand = new RelayCommand(_ => { foreach (var e in Enemies) e.KillNow(); NoteKill(Enemies.Count); },
+            _ => Enemies.Count > 0);
+        WeakenEnemyCommand = new RelayCommand(_ => { SelectedEnemy?.WeakenNow(); NoteWeaken(1); }, _ => SelectedEnemy != null);
+        WeakenAllEnemiesCommand = new RelayCommand(_ => { foreach (var e in Enemies) e.WeakenNow(); NoteWeaken(Enemies.Count); },
+            _ => Enemies.Count > 0);
 
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _poll.Tick += (_, _) => PollTick();
@@ -289,6 +297,9 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             Enemies.Clear();
             foreach (var lc in found)
             {
+                // A record that decodes as a monster but reads impossible combat numbers is a
+                // look-alike scratch buffer, not a creature — keep it out of both lists.
+                if (lc.IsMonster && !lc.IsLiveMonster) continue;
                 var vm = new CharacterViewModel(this, lc);
                 if (vm.IsMonster) Enemies.Add(vm); else Party.Add(vm);
             }
@@ -307,6 +318,17 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         catch (Exception ex) { if (mem == _mem) Status = "Scan error: " + ex.Message; }
         finally { IsScanning = false; RaiseCommands(); }
     }
+
+    // --- combat actions ------------------------------------------------------
+    // Both messages exist because the difference between the two buttons is not visible on screen
+    // until the fight is over and the treasure screen is (or isn't) offered.
+    private void NoteWeaken(int n) => Status = n == 1
+        ? "Enemy left on 1 HP, AC 20, THAC0 20 — one hit kills it, and the kill counts for XP and treasure."
+        : $"{n} enemies left on 1 HP, AC 20, THAC0 20 — one hit each kills them, and the kills count for XP and treasure.";
+
+    private void NoteKill(int n) => Status = n == 1
+        ? "Enemy record zeroed. The engine never processes this as a kill, so it forfeits that creature's loot — Weaken instead if you want the treasure."
+        : $"{n} enemy records zeroed. The engine never processes these as kills, so the encounter's loot is forfeit — Weaken instead if you want the treasure.";
 
     // --- party-wide actions --------------------------------------------------
     private void ForEachParty(Action<CharacterViewModel> action)
@@ -328,6 +350,15 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     // an in-progress edit isn't clobbered) — so you can watch the selected character take damage.
     private readonly byte[] _pollBuf = new byte[PorFormat.RecordSize];
 
+    // Scratch buffer for the combat-arena sweep, and its tick divider — the sweep costs a ~1 MiB
+    // read, so it runs every other tick (~1.2 s) rather than on every one.
+    private readonly byte[] _arenaBuf = new byte[CharacterLocator.SweepBufferSize];
+    private int _tick;
+
+    /// <summary>Set by the view while the Combat tab's editor has keyboard focus, so the live
+    /// refresh of a monster's fields never overwrites a number being typed into them.</summary>
+    public bool EnemyEditorFocused { get; set; }
+
     private void PollTick()
     {
         if (_mem == null) return;
@@ -336,14 +367,83 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             c.ApplyFreeze();
             if (CharacterLocator.Reread(_mem, c.Address, _pollBuf)) c.RefreshLiveSummary(_pollBuf);
         }
+
+        if (++_tick % 2 == 0) SweepEnemies();
+
         foreach (var e in Enemies)
         {
             if (CharacterLocator.Reread(_mem, e.Address, _pollBuf)) e.RefreshLiveSummary(_pollBuf);
         }
-        LiveInventory.ApplyFreeze();
+        // The combat editor watches a creature that is being hit while you look at it, so unlike
+        // the party panel its fields do track the record — except while they're being typed into.
+        if (!EnemyEditorFocused) SelectedEnemy?.RefreshCombatEditors();
+
+        LiveInventory.Tick();
         MemorySearch.RefreshValues();
         Maps.Tick();
     }
+
+    // --- combat arena --------------------------------------------------------
+    /// <summary>
+    /// Re-finds the battle's monster records and reconciles <see cref="Enemies"/> with them, so the
+    /// Combat tab fills when a battle starts and empties when it ends without a manual re-scan.
+    /// Monster records are built fresh for every encounter at addresses the last full scan knows
+    /// nothing about, which is why the list can't just be the scan's leftovers.
+    /// View-models are matched to arena slots by address so selection — and the record a "Kill"
+    /// button is aimed at — survives a sweep; a slot that a different creature has taken over gets
+    /// a fresh view-model so its editor fields don't describe the creature that used to be there.
+    /// </summary>
+    private void SweepEnemies()
+    {
+        if (_mem == null || Party.Count == 0) return;
+
+        nuint low = Party[0].Address, high = Party[0].Address;
+        foreach (var c in Party)
+        {
+            if (c.Address < low) low = c.Address;
+            if (c.Address > high) high = c.Address;
+        }
+
+        var found = CharacterLocator.FindCombatants(_mem, low, high, _arenaBuf);
+
+        // Between battles (and between rounds of the same one) the arena is unchanged — leave the
+        // collection alone so the list doesn't flicker and the selection doesn't move.
+        if (found.Count == Enemies.Count)
+        {
+            bool same = true;
+            for (int i = 0; i < found.Count && same; i++)
+                same = found[i].Address == Enemies[i].Address && SameCreature(found[i].Record, Enemies[i].Record);
+            if (same) return;
+        }
+
+        int before = Enemies.Count;
+        var existing = new Dictionary<nuint, CharacterViewModel>();
+        foreach (var e in Enemies) existing[e.Address] = e;
+
+        var selected = SelectedEnemy;
+        var next = new List<CharacterViewModel>(found.Count);
+        foreach (var lc in found)
+            next.Add(existing.TryGetValue(lc.Address, out var vm) && SameCreature(lc.Record, vm.Record)
+                ? vm                                    // same creature still in the fight
+                : new CharacterViewModel(this, lc));    // a new creature holds this slot
+
+        Enemies.Clear();
+        foreach (var vm in next) Enemies.Add(vm);
+        // Clearing the collection drives the list box's selection to null; put it back.
+        SelectedEnemy = selected != null && next.Contains(selected) ? selected : next.FirstOrDefault();
+
+        // The Kill buttons key off Enemies.Count, and nothing else re-queries them when a battle
+        // starts while the user's hands are off the trainer.
+        RaiseCommands();
+
+        if (before == 0 && next.Count > 0) Status = $"Battle on — {next.Count} monster record(s) in the arena.";
+        else if (before > 0 && next.Count == 0) Status = "Battle over — no monster records in memory.";
+    }
+
+    /// <summary>Is this the same creature the view-model was built for? Name, class and max HP
+    /// identify it; current HP and status are exactly what a battle changes.</summary>
+    private static bool SameCreature(CharacterRecord a, CharacterRecord b) =>
+        a.HpMax == b.HpMax && a.Class == b.Class && a.Name == b.Name;
 
     // --- global hotkeys ------------------------------------------------------
     public void InitHotkeys(IntPtr hwnd)

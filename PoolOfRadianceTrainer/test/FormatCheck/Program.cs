@@ -84,6 +84,37 @@ Check("Randomized icon colors actually changed", colorsChanged, true);
 Check("Randomize left icon-size byte alone", recolor.Bytes[PorFormat.OffIconSize], thrender.Bytes[PorFormat.OffIconSize]);
 Check("Randomize left item-count byte alone", recolor.Bytes[PorFormat.OffNumberOfItems], thrender.Bytes[PorFormat.OffNumberOfItems]);
 
+// --- Monster records, and telling them from look-alikes ---------------------------------------
+// Both captured verbatim from a live DOSBox fight (four orcs in the Slums). The first is one of
+// the orcs. The second starts 0x30 bytes earlier on a stray "Silver 96" string and runs *into* the
+// orc's record, so it satisfies the signature scan — a Pascal name, in-range ability scores, race
+// 0 — while its combat fields land on the zero padding ahead of the real record. That is exactly
+// the record the Combat tab used to list instead of the orcs, and what LooksLikeLiveCombatant is
+// there to reject: AC/THAC0 are stored as 60 − value, so zeroed bytes decode to the absurd 60.
+const string OrcHex =
+    "034F52430000000000000000000000000A060A0A0A0A00000000000000000000000000000000000000000000002900021E0005000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001010E0F1011110901FFFF00000000000000000000000000FFFF0000000000180000000000000000000000000001000000000000010202000100080000003600FF0000000008050000000000000A0001000000000800E6C491C4A2C4000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000018000800A63F0800623E0001010129363400000100080000000509";
+const string StrayBufferHex =
+    "0953696C7665722039360000000000000A060A0A0A0A0000000000000000000000000000000000000000000000000002034F52430000000000000000000000000A060A0A0A0A00000000000000000000000000000000000000000000002900021E0005000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001010E0F1011110901FFFF00000000000000000000000000FFFF0000000000180000000000000000000000000001000000000000010202000100080000003600FF0000000008050000000000000A0001000000000800E6C491C4A2C40000000000000000000000000000000000000000000000000000000000000000000000000000";
+
+var orc = new CharacterRecord(FromHex(OrcHex));
+Check("Orc name", orc.Name, "ORC");
+Check("Orc race", orc.RaceName, "Monster");
+Check("Orc HP", $"{orc.HpCurrent}/{orc.HpMax}", "5/5");
+Check("Orc AC", orc.ArmorClass, 6);
+Check("Orc THAC0", orc.Thac0, 19);
+Check("Orc status", orc.StatusName, "Okay");
+Check("Orc reads as a monster", orc.LooksLikeMonster, true);
+Check("Orc reads as a live combatant", orc.LooksLikeLiveCombatant, true);
+Check("Signature recognises the orc", CharacterSignature.Looks(orc.Bytes, 0), true);
+// Party members are live combatants too — the check must not be monster-specific.
+Check("Thrender reads as a live combatant", thrender.LooksLikeLiveCombatant, true);
+
+var stray = new CharacterRecord(FromHex(StrayBufferHex));
+Check("Stray buffer fools the signature", CharacterSignature.Looks(stray.Bytes, 0), true);
+Check("Stray buffer reads as a monster", stray.LooksLikeMonster, true);
+Check("Stray buffer AC is impossible", stray.ArmorClass, 60);
+Check("Stray buffer rejected as a combatant", stray.LooksLikeLiveCombatant, false);
+
 // --- Item records (CHRDATAn.ITM — 63-byte records) ------------------------------------------
 // Verbatim from THRENDER GRONE's real CHRDATA1.ITM: record 1 (Sling) + record 2 (Ring of
 // Protection, unidentified), then record 7 (Shield, readied + unidentified). Cross-checked
@@ -125,7 +156,12 @@ var dup = new ItemEntry(new byte[ItemEntry.RecordSize], 0);
 dup.CopyFrom(sling);
 Check("CopyFrom clones name", dup.DisplayName, sling.DisplayName);
 Check("CopyFrom clones type", (int)dup.Type, (int)sling.Type);
-Check("CopyFrom clones all bytes", dup.Raw.SequenceEqual(sling.Raw), true);
+// Everything except the destination's own next-item link, which must survive so the owner's list
+// stays intact — see the duplicate checks further down.
+Check("CopyFrom clones every byte but the link",
+    dup.Raw.Where((_, i) => i < ItemEntry.OffNextLink || i >= ItemEntry.OffNextLink + 4)
+        .SequenceEqual(sling.Raw.Where((_, i) => i < ItemEntry.OffNextLink || i >= ItemEntry.OffNextLink + 4)),
+    true);
 
 // IsRechargeable: single items (count 0/1) are not; ammo stacks (count > 1) are; wands/staves/rods
 // always are (their resource is charges, not a stack). The Sling is a single, uncharged item.
@@ -146,7 +182,9 @@ var wand = new ItemEntry(FromHex(
     "00000000000000000000000000000000000000000000000000000000" +
     "0800FB454FCEA7450A00000600000000B888435800"), 0);
 Check("Wand type (0x4F)", (int)wand.Type, 0x4F);
-Check("Wand name", wand.DisplayName, "No * Wand");
+// The cached name the game renders starts with its READY column ("No "), which DisplayName drops —
+// the list shows readied as its own checkbox, and "No Wand" reads like part of the item's name.
+Check("Wand name drops the readied column", wand.DisplayName, "* Wand");
 Check("Wand is a charged item", wand.IsChargedItem, true);
 Check("Wand is a single item (count 0)", wand.Count, 0);
 Check("Wand charges read from 0x3C", wand.Charges, 67);
@@ -157,6 +195,114 @@ Check("Wand RechargeValue is its charges", wand.RechargeValue, 67);
 Check("Recharge changed the wand", wand.Recharge(99), true);
 Check("Recharge set charges to 99", wand.Charges, 99);
 Check("Recharge left count at 0 (no clone)", wand.Count, 0);
+
+// --- item name rendering ----------------------------------------------------
+// Real .ITM records read out of a GOG install's CHRDATA1.ITM (verbatim 63-byte records). The name
+// field is the game's own inventory *line*, so it carries the readied column and, for stacked
+// pseudo-items, a trailing count that exists nowhere else in the record.
+var readiedShield = new ItemEntry(FromHex(
+    "0D205965732020536869656C6420" +                                  // " Yes  Shield "
+    "000000000000000000000000000000000000000000000000000000000000" +  // rest of the 42-byte name field
+    "6B403B00A23B0100010600320000C409000000"), 0);                    // type 0x3B, readied, hidden 6
+Check("Readied item drops its 'Yes' column", readiedShield.DisplayName, "Shield");
+Check("Readied item still reads as readied", readiedShield.Readied, true);
+Check("Unidentified item (hidden-names 6)", readiedShield.Identified, false);
+Check("Ticking ID'd identifies it", readiedShield.SetIdentified(true), true);
+Check("...and it is now identified", readiedShield.Identified, true);
+Check("Un-ticking restores the original masking", readiedShield.SetIdentified(false), true);
+Check("...back to the value the save had", readiedShield.Raw[ItemEntry.OffHiddenNames], (byte)6);
+
+// 0x2A..0x2D is the far pointer to the owner's next item — the link the game walks to build an item
+// list. This record's reads 406B:0000, which is exactly the link the same Shield had in the running
+// game (it pointed at the Silver Mirror behind it in the list).
+Check("Item next-link offset", readiedShield.NextLink.Offset, (ushort)0x0000);
+Check("Item next-link segment", readiedShield.NextLink.Segment, (ushort)0x406B);
+Check("Far pointer resolves seg*16+off", new FarPointer(0x0008, 0x3E4A).Linear, 0x3E4A8u);
+Check("Null far pointer ends a chain", new FarPointer(0, 0).IsNull, true);
+
+// Duplicating an item must NOT copy the source's link over the destination's, or the owner's list
+// would be spliced onto wherever the source sat in its own list.
+var slot = new ItemEntry(readiedShield.Raw);
+var donor = new ItemEntry(readiedShield.Raw);
+donor.Raw[ItemEntry.OffNextLink + 2] = 0x11;      // a donor sitting elsewhere in its own list
+donor.Raw[ItemEntry.OffNextLink + 3] = 0x22;
+donor.Raw[ItemEntry.OffType] = 0x24;
+Check("Donor has a different link", donor.NextLink.Segment, (ushort)0x2211);
+slot.CopyFrom(donor);
+Check("Duplicate keeps the slot's own link", slot.NextLink.Segment, (ushort)0x406B);
+Check("Duplicate takes the donor's other bytes", slot.Raw[ItemEntry.OffType], (byte)0x24);
+
+// A stacked pseudo-item: the "3" is three pieces of jewelry and lives only in the rendered text
+// (the count byte is 0), so DisplayName must keep it.
+var jewelry = new ItemEntry(FromHex(
+    "094A6577656C72792033" +                                                      // "Jewelry 3"
+    "000000000000000000000000000000000000000000000000000000000000000000000000" +  // rest of the name field
+    "3B000800623E000001000000C409000000"), 0);
+Check("Stacked pseudo-item keeps its count text", jewelry.DisplayName, "Jewelry 3");
+Check("...even though the count byte is 0", jewelry.Count, 0);
+
+// --- map terrain ------------------------------------------------------------
+// Walls/doors are decoded from the game's own GEO*.DAX geometry (see Game/MapTerrainData.cs).
+// These spot-checks anchor the decode to landmarks that are verifiable in the game and clue book.
+foreach (var area in MapBook.Areas)
+    Check($"{area.Name}: has decoded terrain", area.Terrain != null, true);
+
+var slums = MapBook.Areas.First(a => a.Name == "Slums").Terrain!;
+// The Slums treasure at (0,0) is reached from the east through an illusory wall: an edge that can be
+// walked through but whose wall graphic is also used as a real wall elsewhere in the level.
+Check("Slums illusory wall at (1,0) west", slums[1, 0].West, WallKind.SecretDoor);
+Check("Slums outer wall at (0,0) west", slums[0, 0].West, WallKind.Wall);
+Check("Slums east exit to New Phlan is a door", slums[15, 4].East, WallKind.Door);
+// The map's outer east/south walls have no neighbouring square to hold them, so they are kept on the
+// edge squares themselves — without which the schematic would draw only two sides of the border.
+Check("Slums outer south wall at (0,15)", slums[0, 15].South, WallKind.Wall);
+Check("Slums interior square has no south edge", slums[0, 8].South, WallKind.None);
+
+var phlan = MapBook.Areas.First(a => a.Name == "New Phlan").Terrain!;
+Check("New Phlan west exit to the Slums is a door", phlan[0, 4].West, WallKind.Door);
+Check("New Phlan harbour at (14,0) is water", phlan[14, 0].Floor, FloorKind.Water);
+Check("New Phlan street at (2,3) is walkable", phlan[2, 3].Floor, FloorKind.Normal);
+Check("New Phlan is 15 rows deep", MapBook.Areas.First(a => a.Name == "New Phlan").Height, 15);
+// The harbour runs out through the south edge at x=13, so that stretch of the border is open water,
+// not sea wall — proof the bottom boundary row is really being read for a 15-row map.
+Check("New Phlan south wall at (0,14)", phlan[0, 14].South, WallKind.Wall);
+Check("New Phlan harbour opens south at (13,14)", phlan[13, 14].South, WallKind.None);
+
+// --- wilderness (overland Moonsea map) --------------------------------------
+// Terrain here is transcribed from the clue-book map, not decoded from the game (see
+// Game/WildernessMap.cs). These checks pin the parse and the coordinate origin, so a future edit to
+// the ASCII can't silently shift every square the teleport targets.
+var wild = MapBook.Areas.First(a => a.IsWilderness);
+Check("Wilderness is the only overland area", MapBook.Areas.Count(a => a.IsWilderness), 1);
+Check("Wilderness is 42 columns wide", wild.Width, WildernessMap.Width);
+Check("Wilderness is 33 rows deep", wild.Height, WildernessMap.Height);
+Check("Wilderness has terrain", wild.Terrain != null, true);
+Check("Wilderness has no walls (overland)", wild.Terrain![0, 32].West, WallKind.None);
+
+var w = wild.Terrain!;
+// Row 32 is ". i ........ =====…": plains at the west edge, then deep water from x=10 east.
+Check("Wilderness (0,32) is plains", w[0, 32].Floor, FloorKind.Plains);
+Check("Wilderness (10,32) is deep water", w[10, 32].Floor, FloorKind.DeepWater);
+// The far north-west is the mountain wall; the swamp band sits under x=5-6 in the south-west.
+Check("Wilderness (0,5) is mountains", w[0, 5].Floor, FloorKind.Mountains);
+Check("Wilderness (5,20) is swamp", w[5, 20].Floor, FloorKind.Swamp);
+Check("Wilderness (31,25) is river", w[31, 25].Floor, FloorKind.River);
+// (27,25) is where the party stood while the position encoding was recovered live — the clue book
+// draws forest there and the game drew a forest backdrop, which is what anchors the origin.
+Check("Wilderness (27,25) is forest", w[27, 25].Floor, FloorKind.Forest);
+// Row 2 opens "...&&&^^…", so the first three squares are plains and the hills start at x=3.
+Check("Wilderness (2,2) is plains", w[2, 2].Floor, FloorKind.Plains);
+Check("Wilderness (3,2) is hills", w[3, 2].Floor, FloorKind.Hills);
+// Rows 0-1 are blank on the clue-book map and columns 40-41 are past the transcription: both must
+// stay Unknown rather than being filled in with a guess.
+Check("Wilderness row 0 is not transcribed", w[10, 0].Floor, FloorKind.Unknown);
+Check("Wilderness column 41 is not transcribed", w[41, 20].Floor, FloorKind.Unknown);
+// A landmark letter leaves its own square's terrain unrecorded, but is listed as a keyed location.
+Check("Wilderness landmark square is not terrain", w[30, 15].Floor, FloorKind.Unknown);
+Check("Kobold Caves is keyed at (30,15)",
+      wild.Locations.Any(l => l.Name.Contains("Kobold Caves") && l.X == 30 && l.Y == 15), true);
+Check("Every wilderness landmark is inside the grid",
+      wild.Locations.All(l => l.X >= 0 && l.X < wild.Width && l.Y >= 0 && l.Y < wild.Height), true);
 
 Console.WriteLine();
 Console.WriteLine(failures == 0

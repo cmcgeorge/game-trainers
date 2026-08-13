@@ -181,6 +181,32 @@ RHIANNON  combat:   HP current (0x11B) = 0,  status (0x10C) = unconscious
 That single diff — HP 7 → 0 and status okay → **unconscious** — matches the dump's own note
 ("Rhiannon is unconscious") and nails down `0x11B` (current HP) and `0x10C` (status).
 
+### The record is the character sheet, not the fight
+
+Traced live against a 16-kobold battle (one party member, `FindCombatants` + a byte-differ on every
+combatant record and on what its pointers reach):
+
+- **`0x104` chains every combatant.** The party member's next-pointer leads to the first monster and
+  on down the encounter, ending in a null — one linked list for both sides.
+- **`0x108` is the engine's per-fight block for that creature.** Null outside combat (a reliable
+  "are we in a battle" test), non-null for every combatant during one. The blocks are 24 bytes; those
+  allocated together sit in a contiguous array. `[0x0A..0x0D]` is a far pointer to the creature's
+  current target — it tracked the party member's attacks from kobold to kobold, one per round.
+- **The engine rewrites those blocks every round**, including for creatures that are already dead:
+  at each round boundary movement `[0x06]` goes back to `0x0C` and the action flags `[0x01]`,
+  `[0x04]`, `[0x05]` are restored across the whole array at once.
+
+The consequence matters for cheating: **a death only counts when the engine's damage routine
+processes it.** That routine is what takes the creature off the battlefield, leaves the body, and
+banks what it carried for the post-battle treasure. Writing HP 0 (and status *dead*, or *gone*) into
+the 285-byte record edits the sheet, not the fight — the creature finishes the round, the surviving
+monsters' morale check ends the battle in a **surrender**, and a surrender pays no XP and no
+treasure. Confirmed in play: forcing the record alone loses the encounter's loot every time.
+
+So the trainer's loot-safe move is to *let the game do the killing* — drop a monster to 1 HP with
+AC/THAC0 20 (`CharacterViewModel.WeakenNow`) and let the next party blow land, which runs the real
+death path. The instant-kill is kept for escaping a fight, and says so on the button.
+
 ### Monsters share the record
 
 Monsters use the **identical 285-byte record**. In the combat dump the six orcs appear as records
@@ -203,6 +229,7 @@ the open-source `coab` `Item.cs` (`StructSize = 0x3F`) and a hex read of real `.
 | Offset | Size | Field | Notes |
 |-------:|:----:|-------|-------|
 | `0x00` | 1+41 | name | Pascal string — the game's **cached** render (regenerated from the name-number bytes + hidden-names flag on display) |
+| `0x2A`–`0x2D` | 4 | **next item** | far pointer (`offset` word, then `segment` word) to the next item this character carries; null on the last |
 | `0x2E` | 1 | item type | see `coab`'s `ItemType` enum (e.g. `0x2F` Sling, `0x3B` Shield, `0x5D` Ring of Protection) |
 | `0x2F`–`0x31` | 3 | name-number bytes | index the base/adjective/noun name parts |
 | `0x32` | 1 | plus | magical bonus (signed) |
@@ -222,6 +249,32 @@ count byte onto another duplicates the whole inventory. The trainer's **🎒 Inv
 exactly this (offline, with an automatic backup); the `ItemEntry` parser is regression-tested in
 `test/FormatCheck` against verbatim `.ITM` bytes.
 
+### Finding a character's items in the *running* game
+
+In memory the same records form a **singly-linked list**: the character record's `0xC8` far pointer
+gives the first item, and each item's `0x2A` far pointer gives the next, ending at `0000:0000`. Both
+are real-mode `segment:offset` pairs, so the guest address is `segment × 16 + offset`.
+
+Following that list is the only correct way to enumerate an inventory, and the difference is not
+academic. A live party member carrying seven items had six of them within 1 KB of its record and the
+seventh **over 8 KB away**, interleaved with unrelated allocations; the list order also differs from
+address order. Sweeping a range around the character record — the obvious approach, and what this
+trainer did first — therefore drops items, picks up freed heap slots that still hold a plausible dead
+record (a stale `Jewelry 3` showed up that way), and in any case cannot say which character a swept
+record belongs to. Walking the links reproduces the game's own item screen exactly, in its order.
+
+The one thing the links don't give you is where the guest's RAM sits in the emulator process. The
+trainer solves that instead of hard-coding it: it signature-scans a megabyte either side of a
+character record for item-shaped bytes, and for each hit assumes *that* is where the head pointer
+lands, which fixes a candidate guest→host offset. Walking the whole chain with that offset either
+resolves every link onto a valid record and terminates, or it doesn't — a wrong offset cannot fake
+seven consecutive valid hops. DOSBox maps the emulated RAM as one flat block, so the offset that
+survives holds for every character and for the rest of the session.
+
+Note also that `0x2A` sitting *inside* the 63-byte record makes a whole-record copy destructive:
+duplicating an item has to preserve the destination slot's own link, or the owner's list gets spliced
+onto wherever the source sat in its list.
+
 ## 6. How the trainer uses this
 
 The trainer mirrors the approach a live memory editor must take:
@@ -236,6 +289,19 @@ The trainer mirrors the approach a live memory editor must take:
    (`Memory/ProcessMemory.cs`), applying the `60 − x` transform for AC/THAC0.
 4. **Poll** (~1.5 Hz) to keep the party/enemy HP display live and to re-apply "freeze HP" (god
    mode) by re-writing current HP to max each tick.
+4a. **Sweep the arena** (~0.8 Hz, `CharacterLocator.FindCombatants`) to keep the combat panel
+   honest. Monster records exist only while a battle is on screen and the game builds them fresh —
+   at fresh addresses — for every encounter, so an enemy list left over from step 2's one-off scan
+   is stale before the first blow lands. Repeating a full ~250 MiB walk on the timer is far too
+   slow (≈650 ms), but the arena is always allocated in the same DOS heap as the party, so a window
+   of ±512 KiB around the party records finds every combatant in **1–3 ms**. The enemy list is then
+   reconciled by address, so selection survives and a slot taken over by a different creature gets
+   a fresh view-model rather than the previous occupant's numbers.
+   The sweep also drops **look-alike buffers**: the signature can straddle a live record — a stray
+   name string a few bytes ahead of a real monster reads as a record of its own, with its combat
+   fields landing on zero padding. Since AC/THAC0 are stored as `60 − value`, those zeroes decode
+   to AC 60 / THAC0 60, which no creature can have, so `CharacterRecord.LooksLikeLiveCombatant`
+   rejects them (both fixture records are in `FormatCheck`).
 5. For anything **not** in the record — the party's map X/Y and facing, the in-combat clock,
    encounter counters — a **Cheat-Engine-style scanner** (`Memory/MemorySearcher.cs`) narrows
    candidates by first-scan/increased/decreased, mirroring the reverse-engineering loop itself.
@@ -266,6 +332,130 @@ Because the interesting data (the party, monsters, item instances) lives in the 
 at runtime, the memory-dump route above is both more direct and more precise than statically
 reversing the overlaid `START.EXE`/`GAME.OVR` — the dumps *are* the ground truth, and the
 `FormatCheck` harness proves the decode against them.
+
+---
+
+## 7a. Level geometry — `GEO*.DAX` (the walls the Maps tab draws)
+
+The Maps tab used to draw only a grid, because the wall data lived in the `.DAX` archives and nobody
+had opened them. They turned out to be straightforward, and `Game/MapTerrainData.cs` is now generated
+from them, so the schematic shows the game's real walls rather than a transcription.
+
+**The container.** A `.DAX` file is:
+
+```
+UInt16  headerLength                 // bytes of block entries that follow
+entry[headerLength / 9]:
+    byte    id                       // block id — the map number
+    UInt32  offset                   // from the end of the header
+    UInt16  unpackedSize
+    UInt16  packedSize
+byte[]  packed block data
+```
+
+`headerLength / 9` blocks; `2 + headerLength + Σ packedSize` accounts for the whole file exactly,
+which is what confirmed the field order.
+
+**The packing** is PackBits-style RLE. Read a lead byte `n`: if `n < 0x80`, copy the next `n + 1`
+bytes verbatim; otherwise repeat the next single byte `256 - n` times. (`257 - n` also decodes
+plausible-looking data — it was the wrong variant, and the tell was that only `256 - n` lands every
+one of the 29 GEO blocks on its declared `unpackedSize` exactly.)
+
+**A GEO block** unpacks to 1026 bytes: a `UInt16` length (`0x0400`) then four 256-byte planes, each a
+16×16 grid indexed `y * 16 + x` with one byte per square:
+
+| plane | contents |
+|-------|----------|
+| 0 | high nibble = **north** wall index, low nibble = **east** wall index |
+| 1 | high nibble = **south** wall index, low nibble = **west** wall index |
+| 2 | per-square backdrop / interior id (not used by the trainer) |
+| 3 | two bits per direction — N = bits 0–1, E = 2–3, S = 4–5, W = 6–7. Non-zero = the edge can be **walked through**: a door, an archway, or an illusory wall |
+
+A wall index of 0 means no wall; non-zero indexes that level's `WALLDEF*.DAX` graphic set. Shared
+edges are stored on *both* squares and agree about 91% of the time — the rest are genuine one-sided
+walls (you see a wall from one side only), so each edge is merged from the two sides.
+
+Nothing marks a door as a door: the door bit says only "passable". What separates a door from an
+**illusory wall** is the *graphic* — an illusory wall is passable but drawn with an index that the
+same level also uses for solid walls, so it looks like a wall. Classifying passable edges that way
+picks out exactly the Slums' known illusory wall at (1, 0) and nothing else.
+
+**Verification.** Rendering all 29 blocks and matching them against this repo's transcribed Slums map
+scores **1.000** on GEO2 block 20, and a live scan of the running DOSBox process finds that same
+512-byte wall array resident verbatim — the game loads the block into RAM unchanged. Every other area
+was identified the same way against the printed maps in the bundled clue book (0.86–0.97, against a
+runner-up of ~0.6 in each case):
+
+| area | block | | area | block |
+|------|-------|-|------|-------|
+| New Phlan (15 rows) | GEO3:0 | | Kovel Mansion | GEO3:14 |
+| Slums | GEO2:20 | | Cadorna Textile House | GEO4:2 |
+| Sokal Keep | GEO4:21 | | Wealthy Area & Temple of Bane | GEO1:31 |
+| Kuto's Well | GEO8:29 | | Valjevo Castle SW / NW / NE / SE | GEO5:6 / 5:3 / 5:4 / 5:5 |
+| Podol Plaza | GEO1:18 | | Mendor's Library | GEO2:15 |
+
+The four Valjevo quadrants score lower against the clue book (~0.75) because most of each map is
+hedge maze, which the book draws in a different style; they are pinned instead by their edge exits,
+which form a consistent 2×2 — NW leads east and south, NE west and south, SW east and north, SE west
+and north — and that agrees with the clue book's ranking.
+
+**Floors.** The game stores no floor terrain, so "impassable" is derived: a square sealed on all four
+sides, or cut off from the level's main walkable region, can never be stood on. In New Phlan the
+squares that derivation finds east of the sea wall are exactly the ones the clue book prints water
+glyphs on, cell for cell, so those are drawn as water and the rest as stone.
+
+---
+
+## 7b. Where the party is standing — and why the wilderness needed its own answer
+
+The Maps tab locates the party by scanning for the coordinates the game prints and narrowing after a
+move. Indoors that works on the obvious shape: three adjacent bytes, `[X][Y][Facing]` (Gold Box
+facing `0=N 1=E 2=S 3=W`). **In the wilderness it never locked**, and the reason is not subtle: with
+the party standing on the square the game labels `26,27`, the byte pair `26,27` occurs **exactly once
+in the emulated guest's 16 MB**, inside a static lookup table that does not change when the party
+moves. Nor is 26 stored in any other form the scan could recognise — not as a 16-bit word, BCD,
+ASCII, or a linear map index `y*stride + x` for any stride from 8 to 128.
+
+**How it was recovered.** Three memory images of the running game were captured with the party on
+three known squares — `(26,27)`, then `(27,25)`, then `(25,25)` — read off the game's own status
+line (`25,25 W 04:09`). Differencing them narrowed the whole 16 MB to a handful of bytes:
+
+- Exactly one address made the transition `27 → 25` between the first two images. Nothing made the
+  transition `26 → 27`, and nothing changed by `+1` that could plausibly be an offset X.
+- The address that *did* track X sat two bytes earlier and read `13 → 14 → 12` while the game
+  displayed `26 → 27 → 25`. It moves one-for-one with X — it is just **short by a constant 13**.
+
+So the wilderness position is a pair of adjacent little-endian 16-bit words, `[X][Y]`. **Y is the
+number on screen; X is not** — the printed X is the stored word plus a bias (13 in the session it was
+recovered from). The bias survived a `+1` move and a `−2` move, which is what rules out a scale
+factor, but a constant that shows up as 13 for a party in the central band is not something to
+hard-code: 13 would make the map's western squares negative, so it is more likely relative to
+something than absolute. The trainer therefore **measures the bias per lock** rather than assuming
+it — Snapshot records each candidate's implied bias and Narrow keeps only the candidates whose bias
+still predicts the new coordinates. That is also what makes the two encodings collapse cleanly: both
+shapes are collected in one pass and the wrong one dies at the first Narrow. Live against the running
+game, ~9,000 candidates for `(25,25)` narrowed to exactly one — the right address, bias 13 — after a
+single move.
+
+One consequence is worth stating because it is easy to get wrong: since the printed X is the stored
+word *plus* a bias, a square west of the bias stores a **negative** word. The X word must therefore be
+read and written as a signed 16-bit value. Truncating it to a byte — as the first cut of this code
+did — silently lands the party 256 columns east of any western target.
+
+**Where it lives.** The pair sits inside the block the game writes to `SAVGAM?.DAT`, which is
+resident verbatim: the save file's bytes map to memory at a fixed delta (the block based at guest
+`0x3315F` in the session examined), so **X is at save offset `0x187` and Y at `0x189`**, with the day
+counter, minute and hour a few words further on (`0x1E1`, `0x18F`, `0x193`). Confirming that also
+confirmed the reading — the on-disk save made while the party stood on `26,27` holds `0D 00 1B 00`
+there, i.e. stored X 13 and Y 27.
+
+**No facing, and no terrain grid.** Only ten bytes in the entire 13,137-byte state block change
+across a three-square move, and none of them is the compass letter the status line prints, so the
+overland marker is drawn as a dot rather than an arrow pointing at a guess. The wilderness terrain is
+not resident either: a template match of the clue-book map against all 16 MB, at every width from 36
+to 48 and one byte per square, finds nothing, and no shipped `.DAX` decodes to an overland grid
+(`WILDCOM.DAX` is the wilderness *graphics*, 4bpp, not a map). That is why `Game/WildernessMap.cs` is
+transcribed rather than generated, and says so.
 
 ---
 

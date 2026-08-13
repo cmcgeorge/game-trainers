@@ -37,6 +37,15 @@ public partial class MainWindow : Window
     private void MaxEverything_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxEverything();
     private void RandomizeIconColors_Click(object sender, RoutedEventArgs e) => Vm(sender)?.RandomizeIconColors();
 
+    // The Combat tab's monster fields are refreshed from live memory every poll tick, which would
+    // wipe out a half-typed value. GotKeyboardFocus/LostKeyboardFocus bubble from the boxes to the
+    // panel, and both fire after focus has moved, so IsKeyboardFocusWithin is the answer to "is the
+    // user typing in here right now?".
+    private void EnemyEditor_FocusChanged(object sender, System.Windows.Input.KeyboardFocusChangedEventArgs e)
+    {
+        if (sender is UIElement panel) _vm.EnemyEditorFocused = panel.IsKeyboardFocusWithin;
+    }
+
     // Cell size (px) of the Maps schematic — must match the MapScale/MapFlipY converters' Cell in
     // App.xaml. Clicking a square sets the teleport target to that grid cell; the schematic is drawn
     // with (0,0) at the top-left (Y increasing down), matching the game's own coordinates.

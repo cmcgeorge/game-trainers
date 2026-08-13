@@ -65,9 +65,22 @@ handful of fields the friendly editors don't surface (saving throws, thief skill
 
 ### ⚔ Combat panel
 
-Monsters use the **same record format** as characters, so while a battle is on screen the scan also
-finds the enemy combatants. The Combat tab lists them with live HP; **💀 Kill selected** or
-**☠ Kill ALL enemies** sets their current HP to 0. You can also freeze your own party's HP through a
+Monsters use the **same record format** as characters, so the trainer can list and edit the enemy
+combatants exactly like party members. Their records exist only while a battle is on screen, and the
+game builds them fresh for each encounter, so the tab **follows the fight by itself** — a background
+sweep of the combat arena fills the list when a battle starts, tracks each monster's HP and status as
+it's fought, and clears it when the battle ends. No re-scan needed.
+
+**🩸 Weaken** is the button to win a fight with: it leaves the enemy alive on 1 HP with AC 20 and
+THAC0 20, so your next blow can't miss and can't fail to kill — and because the *game* applies that
+killing blow, the body drops, its treasure joins the encounter's, and the XP is credited. Use it on
+one enemy or the whole arena.
+
+**💀 Kill** zeroes the records instead. That edits the character sheet, not the fight: the engine
+never runs its death routine, so the creatures finish the round and the battle tends to end in a
+surrender — which pays no XP and no treasure. It's for walking away from a fight, not for looting
+one. (Why it can't be fixed from the record alone is traced out in
+[docs/reverse-engineering.md](docs/reverse-engineering.md) §5.) You can also freeze your own party's HP through a
 fight with god mode.
 
 ### 🔒 Freeze spells
@@ -84,13 +97,25 @@ immediately after a mid-fight cast it should on the next tick — verify the beh
 
 Like the **🧬 Powers** tab, this edits the save on disk (each character's `CHRDATAn.ITM` file), so
 close the game or reload the save afterward; a backup is made automatically before the first change.
-It lists every carried item (as the game shows it, with ready/identified/cursed flags) and offers:
+The save folder is found for you on startup — including the `cloud_saves\POOLRAD` overlay folder a
+GOG install really writes to — and the most recent of the save slots in it is loaded. It lists every
+carried item (as the game shows it, with ready/identified/cursed flags) and offers:
 
+- **ID'd column** — tick it to identify that one item; untick to hide it again.
 - **🔎 ID all items** — for the selected character, or **★ every character** at once: reveals each
   item's full name (sets the "hidden-names" flag to identified). Great for unidentified magic.
 - **⧉ Duplicate inventory** — copy one character's entire inventory onto another, replacing it.
 
 It shares the save you load on the **🧬 Powers** tab (same *Save folder* box).
+
+The same tab hosts the **live** item tools, which edit the running game instead of the save. They
+list a character's items by following the game's own item list — the far pointer in its record, then
+link to link — so what you see is exactly what the game's item screen shows, in the same order, and
+the list keeps itself up to date as you pick things up. Note
+that an item's *name* is text the game itself caches and only rewrites when it next draws the item
+screen — so after identifying, the ID'd column flips immediately while the full name ("Long Sword"
+→ "Long Sword +2 Flame Tongue") appears a moment later, once the game redraws. The list follows the
+game as that happens; no re-scan needed.
 
 ### 🔍 Memory scanner
 
@@ -105,18 +130,45 @@ directly. Candidates are dropped on Detach.
 - **🐉 Monsters** — the bestiary with the game's own XP-per-kill values and stat blocks.
 - **✨ Spells** — every cleric and magic-user spell with what it does and why it matters.
 - **📖 Rules** — classes, races, level caps, and the XP-to-level tables.
-- **🗺 Maps** — each district's grid size and keyed locations with their `(x, y)` coordinates, plus a
-  **manual teleport** helper (see below).
+- **🗺 Maps** — each district drawn with the game's own walls and doors, the overland Moonsea map
+  with its terrain and landmarks, keyed locations with their `(x, y)` coordinates, plus **live
+  position tracking and teleport** (see below).
 - **🗺 Strategy** — a condensed walkthrough; the full guide with maps is in `.docs/strategy-guide.md`.
 
 ### 🗺 Maps & teleport
 
-The **🗺 Maps** tab is an offline reference (areas, grid sizes, keyed locations with coordinates,
-transcribed from the strategy guide). It also hosts a **manual teleport**: the party's map X/Y isn't
-in the character record and its address moves every DOSBox session, so the workflow is — scan for
-your current X (then Y) on the **🔍 Memory** tab, paste those addresses into the teleport box, pick a
-location (or type a target X/Y), and **🧭 Teleport** pokes the coordinates. Do it while *exploring*,
-never mid-combat, then take a step to redraw the map.
+The **🗺 Maps** tab draws every area's schematic with its **walls, doors, archways and illusory
+walls**, water and impassable squares, plus keyed locations with coordinates. The indoor geometry is
+decoded from the game's own level data (`GEO*.DAX` — see `docs/reverse-engineering.md` §7a), not
+transcribed, so it matches what you walk into.
+
+The **wilderness** — the overland Moonsea map you reach by boat once Sokal Keep is cleared — is
+there too, 42×33 with its terrain (plains, swamp, forest, hills, mountains, river, deep water) and
+every lettered landmark: the city-edge squares back to Phlan, the boat landings, Yarash's Pyramid,
+the Nomad Camp, Zhentil Keep Outpost, the Kobold Caves, Lizardman Keep and the rest. Unlike the
+districts, that terrain is **transcribed from the clue-book map**, because the game keeps no
+overland grid to decode — the squares are a travel aid, while your live position and the teleport
+target are read from and written to the game itself and are exact.
+
+**Locate & Teleport** finds the party for real, on either kind of map. The position isn't in the
+character record and its address moves every DOSBox session, so:
+
+1. Read your **X and Y off the game's own display** and type them in.
+2. **📸 Snapshot** — collects every address that could hold them.
+3. Walk to a different square, update X and Y, **🎯 Narrow** — drops every address that no longer
+   predicts them. Repeat until one remains; usually one Narrow is enough.
+4. The green marker then tracks you live, and **🧭 Teleport** sends you to any square — click one on
+   the schematic, pick a keyed location, or type the target.
+
+Do it while *exploring*, never mid-combat, then take a step to redraw the map. Indoors the marker is
+an arrow showing your facing; in the wilderness the game records no facing, so it is a plain dot.
+Locking in the wilderness also selects the overland map for you, and the marker is hidden whenever
+you are browsing a map the party is not standing on.
+
+Under the hood the two worlds store position differently — indoors it is three adjacent bytes
+`[X][Y][Facing]`, in the wilderness a pair of 16-bit words whose X is offset by a constant — which is
+why the tab searches for both shapes at once and lets the loser die at the first Narrow. Details in
+`docs/reverse-engineering.md` §7b.
 
 ---
 
@@ -167,8 +219,12 @@ src/PoolOfRadianceTrainer/
                MonsterBook.cs        bestiary + XP values      SpellBook.cs      cleric/mage spells
                ClassRaceBook.cs      classes/races/XP tables    Walkthrough.cs    in-app strategy
                MapBook.cs            areas + keyed location coordinates (Maps tab)
+               MapTerrainData.cs     per-area walls/doors, generated from the game's GEO*.DAX
+               WildernessMap.cs      the overland Moonsea map (transcribed — the game has no grid)
+               MapAscii.cs           parses both map formats into BoardSquare grids
   Memory/      NativeMethods.cs      hotkey P/Invoke (memory P/Invokes now in GameTrainers.Common)
                CharacterLocator.cs   signature scanner (returns party + monsters)
+               PositionLocator.cs    party map position — indoor bytes and wilderness words
                MemorySearcher.cs     Cheat-Engine-style value scanner (PoR-local)
                GlobalHotkeys.cs      system-wide Ctrl+F1/F2/F3
                (shared)              ProcessMemory / MemoryRegion — pulled from GameTrainers.Common via alias

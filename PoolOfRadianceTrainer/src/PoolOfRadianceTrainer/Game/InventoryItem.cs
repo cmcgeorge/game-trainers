@@ -4,6 +4,26 @@ using System.Text.RegularExpressions;
 namespace PoolOfRadianceTrainer.Game;
 
 /// <summary>
+/// A real-mode <c>segment:offset</c> pointer as the game stores it — the guest is a 16-bit DOS
+/// program, so every pointer it writes is a pair of words, not a flat address.
+/// </summary>
+public readonly record struct FarPointer(ushort Offset, ushort Segment)
+{
+    public bool IsNull => Offset == 0 && Segment == 0;
+
+    /// <summary>The 20-bit physical address this resolves to inside the guest's RAM.</summary>
+    public uint Linear => (uint)Segment * 16 + Offset;
+
+    public static FarPointer Read(byte[] buf, int offset) =>
+        offset + 4 <= buf.Length
+            ? new FarPointer((ushort)(buf[offset] | buf[offset + 1] << 8),
+                             (ushort)(buf[offset + 2] | buf[offset + 3] << 8))
+            : default;
+
+    public override string ToString() => $"{Segment:X4}:{Offset:X4}";
+}
+
+/// <summary>
 /// One carried item: a fixed <b>63-byte (0x3F)</b> record stored in a character's
 /// <c>CHRDATAn.ITM</c> file. Items are persisted as a flat array of these records; the character
 /// record's item-count byte (<see cref="PorFormat.OffNumberOfItems"/>) and the runtime item/equip
@@ -15,6 +35,9 @@ namespace PoolOfRadianceTrainer.Game;
 /// <c>hidden_names_flag = 6</c>).
 ///
 ///   0x00      Pascal name string (length byte + up to 41 chars) — the game's cached render
+///   0x2A..2D  far pointer (offset word, then segment word) to the <b>next</b> item the owner carries;
+///             null on the last. This is what the game walks to draw an item list, so it — not any
+///             adjacency in memory — is what makes a set of records one character's inventory
 ///   0x2E      item type byte (see <c>coab</c> ItemType enum)
 ///   0x32      plus / magical bonus (signed)
 ///   0x34      readied (equipped) flag
@@ -29,6 +52,7 @@ public sealed class ItemEntry
 {
     public const int RecordSize = 0x3F;   // 63
 
+    public const int OffNextLink = 0x2A;   // far pointer to the owner's next item
     public const int OffType = 0x2E;
     private const int OffNamePart1 = 0x31; // base name-part index; marks wands/staves/rods
     private const int OffPlus = 0x32;
@@ -45,15 +69,28 @@ public sealed class ItemEntry
     private const byte NamePartStave = 68;
     private const byte NamePartWand = 69;
 
+    /// <summary>What <see cref="SetIdentified"/> writes back when re-hiding an item that was already
+    /// identified when we first read it, so there is no original value to restore. 6 is the value real
+    /// saves use for an unidentified magic item (seen on a Ring of Protection and a Shield +1).</summary>
+    private const byte DefaultHiddenNames = 6;
+
     /// <summary>The verbatim 63 record bytes; edits mutate in place for write-back.</summary>
     public byte[] Raw { get; }
+
+    /// <summary>The hidden-names flag this record had when it was read, so un-ticking "ID'd" restores
+    /// the item's original masking rather than inventing one.</summary>
+    private readonly byte _originalHiddenNames;
 
     public ItemEntry(byte[] record, int offset = 0)
     {
         Raw = new byte[RecordSize];
         int n = Math.Min(RecordSize, record.Length - offset);
         if (n > 0) Array.Copy(record, offset, Raw, 0, n);
+        _originalHiddenNames = Raw[OffHiddenNames] != 0 ? Raw[OffHiddenNames] : DefaultHiddenNames;
     }
+
+    /// <summary>The next item on the owner's list. Null on the last item.</summary>
+    public FarPointer NextLink => FarPointer.Read(Raw, OffNextLink);
 
     public byte Type => Raw[OffType];
     public sbyte Plus => (sbyte)Raw[OffPlus];
@@ -76,6 +113,10 @@ public sealed class ItemEntry
     /// <summary>Current charge count (0x3C) for wands/staves/rods; meaningless for other items.</summary>
     public int Charges => Raw[OffCharges];
 
+    /// <summary>Charge count as a display string: the number for wands/staves/rods, blank for
+    /// other items (whose 0x3C byte holds unrelated spell/effect data, not charges).</summary>
+    public string ChargesDisplay => IsChargedItem ? Charges.ToString() : "";
+
     /// <summary>Can this item's usable resource be topped up? Wands/staves/rods (charges at 0x3C) and
     /// stacked ammunition (arrows, quarrels, darts — count &gt; 1 at 0x39). Single items (weapons,
     /// armour, rings, a worn shield) are neither, so they are never bumped (which would clone them).</summary>
@@ -88,9 +129,20 @@ public sealed class ItemEntry
     /// <summary>The current rechargeable value: charges for wands/staves/rods, else the stack count.</summary>
     public int RechargeValue => IsChargedItem ? Charges : Count;
 
-    /// <summary>The game's cached rendered name (Pascal string at 0x00), collapsed to single spaces.
-    /// It embeds the game's own inventory markers: a leading "No"/"Yes" (readied) column and a "*"
-    /// for an unidentified item, so it reads like the game's item line.</summary>
+    /// <summary>
+    /// The item's name as the game itself last rendered it — the Pascal string at 0x00, collapsed to
+    /// single spaces.
+    ///
+    /// <para>That cached string is the game's whole inventory <i>line</i>, not just a name: it starts
+    /// with the READY column ("No" / "Yes"), which this strips, because the list already shows that as
+    /// the Rdy checkbox and "No Long Sword" reads like part of the item's name. Anything else the game
+    /// put there is kept verbatim — notably the trailing count on stacked pseudo-items ("Jewelry 3" is
+    /// three pieces of jewelry, and the count lives only in this text, not in the count byte).</para>
+    ///
+    /// <para>The cache is only rewritten by the game when it next draws the item list, so an item that
+    /// has just been identified from here keeps its unidentified appearance until then — see
+    /// <see cref="Identify"/>.</para>
+    /// </summary>
     public string DisplayName
     {
         get
@@ -99,9 +151,15 @@ public sealed class ItemEntry
             var sb = new StringBuilder(len);
             for (int i = 1; i <= len; i++) { byte b = Raw[i]; if (b != 0) sb.Append((char)b); }
             string s = Regex.Replace(sb.ToString(), @"\s+", " ").Trim();
+            s = ReadyColumn.Replace(s, "", 1);
             return string.IsNullOrEmpty(s) ? $"item 0x{Type:X2}" : s;
         }
     }
+
+    /// <summary>The leading readied column the game renders in front of an item's name. Anchored and
+    /// requiring a following space so it can only ever eat that whole column, never the start of a
+    /// real name.</summary>
+    private static readonly Regex ReadyColumn = new(@"^(No|Yes) ", RegexOptions.Compiled);
 
     /// <summary>Short flag summary for the item list, e.g. "equipped · unidentified".</summary>
     public string Tags
@@ -118,18 +176,33 @@ public sealed class ItemEntry
         }
     }
 
-    /// <summary>Reveal every part of the name (fully identify). Returns true if it changed.</summary>
-    public bool Identify()
+    /// <summary>Reveal every part of the name (fully identify). Returns true if it changed.
+    /// Only the hidden-names flag moves: the rendered name cached at 0x00 is the game's, and the game
+    /// rewrites it the next time it draws the item list, so the full name appears in-game (and here
+    /// after a Re-scan) rather than the moment this is called.</summary>
+    public bool Identify() => SetIdentified(true);
+
+    /// <summary>Identify or re-hide this item. Re-hiding restores the record's original hidden-names
+    /// value where there was one. Returns true if the flag changed.</summary>
+    public bool SetIdentified(bool identified)
     {
-        if (Raw[OffHiddenNames] == 0) return false;
-        Raw[OffHiddenNames] = 0;
+        byte want = identified ? (byte)0 : _originalHiddenNames;
+        if (Raw[OffHiddenNames] == want) return false;
+        Raw[OffHiddenNames] = want;
         return true;
     }
 
-    /// <summary>Overwrite this item's whole 63-byte record from <paramref name="src"/> — an in-place
-    /// duplicate. The caller writes the buffer back to the game's memory (or the .ITM file). The link
-    /// pointer that follows the record in memory lives outside these 63 bytes, so it is left intact.</summary>
-    public void CopyFrom(ItemEntry src) => Array.Copy(src.Raw, Raw, RecordSize);
+    /// <summary>Overwrite this item's record from <paramref name="src"/> — an in-place duplicate. The
+    /// caller writes the buffer back to the game's memory (or the .ITM file). This slot's own
+    /// next-item link (0x2A) is deliberately kept: it is what holds the owner's list together, and
+    /// copying the source's link over it would splice this character's inventory onto wherever the
+    /// source sat in its own list.</summary>
+    public void CopyFrom(ItemEntry src)
+    {
+        var link = Raw[OffNextLink..(OffNextLink + 4)];
+        Array.Copy(src.Raw, Raw, RecordSize);
+        Array.Copy(link, 0, Raw, OffNextLink, link.Length);
+    }
 
     /// <summary>Set the ammunition stack-count byte (0x39), clamped to 1..255. Returns true if the
     /// byte changed. Use <see cref="Recharge"/> to top up any rechargeable item correctly — writing

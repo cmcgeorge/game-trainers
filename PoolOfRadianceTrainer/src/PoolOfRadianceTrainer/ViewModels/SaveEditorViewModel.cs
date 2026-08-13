@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows.Input;
 using PoolOfRadianceTrainer.Game;
+using PoolOfRadianceTrainer.Memory;
 using PoolOfRadianceTrainer.Mvvm;
 
 namespace PoolOfRadianceTrainer.ViewModels;
@@ -20,16 +21,69 @@ public sealed class EffectPickViewModel : ObservableObject
     public bool IsChecked { get => _checked; set => SetProperty(ref _checked, value); }
 }
 
+/// <summary>One carried item in a loaded save file. Wraps the record so the ID'd column can be
+/// ticked directly, writing the change straight back to the character's .ITM file.</summary>
+public sealed class SaveItemViewModel : ObservableObject
+{
+    private readonly Action<SaveItemViewModel> _persist;
+
+    public ItemEntry Item { get; }
+
+    public SaveItemViewModel(ItemEntry item, Action<SaveItemViewModel> persist)
+    {
+        Item = item;
+        _persist = persist;
+    }
+
+    public string DisplayName => Item.DisplayName;
+    public bool Readied => Item.Readied;
+    public int Count => Item.Count;
+    public int Value => Item.Value;
+    public string ChargesDisplay => Item.ChargesDisplay;
+    public string Tags => Item.Tags;
+
+    /// <summary>Whether the item is identified. Ticking it reveals every name part and rewrites the
+    /// .ITM file; the game shows the full name once the save is reloaded.</summary>
+    public bool Identified
+    {
+        get => Item.Identified;
+        set
+        {
+            if (Item.Identified == value) return;
+            if (!Item.SetIdentified(value)) { OnPropertyChanged(); return; }
+            _persist(this);
+            Raise();
+        }
+    }
+
+    public void Raise()
+    {
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(Identified));
+        OnPropertyChanged(nameof(Tags));
+    }
+
+    public override string ToString() => DisplayName;
+}
+
 /// <summary>A character in the loaded save, with its live effect list.</summary>
 public sealed class SaveCharacterViewModel : ObservableObject
 {
+    private readonly Action<SaveItemViewModel> _persistItem;
+
     public SaveCharacter Model { get; }
-    public SaveCharacterViewModel(SaveCharacter model) { Model = model; Refresh(); }
+
+    public SaveCharacterViewModel(SaveCharacter model, Action<SaveItemViewModel> persistItem)
+    {
+        Model = model;
+        _persistItem = persistItem;
+        Refresh();
+    }
 
     public int Index => Model.Index;
     public string Name => Model.Name;
     public ObservableCollection<EffectEntry> Effects { get; } = new();
-    public ObservableCollection<ItemEntry> Items { get; } = new();
+    public ObservableCollection<SaveItemViewModel> Items { get; } = new();
 
     public string Label => $"{Name}  ({Effects.Count} effect{(Effects.Count == 1 ? "" : "s")})";
     public string ItemLabel => $"{Name}  ({Items.Count} item{(Items.Count == 1 ? "" : "s")})";
@@ -39,7 +93,7 @@ public sealed class SaveCharacterViewModel : ObservableObject
         Effects.Clear();
         foreach (var e in Model.Effects) Effects.Add(e);
         Items.Clear();
-        foreach (var it in Model.Items) Items.Add(it);
+        foreach (var it in Model.Items) Items.Add(new SaveItemViewModel(it, _persistItem));
         OnPropertyChanged(nameof(Label));
         OnPropertyChanged(nameof(ItemLabel));
     }
@@ -77,11 +131,24 @@ public sealed class SaveEditorViewModel : ObservableObject
         IdentifyItemsAllCommand = new RelayCommand(_ => IdentifyItems(all: true), _ => _save != null);
         DuplicateInventoryCommand = new RelayCommand(_ => DuplicateInventory(),
             _ => _save != null && DuplicateSource != null && SelectedCharacter != null && DuplicateSource != SelectedCharacter);
+
+        // Open on the folder the game is really saving into, and load it, so the character and item
+        // lists (and the buttons that need a loaded save) are usable without hunting for a path.
+        string? found = SaveFolderLocator.Find();
+        if (found != null)
+        {
+            _saveFolder = found;
+            Load();
+        }
     }
 
     // --- state ---------------------------------------------------------------
-    private string _saveFolder = @"C:\Temp\Games\POOLRAD";
+    private string _saveFolder = DefaultSaveFolder;
     public string SaveFolder { get => _saveFolder; set => SetProperty(ref _saveFolder, value); }
+
+    /// <summary>Shown until the game's own save folder is located — a plausible manual mount point,
+    /// not somewhere the app expects to find anything.</summary>
+    private const string DefaultSaveFolder = @"C:\Temp\Games\POOLRAD";
 
     private string _status =
         "Point at a Gold Box save folder (containing CHRDATAn.SAV) and Load. Close the game first.";
@@ -158,7 +225,9 @@ public sealed class SaveEditorViewModel : ObservableObject
         {
             if (!SaveGame.LooksLikeSaveFolder(SaveFolder))
             {
-                Status = "No CHRDATAn.SAV files found in that folder.";
+                Status = "No CHRDATn.SAV save files found in that folder. " +
+                         "Point at the folder the game saves into (for a GOG install that is the " +
+                         "cloud_saves\\POOLRAD folder beside the game, not POOLRAD itself).";
                 return;
             }
             _save = SaveGame.Load(SaveFolder);
@@ -171,12 +240,15 @@ public sealed class SaveEditorViewModel : ObservableObject
             OnPropertyChanged(nameof(Filter));
             ApplyFilter();
             Characters.Clear();
-            foreach (var c in _save.Characters) Characters.Add(new SaveCharacterViewModel(c));
+            foreach (var c in _save.Characters) Characters.Add(new SaveCharacterViewModel(c, PersistItem));
             DuplicateSource = null;
             SelectedCharacter = Characters.FirstOrDefault();
             RaiseItemCommands();
             OnPropertyChanged(nameof(IsLoaded));
-            Status = $"Loaded {Characters.Count} character(s). A backup is made automatically before the first change.";
+            int slots = SaveGame.Slots(SaveFolder).Count;
+            Status = $"Loaded {Characters.Count} character(s) from save slot {_save.Slot}" +
+                     (slots > 1 ? $" (the most recent of {slots} saves in this folder)" : "") +
+                     ". A backup is made automatically before the first change.";
         }
         catch (Exception ex)
         {
@@ -241,6 +313,27 @@ public sealed class SaveEditorViewModel : ObservableObject
     }
 
     // --- items ---------------------------------------------------------------
+    /// <summary>Writes one item's edited record back to its owner's .ITM file. Called by a
+    /// <see cref="SaveItemViewModel"/> when its ID'd checkbox is ticked.</summary>
+    private void PersistItem(SaveItemViewModel item)
+    {
+        var owner = Characters.FirstOrDefault(c => c.Items.Contains(item));
+        if (_save == null || owner == null) return;
+        try
+        {
+            EnsureBackup();
+            SaveGame.WriteItems(owner.Model);
+            Status = $"{(item.Identified ? "Identified" : "Re-hid")} '{item.DisplayName}' on {owner.Name}. " +
+                     $"Backup: {_lastBackup}. Reload the save in the game to see it.";
+        }
+        catch (Exception ex)
+        {
+            item.Item.SetIdentified(!item.Identified);   // put the record back the way it was
+            item.Raise();
+            Status = "Item write failed: " + ex.Message;
+        }
+    }
+
     private void IdentifyItems(bool all)
     {
         if (_save == null) return;

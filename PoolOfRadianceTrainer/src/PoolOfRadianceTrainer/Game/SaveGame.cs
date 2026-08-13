@@ -61,26 +61,50 @@ public sealed class SaveGame
     private const int MaxParty = 8;
 
     public string Folder { get; }
+    /// <summary>The save slot these characters were read from — the letter in CHRDAT&lt;slot&gt;n.SAV.</summary>
+    public char Slot { get; }
     public IReadOnlyList<SaveCharacter> Characters { get; }
 
-    private SaveGame(string folder, IReadOnlyList<SaveCharacter> characters)
+    private SaveGame(string folder, char slot, IReadOnlyList<SaveCharacter> characters)
     {
         Folder = folder;
+        Slot = slot;
         Characters = characters;
     }
 
-    /// <summary>True if the folder contains at least one CHRDATAn.SAV record.</summary>
-    public static bool LooksLikeSaveFolder(string folder) =>
-        !string.IsNullOrWhiteSpace(folder) && Directory.Exists(folder) &&
-        Enumerable.Range(1, MaxParty).Any(i => File.Exists(Path.Combine(folder, $"CHRDATA{i}.SAV")));
+    /// <summary>
+    /// The save slots present in a folder, newest first. A Gold Box saved game is a set of files
+    /// named <c>CHRDAT&lt;slot&gt;&lt;n&gt;.SAV</c> — one letter per save slot ('A' is the first),
+    /// <c>n</c> the party position — so a folder routinely holds several independent saves and the
+    /// interesting one is whichever the player wrote most recently.
+    /// </summary>
+    public static IReadOnlyList<char> Slots(string folder)
+    {
+        if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return Array.Empty<char>();
+        var bySlot = new Dictionary<char, DateTime>();
+        foreach (string f in Directory.EnumerateFiles(folder, "CHRDAT??.SAV"))
+        {
+            string name = Path.GetFileNameWithoutExtension(f);
+            if (name.Length != 8 || !char.IsLetter(name[6]) || !char.IsDigit(name[7])) continue;
+            char slot = char.ToUpperInvariant(name[6]);
+            var stamp = File.GetLastWriteTimeUtc(f);
+            if (!bySlot.TryGetValue(slot, out var best) || stamp > best) bySlot[slot] = stamp;
+        }
+        return bySlot.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key).Select(kv => kv.Key).ToList();
+    }
 
-    public static SaveGame Load(string folder)
+    /// <summary>True if the folder holds at least one Gold Box saved game.</summary>
+    public static bool LooksLikeSaveFolder(string folder) => Slots(folder).Count > 0;
+
+    /// <summary>Loads one save slot; without an explicit slot, the most recently written one.</summary>
+    public static SaveGame Load(string folder, char? slot = null)
     {
         if (!Directory.Exists(folder)) throw new DirectoryNotFoundException(folder);
+        char use = slot ?? Slots(folder).FirstOrDefault('A');
         var chars = new List<SaveCharacter>();
         for (int i = 1; i <= MaxParty; i++)
         {
-            string sav = Path.Combine(folder, $"CHRDATA{i}.SAV");
+            string sav = Path.Combine(folder, $"CHRDAT{use}{i}.SAV");
             if (!File.Exists(sav)) continue;
             byte[] bytes = File.ReadAllBytes(sav);
             if (bytes.Length < PorFormat.RecordSize) continue;
@@ -89,8 +113,8 @@ public sealed class SaveGame
             {
                 Index = i,
                 SavPath = sav,
-                SpcPath = Path.Combine(folder, $"CHRDATA{i}.SPC"),
-                ItmPath = Path.Combine(folder, $"CHRDATA{i}.ITM"),
+                SpcPath = Path.Combine(folder, $"CHRDAT{use}{i}.SPC"),
+                ItmPath = Path.Combine(folder, $"CHRDAT{use}{i}.ITM"),
                 SavBytes = bytes,
                 Record = new CharacterRecord(bytes),
             };
@@ -108,16 +132,17 @@ public sealed class SaveGame
             }
             chars.Add(sc);
         }
-        if (chars.Count == 0) throw new FileNotFoundException("No CHRDATAn.SAV character files found in the folder.");
-        return new SaveGame(folder, chars);
+        if (chars.Count == 0) throw new FileNotFoundException($"No CHRDAT{use}n.SAV character files found in the folder.");
+        return new SaveGame(folder, use, chars);
     }
 
-    /// <summary>Copies the save-relevant files to a timestamped sub-folder; returns its path.</summary>
+    /// <summary>Copies the save-relevant files to a timestamped sub-folder; returns its path.
+    /// Every slot is copied, not just the loaded one, so the backup restores the folder as it was.</summary>
     public string Backup()
     {
         string dir = Path.Combine(Folder, $"_trainer-backup-{DateTime.Now:yyyyMMdd-HHmmss}");
         Directory.CreateDirectory(dir);
-        foreach (string pattern in new[] { "CHRDATA*.*", "SAVGAM*.DAT" })
+        foreach (string pattern in new[] { "CHRDAT*.*", "SAVGAM*.DAT" })
             foreach (string f in Directory.GetFiles(Folder, pattern))
                 File.Copy(f, Path.Combine(dir, Path.GetFileName(f)), overwrite: true);
         return dir;

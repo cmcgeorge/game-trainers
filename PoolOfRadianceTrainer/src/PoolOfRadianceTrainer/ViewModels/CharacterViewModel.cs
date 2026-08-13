@@ -243,12 +243,49 @@ public sealed class CharacterViewModel : ObservableObject
         foreach (var b in RawBytes) b.Refresh();
     }
 
-    /// <summary>Zero this record's current HP — the combat panel uses it to drop a monster.</summary>
+    /// <summary>
+    /// Leaves this creature alive but on its last hit point, unable to hit back and impossible to
+    /// miss (AC 20, THAC0 20) — so the party's very next blow kills it *through the game's own
+    /// damage routine*.
+    ///
+    /// <para>This is the loot-safe way to win a fight. A death only counts to the engine when its
+    /// damage routine processes it: that is what removes the creature from the battlefield, leaves
+    /// the body, and banks what it was carrying for the post-battle treasure. Writing HP and status
+    /// straight into the record (see <see cref="KillNow"/>) never runs that routine — the record is
+    /// the character sheet, while the fight itself runs off a separate per-combatant block the
+    /// engine rebuilds every round — so the creature keeps acting and the survivors' morale check
+    /// ends the fight in a surrender, which pays no XP and no treasure.</para>
+    /// </summary>
+    public void WeakenNow()
+    {
+        Record.HpCurrent = 1; Poke(PorFormat.OffHpCur, 1);
+        Record.ArmorClass = 20; Poke(PorFormat.OffAcCur, 1);
+        Record.ArmorClassBase = 20; Poke(PorFormat.OffAcBase, 1);
+        Record.Thac0 = 20; Poke(PorFormat.OffThac0Cur, 1);
+        Record.Thac0Base = 20; Poke(PorFormat.OffThac0Base, 1);
+        OnPropertyChanged(nameof(HpCurrent)); OnPropertyChanged(nameof(ArmorClass));
+        OnPropertyChanged(nameof(Thac0)); RaiseDerived();
+    }
+
+    /// <summary>
+    /// Zero this record's current HP and mark it dead — the combat panel uses it to drop a monster.
+    /// Status 6 (dead) is deliberately *not* status 8 (gone): "dead" is the state a normal killing
+    /// blow leaves behind — a body on the field whose carried items feed the post-battle treasure —
+    /// while "gone" is the engine's remove-from-the-encounter state (fled off-map, disintegrated,
+    /// undead destroyed by turning), which takes anything the creature was carrying with it.
+    /// Monsters that carry gear (orc leaders' Chain Mail +1, Grishnak's brass key) would be looted
+    /// of nothing. Pick "Gone" from the Status box by hand if you ever actually want that.
+    ///
+    /// <para>Even so this is <b>not</b> loot-safe, and cannot be made so from the record alone: the
+    /// engine never processes the death, so the creature finishes the round, the fight tends to end
+    /// in a surrender, and the encounter pays nothing. Use it to walk away from a hopeless fight;
+    /// use <see cref="WeakenNow"/> when you want the treasure.</para>
+    /// </summary>
     public void KillNow()
     {
         Record.HpCurrent = 0; Poke(PorFormat.OffHpCur, 1);
-        Record.Status = 8; Poke(PorFormat.OffStatus, 1);   // gone
-        OnPropertyChanged(nameof(HpCurrent)); RaiseDerived();
+        Record.Status = 6; Poke(PorFormat.OffStatus, 1);   // dead
+        OnPropertyChanged(nameof(HpCurrent)); OnPropertyChanged(nameof(StatusIndex)); RaiseDerived();
     }
 
     // --- freeze / live refresh ----------------------------------------------
@@ -298,6 +335,22 @@ public sealed class CharacterViewModel : ObservableObject
         Array.Copy(fresh, 0, Record.Bytes, 0, PorFormat.RecordSize);
         RaiseDerived();
         OnPropertyChanged(nameof(LiveHp));
+    }
+
+    /// <summary>
+    /// Re-raises just the fields the Combat tab edits, so a monster's numbers follow the battle
+    /// instead of showing whatever they were when the record was located. Only those five, so this
+    /// stays cheap enough for the poll loop (unlike <see cref="RefreshEditors"/>, which also walks
+    /// all 285 raw bytes). The caller skips it while those boxes have focus — see
+    /// <c>MainViewModel.EnemyEditorFocused</c>.
+    /// </summary>
+    public void RefreshCombatEditors()
+    {
+        OnPropertyChanged(nameof(HpCurrent));
+        OnPropertyChanged(nameof(HpMax));
+        OnPropertyChanged(nameof(ArmorClass));
+        OnPropertyChanged(nameof(Thac0));
+        OnPropertyChanged(nameof(StatusIndex));
     }
 
     // --- write plumbing ------------------------------------------------------

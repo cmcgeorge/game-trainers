@@ -21,7 +21,6 @@
                     <Button Content="⏏ Detach" Command="{Binding DetachCommand}"/>
                     <Button Content="🔎 Re-scan" Command="{Binding ScanCommand}"/>
                     <Rectangle Width="1" Fill="{StaticResource Line}" Margin="6,2"/>
-                    <CheckBox Content="🛡 God mode (freeze party HP)" IsChecked="{Binding GodMode}"/>
                     <CheckBox Content="🧊 Freeze party (HP + status)" IsChecked="{Binding FreezeAll}"
                               ToolTip="Keeps every party member at full HP and pins status to Okay each tick — no held, poisoned, unconscious, petrified or dead."/>
                     <CheckBox Content="🔒 Freeze spells (party)" IsChecked="{Binding FreezeSpells}"
@@ -267,10 +266,16 @@
                             <DockPanel Grid.Column="0" Margin="0,0,8,0">
                                 <TextBlock DockPanel.Dock="Top" Text="COMBATANTS / MONSTERS" Style="{StaticResource Section}"/>
                                 <StackPanel DockPanel.Dock="Bottom">
-                                    <Button Content="💀 Kill selected" Command="{Binding KillEnemyCommand}"/>
-                                    <Button Content="☠ Kill ALL enemies" Command="{Binding KillAllEnemiesCommand}"/>
-                                    <TextBlock Text="Monster records only appear while a battle is on screen. 'Kill' sets a record's current HP to 0."
-                                               Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+                                    <Button Content="🩸 Weaken selected (1 HP)" Command="{Binding WeakenEnemyCommand}"
+                                            ToolTip="Leaves it alive on 1 HP, AC 20, THAC0 20 — your next hit kills it through the game's own damage routine, so the body, its treasure and the XP all count."/>
+                                    <Button Content="🩸 Weaken ALL enemies (1 HP)" Command="{Binding WeakenAllEnemiesCommand}"
+                                            ToolTip="Same for every combatant in the arena — one hit each and the fight is over, with the treasure intact."/>
+                                    <Button Content="💀 Kill selected" Command="{Binding KillEnemyCommand}" Margin="0,6,0,0"
+                                            ToolTip="Zeroes the record. The engine does not process this as a kill — no body, no treasure, no XP. For escaping a fight, not for looting it."/>
+                                    <Button Content="☠ Kill ALL enemies" Command="{Binding KillAllEnemiesCommand}"
+                                            ToolTip="Zeroes every enemy record. Forfeits the encounter's treasure and XP — use Weaken to win a fight you want to loot."/>
+                                    <TextBlock Text="Monsters appear here on their own while a battle is on screen and clear when it ends — no re-scan needed. Weaken to win a fight and keep the loot; Kill only zeroes the records, which the engine never counts as kills (the fight tends to end in a surrender, paying nothing)."
+                                               Style="{StaticResource Hint}" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ListBox ItemsSource="{Binding Enemies}" SelectedItem="{Binding SelectedEnemy}" Margin="0,0,0,8">
                                     <ListBox.ItemTemplate>
@@ -283,7 +288,10 @@
                                     </ListBox.ItemTemplate>
                                 </ListBox>
                             </DockPanel>
-                            <Border Grid.Column="1" DataContext="{Binding SelectedEnemy}">
+                            <!-- The poll loop keeps these fields on the live record; the focus
+                                 handlers pause that while a value is being typed in. -->
+                            <Border Grid.Column="1" DataContext="{Binding SelectedEnemy}"
+                                    GotKeyboardFocus="EnemyEditor_FocusChanged" LostKeyboardFocus="EnemyEditor_FocusChanged">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                                     <StackPanel>
                                         <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
@@ -457,7 +465,7 @@
                             CornerRadius="6" Padding="12">
                         <DockPanel>
                             <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
-                                <TextBlock Text="Offline inventory editor — reads and writes each character's CHRDATAn.ITM file. Identify every carried item, or copy one character's whole inventory onto another. This does NOT touch the running game: close the game (or reload the save afterward) for changes to take effect. A backup is made automatically before the first change. Shares the save loaded on the 🧬 Powers tab."
+                                <TextBlock Text="Offline inventory editor — reads and writes each character's CHRDATAn.ITM file. Tick an item's ID'd box to identify it, use the buttons to do a whole character or the party, or copy one character's whole inventory onto another. This does NOT touch the running game: close the game (or reload the save afterward) for changes to take effect. A backup is made automatically before the first change. The save folder below is detected on startup (and the newest save slot in it loaded); shares the save loaded on the 🧬 Powers tab."
                                            Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
                                 <StackPanel Orientation="Horizontal">
                                     <TextBlock Text="Save folder:" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -473,7 +481,7 @@
                                     BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8"
                                     DataContext="{Binding DataContext.LiveInventory, RelativeSource={RelativeSource AncestorType=Window}}">
                                 <StackPanel>
-                                    <TextBlock Text="Live game (memory) — edits the RUNNING game directly, no reload needed. Attach &amp; Scan on the top toolbar first, then Re-scan after picking up or dropping items. Do this out of combat."
+                                    <TextBlock Text="Live game (memory) — edits the RUNNING game directly, no reload needed. Attach &amp; Scan on the top toolbar first, then Re-scan after picking up or dropping items. Do this out of combat. Item names are text the game itself caches: after identifying, the ID'd box ticks at once and the full name follows when the game next draws its item screen."
                                                Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
                                     <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
                                         <TextBlock Text="Party member:" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -500,7 +508,18 @@
                                                   MaxHeight="180">
                                             <DataGrid.Columns>
                                                 <DataGridTextColumn Header="Item" Binding="{Binding DisplayName}" Width="*"/>
-                                                <DataGridCheckBoxColumn Header="ID'd" Binding="{Binding Identified, Mode=OneWay}" Width="46"/>
+                                                <!-- Template column, not DataGridCheckBoxColumn: a checkbox in a cell
+                                                     template takes a single click and stays live while the grid itself
+                                                     is read-only. Ticking it identifies that one item in the game. -->
+                                                <DataGridTemplateColumn Header="ID'd" Width="46">
+                                                    <DataGridTemplateColumn.CellTemplate>
+                                                        <DataTemplate>
+                                                            <CheckBox IsChecked="{Binding Identified, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                      HorizontalAlignment="Center"
+                                                                      ToolTip="Identify this item in the running game (untick to hide it again)."/>
+                                                        </DataTemplate>
+                                                    </DataGridTemplateColumn.CellTemplate>
+                                                </DataGridTemplateColumn>
                                                 <DataGridCheckBoxColumn Header="Rdy" Binding="{Binding Readied, Mode=OneWay}" Width="46"/>
                                                 <DataGridTextColumn Header="Qty" Binding="{Binding Count}" Width="46"/>
                                                 <DataGridTextColumn Header="Chrg" Binding="{Binding Charges}" Width="48"/>
@@ -565,9 +584,18 @@
                                               IsReadOnly="True" HeadersVisibility="Column">
                                         <DataGrid.Columns>
                                             <DataGridTextColumn Header="Item" Binding="{Binding DisplayName}" Width="*"/>
-                                            <DataGridCheckBoxColumn Header="ID'd" Binding="{Binding Identified}" Width="46"/>
-                                            <DataGridCheckBoxColumn Header="Rdy" Binding="{Binding Readied}" Width="46"/>
+                                            <DataGridTemplateColumn Header="ID'd" Width="46">
+                                                <DataGridTemplateColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <CheckBox IsChecked="{Binding Identified, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                  HorizontalAlignment="Center"
+                                                                  ToolTip="Identify this item in the save file (untick to hide it again)."/>
+                                                    </DataTemplate>
+                                                </DataGridTemplateColumn.CellTemplate>
+                                            </DataGridTemplateColumn>
+                                            <DataGridCheckBoxColumn Header="Rdy" Binding="{Binding Readied, Mode=OneWay}" Width="46"/>
                                             <DataGridTextColumn Header="Qty" Binding="{Binding Count}" Width="46"/>
+                                            <DataGridTextColumn Header="Chrg" Binding="{Binding ChargesDisplay}" Width="48"/>
                                             <DataGridTextColumn Header="Value" Binding="{Binding Value}" Width="60"/>
                                             <DataGridTextColumn Header="Flags" Binding="{Binding Tags}" Width="160"/>
                                         </DataGrid.Columns>
@@ -662,6 +690,21 @@
                                         <DataGridTextColumn Header="Thief" Binding="{Binding Thief}" Width="*"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
+                                <TextBlock Text="Level progression (hit dice, spell slots &amp; backstab)" Style="{StaticResource Section}"/>
+                                <DataGrid ItemsSource="{Binding LevelProgression}" AutoGenerateColumns="False" IsReadOnly="True"
+                                          HeadersVisibility="Column" MaxHeight="280">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Lvl" Binding="{Binding Level}" Width="36"/>
+                                        <DataGridTextColumn Header="Ftr HD" Binding="{Binding FighterHd}" Width="50"/>
+                                        <DataGridTextColumn Header="Clr HD" Binding="{Binding ClericHd}" Width="50"/>
+                                        <DataGridTextColumn Header="Clr Spells" Binding="{Binding ClericSpells}" Width="70"/>
+                                        <DataGridTextColumn Header="Mag HD" Binding="{Binding MageHd}" Width="50"/>
+                                        <DataGridTextColumn Header="Mag Spells" Binding="{Binding MageSpells}" Width="70"/>
+                                        <DataGridTextColumn Header="Thf HD" Binding="{Binding ThiefHd}" Width="50"/>
+                                        <DataGridTextColumn Header="Thf Stab" Binding="{Binding ThiefBackstab}" Width="50"/>
+                                        <DataGridTextColumn Header="Notes" Binding="{Binding Notes}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
                             </StackPanel>
                         </ScrollViewer>
                     </Border>
@@ -683,26 +726,37 @@
                                 <Border DockPanel.Dock="Bottom" BorderBrush="{StaticResource Line}" BorderThickness="1"
                                         CornerRadius="4" Padding="8" Margin="0,8,0,0">
                                     <StackPanel>
-                                        <TextBlock Text="Manual teleport" Style="{StaticResource Section}" Margin="0,0,0,2"/>
-                                        <TextBlock Text="Coordinates aren't in the character record. Scan for the party's X (then Y) on the 🔍 Memory tab, paste the addresses here, pick a location above (or type a target), and Teleport. Exploring only — never in combat."
+                                        <TextBlock Text="Locate &amp; Teleport" Style="{StaticResource Section}" Margin="0,0,0,2"/>
+                                        <TextBlock Text="Position isn't in the character record. Enter your current X and Y from the game display, click Snapshot, walk to a different square, update X and Y, click Narrow — repeat until locked. Works indoors and in the wilderness (the overland status line reads e.g. '25,25 W 04:09'); locking out there selects the overland map for you. Exploring only — never in combat."
                                                    Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,0,0,6"/>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="70"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
-                                            </Grid.RowDefinitions>
-                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="X addr:" VerticalAlignment="Center"/>
-                                            <TextBox Grid.Row="0" Grid.Column="1" Margin="0,0,0,4"
-                                                     Text="{Binding XAddress, UpdateSourceTrigger=PropertyChanged}"/>
-                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Y addr:" VerticalAlignment="Center"/>
-                                            <TextBox Grid.Row="1" Grid.Column="1"
-                                                     Text="{Binding YAddress, UpdateSourceTrigger=PropertyChanged}"/>
-                                        </Grid>
-                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+
+                                        <!-- Current X / Y inputs -->
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <TextBlock Text="Current X:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBox Width="44" Text="{Binding CurrentX, UpdateSourceTrigger=PropertyChanged}"/>
+                                            <TextBlock Text="Y:" VerticalAlignment="Center" Margin="8,0,4,0"/>
+                                            <TextBox Width="44" Text="{Binding CurrentY, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </StackPanel>
+                                        <!-- Snapshot / Narrow / Reset -->
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <Button Content="📸 Snapshot" Command="{Binding SnapshotCommand}" Margin="0,0,4,0"/>
+                                            <Button Content="🎯 Narrow"   Command="{Binding NarrowCommand}"   Margin="0,0,4,0"/>
+                                            <Button Content="↩ Reset"     Command="{Binding ResetCommand}"/>
+                                        </StackPanel>
+
+                                        <!-- Search state / live position -->
+                                        <TextBlock Text="{Binding SearchState}" Style="{StaticResource Hint}" TextWrapping="Wrap" Margin="0,0,0,2"/>
+                                        <TextBlock Style="{StaticResource Hint}" Foreground="{StaticResource Good}"
+                                                   Visibility="{Binding HasLock, Converter={StaticResource BoolToVis}}"
+                                                   Margin="0,0,0,4">
+                                            <Run Text="Live position: "/>
+                                            <Run Text="{Binding LivePosition, Mode=OneWay}"/>
+                                        </TextBlock>
+
+                                        <Separator Margin="0,4,0,4"/>
+
+                                        <!-- Teleport target -->
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
                                             <TextBlock Text="Target X:" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                             <TextBox Width="44" Text="{Binding TargetX, UpdateSourceTrigger=PropertyChanged}"/>
                                             <TextBlock Text="Y:" VerticalAlignment="Center" Margin="8,0,4,0"/>
@@ -729,7 +783,9 @@
                                      the green dot is your live position once the X/Y addresses are pasted. -->
                                 <TextBlock DockPanel.Dock="Top" Text="MAP (click a square to set the teleport target)"
                                            Style="{StaticResource Section}"/>
-                                <ScrollViewer DockPanel.Dock="Top" MaxHeight="400" Margin="0,0,0,8"
+                                <!-- 600px clears the 33-row overland map (33 × 18px) without scrolling;
+                                     smaller windows still get scrollbars. -->
+                                <ScrollViewer DockPanel.Dock="Top" MaxHeight="600" Margin="0,0,0,8"
                                               HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                                     <Border BorderBrush="{StaticResource Line}" BorderThickness="1" Background="#12141A"
                                             HorizontalAlignment="Left" VerticalAlignment="Top" ClipToBounds="True"
@@ -776,6 +832,12 @@
                                                                        Fill="{Binding West, Converter={StaticResource WallBrush}}"/>
                                                             <Rectangle Height="2" VerticalAlignment="Top"
                                                                        Fill="{Binding North, Converter={StaticResource WallBrush}}"/>
+                                                            <!-- Only set on the map's outer edge; every interior edge is
+                                                                 drawn once as the next square's West/North. -->
+                                                            <Rectangle Width="2" HorizontalAlignment="Right"
+                                                                       Fill="{Binding East, Converter={StaticResource WallBrush}}"/>
+                                                            <Rectangle Height="2" VerticalAlignment="Bottom"
+                                                                       Fill="{Binding South, Converter={StaticResource WallBrush}}"/>
                                                         </Grid>
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
@@ -835,22 +897,84 @@
                                                 </Border>
                                             </Canvas>
 
+                                            <!-- Live position. Indoors the facing byte sits beside the
+                                                 coordinates so the marker is an arrow; the wilderness
+                                                 position words have no facing, so it is a plain dot. -->
                                             <Canvas>
-                                                <Grid Width="18" Height="18" ToolTip="Your live position"
-                                                      Visibility="{Binding HasLock, Converter={StaticResource BoolToVis}}"
+                                                <Grid Width="18" Height="18" ToolTip="Your live position (arrow points in facing direction)"
+                                                      Visibility="{Binding ShowFacingArrow, Converter={StaticResource BoolToVis}}"
                                                       Canvas.Left="{Binding LiveX, Converter={StaticResource MapScale}}">
                                                     <Canvas.Top>
                                                         <MultiBinding Converter="{StaticResource MapFlipY}">
                                                             <Binding Path="LiveY"/>
                                                         </MultiBinding>
                                                     </Canvas.Top>
-                                                    <Ellipse Width="14" Height="14" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                             Fill="{StaticResource Good}" Stroke="White" StrokeThickness="2"/>
+                                                    <Polygon Points="9,1 17,17 9,13 1,17"
+                                                             Fill="{StaticResource Good}" Stroke="White" StrokeThickness="1.5"
+                                                             HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                             RenderTransformOrigin="0.5,0.5">
+                                                        <Polygon.RenderTransform>
+                                                            <RotateTransform Angle="{Binding LiveFacingDegrees}"/>
+                                                        </Polygon.RenderTransform>
+                                                    </Polygon>
+                                                </Grid>
+                                            </Canvas>
+
+                                            <Canvas>
+                                                <Grid Width="18" Height="18" ToolTip="Your live position (the wilderness records no facing)"
+                                                      Visibility="{Binding ShowLiveDot, Converter={StaticResource BoolToVis}}"
+                                                      Canvas.Left="{Binding LiveX, Converter={StaticResource MapScale}}">
+                                                    <Canvas.Top>
+                                                        <MultiBinding Converter="{StaticResource MapFlipY}">
+                                                            <Binding Path="LiveY"/>
+                                                        </MultiBinding>
+                                                    </Canvas.Top>
+                                                    <Ellipse Width="12" Height="12" Fill="{StaticResource Good}"
+                                                             Stroke="White" StrokeThickness="1.5"
+                                                             HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                                 </Grid>
                                             </Canvas>
                                         </Grid>
                                     </Border>
                                 </ScrollViewer>
+
+                                <!-- Legend for the schematic. Walls/doors/illusory walls are decoded from the
+                                     game's own GEO*.DAX level geometry; see Game/MapTerrainData.cs. The
+                                     wilderness terrain row below is transcribed from the clue book instead
+                                     — the game keeps no overland grid; see Game/WildernessMap.cs. -->
+                                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Rectangle Width="14" Height="3" Fill="#E0B341" VerticalAlignment="Center"/>
+                                        <TextBlock Text="wall" Style="{StaticResource Hint}" Margin="4,0,12,0"/>
+                                        <Rectangle Width="14" Height="3" Fill="#5FA35C" VerticalAlignment="Center"/>
+                                        <TextBlock Text="door / archway" Style="{StaticResource Hint}" Margin="4,0,12,0"/>
+                                        <Rectangle Width="14" Height="3" Fill="#C060C0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="illusory / secret wall" Style="{StaticResource Hint}" Margin="4,0,12,0"/>
+                                        <Rectangle Width="12" Height="12" Fill="#805B9BD5" VerticalAlignment="Center"/>
+                                        <TextBlock Text="water" Style="{StaticResource Hint}" Margin="4,0,12,0"/>
+                                        <Rectangle Width="12" Height="12" Fill="#80CFCFC2" VerticalAlignment="Center"/>
+                                        <TextBlock Text="impassable" Style="{StaticResource Hint}" Margin="4,0,0,0"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                        <TextBlock Text="Wilderness:" Style="{StaticResource Hint}" Margin="0,0,6,0"/>
+                                        <Rectangle Width="12" Height="12" Fill="#C08FA855" VerticalAlignment="Center"/>
+                                        <TextBlock Text="plains" Style="{StaticResource Hint}" Margin="4,0,10,0"/>
+                                        <Rectangle Width="12" Height="12" Fill="#C05E6E3C" VerticalAlignment="Center"/>
+                                        <TextBlock Text="swamp" Style="{StaticResource Hint}" Margin="4,0,10,0"/>
+                                        <Rectangle Width="12" Height="12" Fill="#C02E6B38" VerticalAlignment="Center"/>
+                                        <TextBlock Text="forest" Style="{StaticResource Hint}" Margin="4,0,10,0"/>
+                                        <Rectangle Width="12" Height="12" Fill="#C08A6E45" VerticalAlignment="Center"/>
+                                        <TextBlock Text="hills" Style="{StaticResource Hint}" Margin="4,0,10,0"/>
+                                        <Rectangle Width="12" Height="12" Fill="#C07E7674" VerticalAlignment="Center"/>
+                                        <TextBlock Text="mountains" Style="{StaticResource Hint}" Margin="4,0,10,0"/>
+                                        <Rectangle Width="12" Height="12" Fill="#C04E9BD5" VerticalAlignment="Center"/>
+                                        <TextBlock Text="river" Style="{StaticResource Hint}" Margin="4,0,10,0"/>
+                                        <Rectangle Width="12" Height="12" Fill="#C01E468C" VerticalAlignment="Center"/>
+                                        <TextBlock Text="deep water" Style="{StaticResource Hint}" Margin="4,0,10,0"/>
+                                        <Rectangle Width="12" Height="12" Fill="#306B707C" VerticalAlignment="Center"/>
+                                        <TextBlock Text="not transcribed" Style="{StaticResource Hint}" Margin="4,0,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
 
                                 <TextBlock DockPanel.Dock="Top" Text="LOCATIONS (select one to set the teleport target)"
                                            Style="{StaticResource Section}"/>
