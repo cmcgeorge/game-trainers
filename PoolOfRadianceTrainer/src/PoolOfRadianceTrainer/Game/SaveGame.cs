@@ -236,6 +236,20 @@ public sealed class SaveGame
         return dst.Items.Count;
     }
 
+    // --- the character record itself -----------------------------------------
+
+    /// <summary>
+    /// Persists a character's edited 285-byte record to its .SAV file. The parsed
+    /// <see cref="SaveCharacter.Record"/> is copied back over the head of the raw file bytes, so
+    /// anything the file carries past the record survives — as does everything the record itself
+    /// holds that the edit didn't touch.
+    /// </summary>
+    public static void WriteRecord(SaveCharacter c)
+    {
+        Array.Copy(c.Record.Bytes, 0, c.SavBytes, 0, PorFormat.RecordSize);
+        WriteAtomic(c.SavPath, c.SavBytes);
+    }
+
     private static void SetHead(SaveCharacter c, bool present)
     {
         // Patch the effects-head pointer in the full raw .SAV bytes, preserving everything else

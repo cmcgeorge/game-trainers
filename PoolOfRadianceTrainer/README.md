@@ -93,6 +93,63 @@ casting never uses a spell up. Toggle it off before you re-memorize a different 
 Like god-mode HP freeze, this writes to the live game each tick; if a spell doesn't reappear
 immediately after a mid-fight cast it should on the next tick — verify the behavior in your own game.
 
+### 🎓 Change class
+
+The **Class** box in the identity row writes the class byte and nothing else, which leaves a
+character whose sheet says "Magic-User" while its saving throws, THAC0 and empty spell book still
+describe a fighter. The **Change class** panel further down the 🧙 Character tab does it properly.
+
+Pick the new class — the list offers what the character's **race** may take, with a checkbox to
+show the combinations the game would refuse — and the panel previews the whole change before you
+commit: the new per-class levels, THAC0, saving throws, and any spells or thief skills, followed by
+anything questionable (an illegal race/class pairing, a level the class can't reach, an ability
+below the class minimum, experience that doesn't support the level, a lawful-good thief).
+
+The character **keeps its level and its hit points**. A level-5 fighter becomes a level-5
+magic-user, clamped to what that class and race can actually reach (an elf fighter stops at 7, a
+half-elf cleric at 5, the training halls at Fighter 8 / Thief 9 / Cleric 6 / Mage 6), and keeps the
+25 hit points it earned — which is exactly the kind of character only a trainer can make. What gets
+rewritten is everything the class decides: per-class levels, THAC0 (keeping whatever your equipment
+and Strength were already worth), the level-appropriate saving throws, thief skills with their
+racial and Dexterity adjustments, and the spell book — a new caster knows every spell of the levels
+it can cast, and a character leaving a caster class loses the lot. Experience, abilities, Armor
+Class, money and items are untouched.
+
+Two things the game still gets the last word on: the training hall recomputes progression when you
+next level, and readied gear isn't re-checked — a magic-user in plate mail keeps that Armor Class
+until you unready it in-game.
+
+### 🧝 Party generator
+
+Rolls a whole party for you instead of six trips through the create-a-character screens. Every
+character comes out **good-aligned**, **level 1**, and in a race/class combination the game itself
+offers — following the party the Rule Book recommends: front-line fighters, a healer, a scout and a
+magic-user. Pick how many to roll (a short party keeps the roles that matter — four is always a
+fighter, a cleric, a magic-user and a thief), choose straight **3d6** or **4d6 drop-the-lowest**,
+and hit **🎲 Roll a new party** until you like the look of them.
+
+Abilities go to the class that needs them (a Fighter/Mage's best roll lands in Strength, its second
+in Intelligence), and everything derived from them is filled in to match: hit points from the class
+hit die at maximum plus the Constitution bonus (a multiclass averages its dice, as the game does),
+unarmored AC from Dexterity, THAC0 from class and Strength, the level-1 saving-throw row — best-of
+for a multiclass — thief skills with their racial and Dexterity adjustments, and a starting spell
+book that always includes **Sleep** and **Magic Missile**. Exceptional Strength is rolled only for
+fighters at STR 18, and only up to 18/50 for a female fighter, exactly as the game allows.
+
+Then write the party to either target:
+
+- **🧝 Replace the live party** — stamps the characters over the party in the running game, in
+  marching order. Takes effect immediately; save in the game to keep them.
+- **💾 Write into the loaded save** — rewrites the `CHRDATn.SAV` records of the save loaded on the
+  Powers/Inventory tab, after backing the whole folder up. Close the game first.
+
+Both **replace characters that already exist** — neither can add new party members, because how many
+members a party has is the game's own bookkeeping (a linked list in memory, and a count somewhere in
+`SAVGAM?.DAT` that this trainer hasn't decoded). So make six characters in the game however quickly
+you like, then generate over them. Each slot keeps its **money and carried items** — only the
+character sheet changes — which means readied armour may no longer suit the new class until you
+re-ready it in-game and the AC recomputes.
+
 ### 🎒 Inventory (offline save editor)
 
 Like the **🧬 Powers** tab, this edits the save on disk (each character's `CHRDATAn.ITM` file), so
@@ -206,7 +263,13 @@ dotnet run --project test/FormatCheck
 ```
 THRENDER GRONE  Male Dwarf Fighter (LG)      STR 17  HP 11/11  AC 1  THAC0 19  age 52  XP 32
 RHIANNON        Female Elf Fighter/Mage (TN)  STR 15  HP 7/7   AC 0            age 180
+ALTHARION       Male Human Fighter (LG) L5   STR 18/89  HP 25/25  THAC0 base 16  XP 34,135
 ```
+
+The third is a verbatim `CHRDATA1.SAV` from a real saved game, and it is the only fixture above
+level 1 — which is what lets the per-level class tables (THAC0, saving throws) be checked rather
+than assumed: its THAC0 base of 16 is four points better than the level-1 fighter's 20, four levels
+up, and its saving throws are the fighter level-5 row exactly.
 
 and the combat dump independently pins the live fields — Rhiannon's current HP 7→0 and status
 okay→**unconscious** between the two captures.
@@ -221,6 +284,9 @@ src/PoolOfRadianceTrainer/
                CharacterRecord.cs    typed, mutable view over a 285-byte buffer (AC/THAC0 60-x encoding)
                CharacterSignature.cs the record-shape predicate used by the scanner
                SaveGame.cs           offline CHRDATAn.SAV/.SPC/.ITM editor (effects, items, backup)
+               ClassTables.cs        per-class/per-level THAC0, saves, thief skills, spell slots, caps
+               ClassChange.cs        changes a character's class and every number that follows from it
+               PartyGenerator.cs     rolls a good-aligned level-1 party and stamps it into records
                EffectBook.cs         the effect/"power" dictionary   InventoryItem.cs  63-byte item record
                MonsterBook.cs        bestiary + XP values      SpellBook.cs      cleric/mage spells
                ClassRaceBook.cs      classes/races/XP tables    Walkthrough.cs    in-app strategy

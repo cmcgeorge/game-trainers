@@ -94,6 +94,7 @@ public sealed class SaveCharacterViewModel : ObservableObject
         foreach (var e in Model.Effects) Effects.Add(e);
         Items.Clear();
         foreach (var it in Model.Items) Items.Add(new SaveItemViewModel(it, _persistItem));
+        OnPropertyChanged(nameof(Name));   // the record itself can be rewritten (party generator)
         OnPropertyChanged(nameof(Label));
         OnPropertyChanged(nameof(ItemLabel));
     }
@@ -245,6 +246,8 @@ public sealed class SaveEditorViewModel : ObservableObject
             SelectedCharacter = Characters.FirstOrDefault();
             RaiseItemCommands();
             OnPropertyChanged(nameof(IsLoaded));
+            OnPropertyChanged(nameof(LoadedCharacterCount));
+            OnPropertyChanged(nameof(LoadedSlotSummary));
             int slots = SaveGame.Slots(SaveFolder).Count;
             Status = $"Loaded {Characters.Count} character(s) from save slot {_save.Slot}" +
                      (slots > 1 ? $" (the most recent of {slots} saves in this folder)" : "") +
@@ -255,6 +258,8 @@ public sealed class SaveEditorViewModel : ObservableObject
             _save = null;
             Characters.Clear();
             OnPropertyChanged(nameof(IsLoaded));
+            OnPropertyChanged(nameof(LoadedCharacterCount));
+            OnPropertyChanged(nameof(LoadedSlotSummary));
             Status = "Load failed: " + ex.Message;
         }
     }
@@ -394,6 +399,49 @@ public sealed class SaveEditorViewModel : ObservableObject
                      $"Backup: {_lastBackup}. Reload the save in the game to see the full names.";
         }
         catch (Exception ex) { Status = "Identify failed: " + ex.Message; }
+    }
+
+    // --- generated party ------------------------------------------------------
+    /// <summary>How many characters the loaded save slot holds (0 when nothing is loaded).</summary>
+    public int LoadedCharacterCount => _save?.Characters.Count ?? 0;
+
+    /// <summary>One line describing what a party-generator write would land on.</summary>
+    public string LoadedSlotSummary => _save == null
+        ? "No save folder loaded — load one on the Powers or Inventory tab."
+        : $"Save slot {_save.Slot} in {_save.Folder} — {LoadedCharacterCount} character(s): " +
+          string.Join(", ", Characters.Select(c => c.Name));
+
+    /// <summary>
+    /// Writes generated characters over the loaded slot's characters, in party order, and saves
+    /// each one's .SAV file. Only as many characters as the slot already holds can be replaced —
+    /// the game decides how many party members a save has, and nothing this trainer has decoded
+    /// says where that count lives. Returns the number of records rewritten.
+    /// </summary>
+    public int ApplyGeneratedParty(IReadOnlyList<RolledCharacter> rolled)
+    {
+        if (_save == null) { Status = "Load a save folder first (Powers or Inventory tab)."; return 0; }
+        if (rolled.Count == 0) { Status = "Roll a party first."; return 0; }
+
+        try
+        {
+            if (!ReadyToWrite()) { Status = "Edit cancelled."; return 0; }
+            int n = Math.Min(rolled.Count, Characters.Count);
+            for (int i = 0; i < n; i++)
+            {
+                rolled[i].StampOnto(Characters[i].Model.Record);
+                SaveGame.WriteRecord(Characters[i].Model);
+                Characters[i].Refresh();
+            }
+            OnPropertyChanged(nameof(LoadedSlotSummary));
+            Status = $"Wrote {n} generated character(s) into save slot {_save.Slot}. " +
+                     $"Backup: {_lastBackup}. Load that save in the game to play them." +
+                     (rolled.Count > n
+                        ? $" The slot holds only {n} character(s), so {rolled.Count - n} of the generated " +
+                          "party had nowhere to go."
+                        : "");
+            return n;
+        }
+        catch (Exception ex) { Status = "Party write failed: " + ex.Message; return 0; }
     }
 
     private void DuplicateInventory()

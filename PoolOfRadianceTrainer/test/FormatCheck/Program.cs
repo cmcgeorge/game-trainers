@@ -477,6 +477,777 @@ Check("Kobold Caves is keyed at (30,15)",
 Check("Every wilderness landmark is inside the grid",
       wild.Locations.All(l => l.X >= 0 && l.X < wild.Width && l.Y >= 0 && l.Y < wild.Height), true);
 
+// --- the known-spell block's ordering ------------------------------------------
+// The record flags known spells one byte per spell, but not in the order SpellBook lists them: the
+// game's table is grouped by spell *level* first and school second. START.EXE carries that table
+// verbatim (Bless · Curse · Cure Light Wounds … · Sleep · Find Traps …), and the sample party's elf
+// Fighter/Mage proves it — her four flags decode to four magic-user level-1 spells under this order
+// and to cleric level-2/3 spells under any other, on a character with no cleric level at all.
+Check("Known-spell block covers every spell", SpellBook.InRecordOrder.Count, PorFormat.KnownSpellsLen);
+Check("Known-spell index 0 is Bless (cleric 1)", SpellBook.InRecordOrder[0].Name, "Bless");
+Check("Known-spell index 8 starts the mage level 1s", SpellBook.InRecordOrder[8].Name, "Burning Hands");
+Check("Known-spell index 20 is Sleep", SpellBook.InRecordOrder[20].Name, "Sleep");
+Check("Known-spell index 21 returns to the clerics", SpellBook.InRecordOrder[21].Name, "Find Traps");
+Check("Sleep's index is looked up by school", SpellBook.RecordIndexOf("Mage", "Sleep"), 20);
+Check("Both schools' Detect Magic are distinct",
+      SpellBook.RecordIndexOf("Cleric", "Detect Magic") != SpellBook.RecordIndexOf("Mage", "Detect Magic"), true);
+{
+    var flagged = Enumerable.Range(0, PorFormat.KnownSpellsLen)
+        .Where(i => rhiannon.Bytes[PorFormat.OffKnownSpells + i] != 0)
+        .Select(i => SpellBook.InRecordOrder[i])
+        .ToList();
+    Check("Rhiannon knows four spells", flagged.Count, 4);
+    Check("...all magic-user level 1", flagged.All(s => s is { School: "Mage", Level: 1 }), true);
+    Check("...and they are her starting spell book",
+          string.Join(", ", flagged.Select(s => s.Name)), "Detect Magic, Read Magic, Shield, Sleep");
+}
+
+// --- the party generator ------------------------------------------------------
+// A generated party has to be *legal* (race/class combinations the game offers, ability minimums
+// met, good alignments) and *consistent* (every derived number matching the abilities it was rolled
+// from). The two sample records are the ground truth the derived numbers are anchored to.
+{
+    // Independent copies of the AD&D 1e level-1 rows, so a change to the generator's own tables has
+    // to be made deliberately in two places rather than silently agreeing with itself.
+    var expectedSaves = new Dictionary<int, int[]>
+    {
+        [PorFormat.ClassFighter] = new[] { 14, 15, 16, 17, 17 },
+        [PorFormat.ClassCleric] = new[] { 10, 13, 14, 16, 15 },
+        [PorFormat.ClassMage] = new[] { 14, 13, 11, 15, 12 },
+        [PorFormat.ClassThief] = new[] { 13, 12, 14, 16, 15 },
+    };
+    var expectedThac0 = new Dictionary<int, int>
+    {
+        [PorFormat.ClassFighter] = 20, [PorFormat.ClassCleric] = 20,
+        [PorFormat.ClassMage] = 21, [PorFormat.ClassThief] = 21,
+    };
+    var expectedDie = new Dictionary<int, int>
+    {
+        [PorFormat.ClassFighter] = 10, [PorFormat.ClassCleric] = 8,
+        [PorFormat.ClassMage] = 4, [PorFormat.ClassThief] = 6,
+    };
+    var expectedMinimums = new Dictionary<int, (int Stat, int Min)[]>
+    {
+        [PorFormat.ClassFighter] = new[] { (0, 9), (4, 7) },
+        [PorFormat.ClassCleric] = new[] { (2, 9) },
+        [PorFormat.ClassMage] = new[] { (1, 9) },
+        [PorFormat.ClassThief] = new[] { (3, 9) },
+    };
+    // What each race may be, from the Rule Book's table (docs/strategy-guide.md §2).
+    var allowedClasses = new Dictionary<int, int[]>
+    {
+        [PorFormat.RaceHuman] = new[]
+            { PorFormat.ClassCleric, PorFormat.ClassFighter, PorFormat.ClassMage, PorFormat.ClassThief },
+        [PorFormat.RaceElf] = new[]
+            { PorFormat.ClassFighter, PorFormat.ClassMage, PorFormat.ClassThief, PorFormat.ClassFighterMage,
+              PorFormat.ClassFighterThief, PorFormat.ClassMageThief, PorFormat.ClassFighterMageThief },
+        // Cleric/Thief is deliberately absent: it is a half-orc combination, not a half-elf one.
+        [PorFormat.RaceHalfElf] = new[]
+            { PorFormat.ClassCleric, PorFormat.ClassFighter, PorFormat.ClassMage, PorFormat.ClassThief,
+              PorFormat.ClassClericFighter, PorFormat.ClassClericFighterMage, PorFormat.ClassClericMage,
+              PorFormat.ClassFighterMage, PorFormat.ClassFighterThief,
+              PorFormat.ClassMageThief, PorFormat.ClassFighterMageThief },
+        [PorFormat.RaceDwarf] = new[]
+            { PorFormat.ClassFighter, PorFormat.ClassThief, PorFormat.ClassFighterThief },
+        [PorFormat.RaceGnome] = new[]
+            { PorFormat.ClassFighter, PorFormat.ClassThief, PorFormat.ClassFighterThief },
+        [PorFormat.RaceHalfling] = new[]
+            { PorFormat.ClassFighter, PorFormat.ClassThief, PorFormat.ClassFighterThief },
+    };
+
+    int ConBonus(int con, bool warrior) => con <= 3 ? -2 : con <= 6 ? -1 : con <= 14 ? 0
+        : con == 15 ? 1 : con == 16 ? 2 : con == 17 ? (warrior ? 3 : 2) : (warrior ? 4 : 2);
+    int DexAc(int dex) => dex <= 3 ? -4 : dex == 4 ? -3 : dex == 5 ? -2 : dex == 6 ? -1
+        : dex <= 14 ? 0 : dex == 15 ? 1 : dex == 16 ? 2 : dex == 17 ? 3 : 4;
+    int StrHit(int str, int pct) => str <= 3 ? -3 : str <= 5 ? -2 : str <= 7 ? -1 : str <= 16 ? 0
+        : str == 17 ? 1 : pct <= 50 ? 1 : pct <= 99 ? 2 : 3;
+
+    // 200 parties, so the checks below see every roster pick rather than one lucky draw.
+    var parties = Enumerable.Range(0, 200)
+        .Select(seed => PartyGenerator.Generate(new Random(seed)))
+        .ToList();
+    var everyone = parties.SelectMany(p => p).ToList();
+
+    Check("A party is six characters", parties.All(p => p.Count == 6), true);
+    Check("Names are unique within a party",
+          parties.All(p => p.Select(c => c.Name).Distinct().Count() == p.Count), true);
+    Check("Every character is good-aligned",
+          everyone.All(c => PartyGenerator.GoodAlignments.Contains(c.Alignment)), true);
+    // A thief cannot be lawful good (strategy guide §2), which is the one alignment restriction the
+    // classes Pool of Radiance offers actually carries.
+    Check("No thief is lawful good",
+          everyone.Where(c => c.SingleClasses.Contains(PorFormat.ClassThief)).All(c => c.Alignment != 0), true);
+    Check("Every race/class combination is one the game offers",
+          everyone.All(c => allowedClasses[c.Race].Contains(c.Class)), true);
+    Check("Every party has a fighter, a cleric, a magic-user and a thief",
+          parties.All(p => new[] { PorFormat.ClassFighter, PorFormat.ClassCleric, PorFormat.ClassMage, PorFormat.ClassThief }
+                            .All(cls => p.Any(c => c.SingleClasses.Contains(cls)))), true);
+    Check("The front of the marching order is a fighter",
+          parties.All(p => p[0].SingleClasses.Contains(PorFormat.ClassFighter)), true);
+
+    Check("Ability scores are in range",
+          everyone.All(c => c.Stats.Length == PorFormat.StatCount && c.Stats.All(v => v >= 3 && v <= 18)), true);
+    Check("Every class minimum is met",
+          everyone.All(c => c.SingleClasses.All(cls =>
+              expectedMinimums[cls].All(m => c.Stats[m.Stat] >= m.Min))), true);
+    // Exceptional Strength belongs to fighters at Strength 18 alone, and a female fighter's tops
+    // out at 18/50 (strategy guide §2).
+    Check("Exceptional Strength only for fighters at STR 18",
+          everyone.All(c => c.StrengthPercent == 0 ||
+              (c.Stats[0] == 18 && c.SingleClasses.Contains(PorFormat.ClassFighter))), true);
+    Check("Female exceptional Strength caps at 18/50",
+          everyone.All(c => c.Gender == 0 || c.StrengthPercent <= 50), true);
+    Check("STR% is in range", everyone.All(c => c.StrengthPercent is >= 0 and <= 100), true);
+
+    Check("Level 1 in each of the character's classes",
+          everyone.All(c => Enumerable.Range(0, PorFormat.ClassLevelCount)
+              .All(i => c.ClassLevels[i] == (c.SingleClasses.Contains(i) ? 1 : 0))), true);
+    Check("Hit points are the averaged maximum die plus the Constitution bonus",
+          everyone.All(c =>
+          {
+              int rolled = Math.Max(1, c.SingleClasses.Sum(cls => expectedDie[cls]) / c.SingleClasses.Length);
+              int hp = Math.Max(1, rolled + ConBonus(c.Stats[4], c.SingleClasses.Contains(PorFormat.ClassFighter)));
+              return c.HpRolled == rolled && c.HpMax == hp;
+          }), true);
+    Check("THAC0 is the class base less the Strength bonus to hit",
+          everyone.All(c => c.Thac0Base == c.SingleClasses.Min(cls => expectedThac0[cls]) &&
+                            c.Thac0 == c.Thac0Base - StrHit(c.Stats[0], c.StrengthPercent)), true);
+    Check("Armor Class is the unarmored 10 less the Dexterity adjustment",
+          everyone.All(c => c.ArmorClassBase == PartyGenerator.UnarmoredAc &&
+                            c.ArmorClass == PartyGenerator.UnarmoredAc - DexAc(c.Stats[3])), true);
+    Check("A multiclass saves as its best class in every category",
+          everyone.All(c => Enumerable.Range(0, PorFormat.SavesLen)
+              .All(i => c.Saves[i] == c.SingleClasses.Min(cls => expectedSaves[cls][i]))), true);
+    Check("Only thieves have thief skills",
+          everyone.All(c => c.SingleClasses.Contains(PorFormat.ClassThief)
+              ? c.ThiefSkills.Any(v => v > 0)
+              : c.ThiefSkills.All(v => v == 0)), true);
+    Check("Thief skills are percentages",
+          everyone.All(c => c.ThiefSkills.All(v => v is >= 0 and <= 95)), true);
+    // Sleep is the spell the early game is won with, so every generated magic-user starts with it.
+    Check("Every magic-user knows Sleep and Magic Missile",
+          everyone.Where(c => c.SingleClasses.Contains(PorFormat.ClassMage))
+              .All(c => c.KnownSpells[SpellBook.RecordIndexOf("Mage", "Sleep")] &&
+                        c.KnownSpells[SpellBook.RecordIndexOf("Mage", "Magic Missile")]), true);
+    Check("A magic-user starts with four level-1 spells",
+          everyone.Where(c => c.SingleClasses.Contains(PorFormat.ClassMage) && !c.SingleClasses.Contains(PorFormat.ClassCleric))
+              .All(c => c.KnownSpells.Count(k => k) == 4), true);
+    Check("A magic-user knows nothing above level 1",
+          everyone.Where(c => c.SingleClasses.Contains(PorFormat.ClassMage))
+              .All(c => Enumerable.Range(0, PorFormat.KnownSpellsLen)
+                  .All(i => !c.KnownSpells[i] || SpellBook.InRecordOrder[i].Level == 1)), true);
+    Check("Non-casters know no spells",
+          everyone.Where(c => !c.SingleClasses.Contains(PorFormat.ClassMage) && !c.SingleClasses.Contains(PorFormat.ClassCleric))
+              .All(c => c.KnownSpells.All(k => !k) && c.ClericSlots.All(s => s == 0) && c.MageSlots.All(s => s == 0)), true);
+    Check("A magic-user gets its one spell a day", everyone
+              .Where(c => c.SingleClasses.Contains(PorFormat.ClassMage)).All(c => c.MageSlots[0] == 1), true);
+    // A level-1 cleric gets one spell from its class and up to two more from Wisdom — which is why
+    // the roller deals Wisdom the best roll for a cleric.
+    Check("A cleric's spells a day are its class slot plus its Wisdom bonus", everyone
+              .Where(c => c.SingleClasses.Contains(PorFormat.ClassCleric))
+              .All(c => c.ClericSlots[0] == 1 + (c.Stats[2] <= 12 ? 0 : c.Stats[2] == 13 ? 1 : 2)), true);
+    Check("...so every generated cleric can actually cast something", everyone
+              .Where(c => c.SingleClasses.Contains(PorFormat.ClassCleric)).All(c => c.ClericSlots[0] >= 1), true);
+
+    // Same seed, same party — the preview a user sees must be the party that gets written.
+    var a = PartyGenerator.Generate(new Random(4242));
+    var b = PartyGenerator.Generate(new Random(4242));
+    Check("Generation is deterministic for a seed",
+          a.Zip(b).All(p => p.First.Name == p.Second.Name && p.First.Class == p.Second.Class &&
+                            p.First.Stats.SequenceEqual(p.Second.Stats)), true);
+
+    // A short party drops the second fighter and the support caster, not the roles that carry the game.
+    var four = PartyGenerator.Generate(new Random(7), 4);
+    Check("A four-character party is four characters", four.Count, 4);
+    Check("...and still covers all four classes",
+          new[] { PorFormat.ClassFighter, PorFormat.ClassCleric, PorFormat.ClassMage, PorFormat.ClassThief }
+              .All(cls => four.Any(c => c.SingleClasses.Contains(cls))), true);
+    Check("A one-character party is a fighter",
+          PartyGenerator.Generate(new Random(7), 1)[0].SingleClasses.Contains(PorFormat.ClassFighter), true);
+    Check("Party size is clamped to what the game allows",
+          PartyGenerator.Generate(new Random(7), 99).Count, PartyGenerator.MaxParty);
+
+    // Anchor the derived numbers to the two records captured from the running game: a generated
+    // level-1 fighter and Fighter/Mage must come out carrying what the real ones do.
+    var genFighter = everyone.First(c => c.Class == PorFormat.ClassFighter);
+    Check("A generated fighter's THAC0 base matches Thrender's", genFighter.Thac0Base, thrender.Thac0Base);
+    Check("...and its saving throws do too",
+          genFighter.Saves.SequenceEqual(Enumerable.Range(0, PorFormat.SavesLen).Select(thrender.GetSave)), true);
+    Check("...and its movement", genFighter.Movement, thrender.Bytes[PorFormat.OffMovementBase]);
+
+    var genFighterMage = everyone.First(c => c.Class == PorFormat.ClassFighterMage);
+    Check("A generated Fighter/Mage's THAC0 base matches Rhiannon's", genFighterMage.Thac0Base, rhiannon.Thac0Base);
+    Check("...and its saving throws do too",
+          genFighterMage.Saves.SequenceEqual(Enumerable.Range(0, PorFormat.SavesLen).Select(rhiannon.GetSave)), true);
+    // Rhiannon has 7 HP at Constitution 14 — a maximised d10 and d4 averaged, with no bonus.
+    Check("...and so do its hit points at her Constitution",
+          everyone.First(c => c.Class == PorFormat.ClassFighterMage && c.Stats[4] <= 14).HpMax, rhiannon.HpMax);
+
+    // --- stamping a generated character into a record --------------------------
+    Check("Written ranges are ordered, non-overlapping and inside the record", Enumerable
+        .Range(0, RolledCharacter.WrittenRanges.Length)
+        .All(i =>
+        {
+            var (off, len) = RolledCharacter.WrittenRanges[i];
+            bool ok = off >= 0 && len > 0 && off + len <= PorFormat.RecordSize;
+            if (i > 0)
+            {
+                var (prevOff, prevLen) = RolledCharacter.WrittenRanges[i - 1];
+                ok &= prevOff + prevLen <= off;
+            }
+            return ok;
+        }), true);
+
+    var hero = PartyGenerator.Generate(new Random(99))[0];
+    var sheet = thrender.Clone();
+    hero.StampOnto(sheet);
+
+    // What the generator must NOT touch: the sheet's possessions and the game's own pointers.
+    Check("Stamping leaves the money alone", sheet.Gold == thrender.Gold && sheet.Platinum == thrender.Platinum &&
+          sheet.GetMoney(1) == thrender.GetMoney(1) && sheet.Gems == thrender.Gems, true);
+    Check("Stamping leaves the carried items alone",
+          sheet.Bytes[PorFormat.OffNumberOfItems], thrender.Bytes[PorFormat.OffNumberOfItems]);
+    Check("Stamping leaves the item-list pointer alone",
+          sheet.Bytes.Skip(PorFormat.OffItemsPtr).Take(4).SequenceEqual(thrender.Bytes.Skip(PorFormat.OffItemsPtr).Take(4)), true);
+    Check("Stamping leaves the equipped-item pointers alone",
+          sheet.Bytes.Skip(PorFormat.OffEquipWeapon).Take(52).SequenceEqual(thrender.Bytes.Skip(PorFormat.OffEquipWeapon).Take(52)), true);
+    Check("Stamping leaves the effects pointer alone",
+          sheet.Bytes.Skip(PorFormat.OffEffectsPtr).Take(4).SequenceEqual(thrender.Bytes.Skip(PorFormat.OffEffectsPtr).Take(4)), true);
+    Check("Stamping leaves the party linked-list pointer alone",
+          sheet.Bytes.Skip(PorFormat.OffNextCharPtr).Take(4).SequenceEqual(thrender.Bytes.Skip(PorFormat.OffNextCharPtr).Take(4)), true);
+    Check("Stamping leaves encumbrance alone",
+          sheet.Bytes.Skip(PorFormat.OffEncumbrance).Take(2).SequenceEqual(thrender.Bytes.Skip(PorFormat.OffEncumbrance).Take(2)), true);
+    Check("Stamping leaves the combat icon alone",
+          Enumerable.Range(0, PorFormat.IconColorLen).All(i => sheet.GetIconColor(i) == thrender.GetIconColor(i)) &&
+          sheet.Bytes[PorFormat.OffIconSize] == thrender.Bytes[PorFormat.OffIconSize], true);
+    // The declared ranges are what the live edit pokes into the running game, so a byte that changes
+    // outside them would be a change the game never sees.
+    Check("Nothing changes outside the declared ranges", Enumerable
+        .Range(0, PorFormat.RecordSize)
+        .All(o => sheet.Bytes[o] == thrender.Bytes[o] ||
+                  RolledCharacter.WrittenRanges.Any(r => o >= r.Offset && o < r.Offset + r.Length)), true);
+
+    // And what it must write: the record has to read back as the character that was rolled.
+    Check("Stamped name", sheet.Name, hero.Name);
+    Check("Stamped race", sheet.Race, hero.Race);
+    Check("Stamped class", sheet.Class, hero.Class);
+    Check("Stamped alignment", sheet.Alignment, hero.Alignment);
+    Check("Stamped gender", sheet.Gender, hero.Gender);
+    Check("Stamped age", sheet.Age, hero.Age);
+    Check("Stamped abilities",
+          Enumerable.Range(0, PorFormat.StatCount).All(i => sheet.GetStat(i) == hero.Stats[i]), true);
+    Check("Stamped exceptional Strength", sheet.StrengthPercent, hero.StrengthPercent);
+    Check("Stamped hit points", $"{sheet.HpCurrent}/{sheet.HpMax}", $"{hero.HpMax}/{hero.HpMax}");
+    Check("Stamped rolled hit points", sheet.HpRolled, hero.HpRolled);
+    Check("Stamped AC (effective and base)", $"{sheet.ArmorClass}/{sheet.ArmorClassBase}",
+          $"{hero.ArmorClass}/{hero.ArmorClassBase}");
+    Check("Stamped THAC0 (effective and base)", $"{sheet.Thac0}/{sheet.Thac0Base}", $"{hero.Thac0}/{hero.Thac0Base}");
+    Check("Stamped saving throws",
+          Enumerable.Range(0, PorFormat.SavesLen).All(i => sheet.GetSave(i) == hero.Saves[i]), true);
+    Check("Stamped thief skills",
+          Enumerable.Range(0, PorFormat.ThiefSkillsLen).All(i => sheet.GetThiefSkill(i) == hero.ThiefSkills[i]), true);
+    Check("Stamped class levels",
+          Enumerable.Range(0, PorFormat.ClassLevelCount).All(i => sheet.GetClassLevel(i) == hero.ClassLevels[i]), true);
+    // A generated character replaces whoever held the slot, so its class bitmask must be rewritten
+    // too — the same byte a class change has to carry.
+    Check("Stamped class bitmask",
+          sheet.Bytes[PorFormat.OffClassMask], (byte)ClassTables.ClassMaskFor(hero.Class));
+    Check("Stamped known spells", Enumerable.Range(0, PorFormat.KnownSpellsLen)
+          .All(i => (sheet.Bytes[PorFormat.OffKnownSpells + i] != 0) == hero.KnownSpells[i]), true);
+    Check("Stamped a fresh experience total", sheet.Experience, 0L);
+    Check("Stamped status Okay", sheet.Status, 0);
+    Check("Stamped level and attack level",
+          $"{sheet.Bytes[PorFormat.OffLevelHighest]}/{sheet.Bytes[PorFormat.OffAttackLevel]}", "1/1");
+    Check("Stamped movement",
+          $"{sheet.Bytes[PorFormat.OffMovementBase]}/{sheet.Bytes[PorFormat.OffMovementCur]}",
+          $"{hero.Movement}/{hero.Movement}");
+    // The sheet's previous occupant may have been drained by undead, or have had spells memorized
+    // that the new character's class can't cast.
+    Check("Stamping clears any level drain",
+          sheet.Bytes[PorFormat.OffDrainedLevels] == 0 && sheet.Bytes[PorFormat.OffDrainedHp] == 0 &&
+          sheet.Bytes[PorFormat.OffUndeadLevel] == 0, true);
+    Check("Stamping clears the memorized spells", Enumerable
+        .Range(0, PorFormat.MemorizedSpellsLen)
+        .All(i => sheet.Bytes[PorFormat.OffMemorizedSpells + i] == 0), true);
+    // The poll loop only adopts a re-read record when it is still the same creature, so a stamped
+    // sheet has to read as somebody new — otherwise the trainer would keep showing the old character.
+    Check("A stamped sheet is a different creature", thrender.IsSameCreatureAs(sheet), false);
+    Check("...and still passes the record signature", CharacterSignature.Looks(sheet.Bytes, 0), true);
+    Check("...and reads as a live party member, not a monster",
+          sheet.LooksLikeLiveCombatant && !sheet.LooksLikeMonster, true);
+
+    // --- writing a generated party into save files -----------------------------
+    // The offline path end to end: load a save folder, stamp a generated party over its characters,
+    // write the .SAV files, and load them again. What comes back has to be the party that was
+    // rolled — and the files have to stay the size the game wrote them.
+    {
+        string dir = Path.Combine(Path.GetTempPath(), "por-partygen-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllBytes(Path.Combine(dir, "CHRDATA1.SAV"), thrender.Bytes);
+            File.WriteAllBytes(Path.Combine(dir, "CHRDATA2.SAV"), rhiannon.Bytes);
+
+            var save = SaveGame.Load(dir);
+            Check("The save folder loads both characters", save.Characters.Count, 2);
+
+            var rolled = PartyGenerator.Generate(new Random(2024), 2);
+            for (int i = 0; i < save.Characters.Count; i++)
+            {
+                rolled[i].StampOnto(save.Characters[i].Record);
+                SaveGame.WriteRecord(save.Characters[i]);
+            }
+
+            var reloaded = SaveGame.Load(dir);
+            Check("The rewritten save still holds both characters", reloaded.Characters.Count, 2);
+            Check("...whose names came back as rolled",
+                  string.Join(", ", reloaded.Characters.Select(c => c.Name)),
+                  string.Join(", ", rolled.Select(c => c.Name)));
+            Check("...with their classes",
+                  reloaded.Characters.Select(c => c.Record.Class).SequenceEqual(rolled.Select(c => c.Class)), true);
+            Check("...their abilities",
+                  reloaded.Characters.Zip(rolled).All(p => Enumerable.Range(0, PorFormat.StatCount)
+                      .All(i => p.First.Record.GetStat(i) == p.Second.Stats[i])), true);
+            Check("...and their hit points",
+                  reloaded.Characters.Zip(rolled).All(p => p.First.Record.HpMax == p.Second.HpMax &&
+                                                           p.First.Record.HpCurrent == p.Second.HpMax), true);
+            Check("The .SAV file is still one record long",
+                  new FileInfo(Path.Combine(dir, "CHRDATA1.SAV")).Length, (long)PorFormat.RecordSize);
+            // The record the game keeps its own bookkeeping in must survive the rewrite intact.
+            Check("The rewritten record keeps the slot's money",
+                  reloaded.Characters[0].Record.GetMoney(1), thrender.GetMoney(1));
+        }
+        finally { try { Directory.Delete(dir, recursive: true); } catch { /* temp dir */ } }
+    }
+
+    // Class byte constants must keep pointing at the classes they are named for.
+    Check("Class constants match the class table",
+          PorFormat.Classes[PorFormat.ClassFighterMage] == "Fighter/Mage" &&
+          PorFormat.Classes[PorFormat.ClassClericFighterMage] == "Cleric/Fighter/Mage" &&
+          PorFormat.Classes[PorFormat.ClassThief] == "Thief", true);
+    Check("Race constants match the race table",
+          PorFormat.Races[PorFormat.RaceHalfElf] == "Half-Elf" && PorFormat.Races[PorFormat.RaceHuman] == "Human", true);
+    // The class-level bytes are indexed by the same numbers as the single-class values, which is
+    // what lets a multiclass write its levels straight from its class list.
+    Check("Class bytes double as class-level indices",
+          PorFormat.ClassLevelNames[PorFormat.ClassCleric] == "Cleric" &&
+          PorFormat.ClassLevelNames[PorFormat.ClassFighter] == "Fighter" &&
+          PorFormat.ClassLevelNames[PorFormat.ClassMage] == "Mage" &&
+          PorFormat.ClassLevelNames[PorFormat.ClassThief] == "Thief", true);
+}
+
+// --- a level-5 fighter, verbatim from a real saved game -----------------------
+// ALTHARION — the 285-byte CHRDATA1.SAV of a GOG install's own save. The two dump records above are
+// both level 1, so nothing in them could tell a per-level table from a constant; this one is level
+// 5 and pins the other end of the line. Its THAC0 base of 16 is four points better than the level-1
+// fighter's 20, four levels up, and its saving throws are the fighter level-5 row exactly.
+const string AltharionHex =
+    "09414C54484152494F4E000000000000120E0C0D0E0F59000000000000000000000000000000000000000000002C0702130019000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000005010B0C0D0D0E0C0500000000000000000000000000000000000000000000000000000000B1020200050000000500000000000000000200010002000000320136578500000819000000000000000000010100000002817C2AA516CA0F08004A3E0000263E0800183E0800423E0000000000000000000000000000000000000000000000000000000000000000000000000000000002006E06000000000000000000010000303A360100010006000700190C";
+
+var altharion = new CharacterRecord(FromHex(AltharionHex));
+Check("Altharion name", altharion.Name, "ALTHARION");
+Check("Altharion race", altharion.RaceName, "Human");
+Check("Altharion class", altharion.ClassName, "Fighter");
+Check("Altharion is level 5", altharion.GetClassLevel(PorFormat.ClassFighter), 5);
+Check("...and the level byte agrees", altharion.Bytes[PorFormat.OffLevelHighest], (byte)5);
+Check("...as does the attack level", altharion.Bytes[PorFormat.OffAttackLevel], (byte)5);
+Check("Altharion STR 18/89", altharion.StrengthDisplay, "18/89");
+Check("Altharion HP", $"{altharion.HpCurrent}/{altharion.HpMax}", "25/25");
+Check("Altharion XP", altharion.Experience, 34135L);
+Check("Altharion THAC0 base", altharion.Thac0Base, 16);
+Check("Altharion AC base is the unarmored 10", altharion.ArmorClassBase, 10);
+Check("Altharion movement", altharion.Bytes[PorFormat.OffMovementBase], (byte)12);
+Check("Altharion carries no thief skills",
+      Enumerable.Range(0, PorFormat.ThiefSkillsLen).All(i => altharion.GetThiefSkill(i) == 0), true);
+
+// --- the class bitmask at 0xB0 ------------------------------------------------
+// The rest of the bundled sample party, verbatim from the game's own CHRDATAn.SAV files. Thrender
+// and Rhiannon (above) are a fighter and a Fighter/Mage; these four complete the six and, between
+// them, cover every class combination the party has — which is what identifies 0xB0.
+//
+// The byte was undecoded until a caster was diffed against a non-caster to see what a class change
+// might be missing. It is a bitmask: mage 0x01, cleric 0x02, thief 0x04, fighter 0x08. Checked
+// against 71 character records found across four save folders, in 15 distinct characters covering
+// six class combinations, it matches the class-level bytes every single time.
+const string BakshiHex =
+    "0642414B5348490000000000000000001210110E0C0C5A00000000000000000000000000000000000303051500280409300007010101010101010100000100000000000001010001000000000000000000000000000000000000000000000000000000000000000000000001010A0D0B0F0C0C0100000000000000000000000D00014F00000100000000240000000000020000000000010001000001000000000602000100020000003201B30A0000000B050300000100000000000B050911010291A2B3C4E6F7020F00F94E0F00F94E000000000E00FD4E0000000000000000000000000000000000000000000000000000000000000000000000000000000002007E0209003A4F00000000000100002A3836000001000A0004000709";
+const string BrotherSeanHex =
+    "0C42524F54484552205345414E000000100C110F1012000000000000000000000000000000000000000103030028070016000A010101010101010100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001010A0D0E100F0C0100000000000000000000000000000000000100000000240000000000020000000000010000000000000000000002000100020000003201FA2000000002050300000000000000000304051A030291A2B3C4E6F7030100D04F0100D04F0F00D74F0000D44F0000000000000000000000000000000000000000000000000000000000000000000000000000000002007E020E00DB4F0000000000010000283A3601000100060002000A06";
+const string DarkstarHex =
+    "084441524B53544152000000000000000C120B110F0E00000000000000000000000000000000000000000015002807051B0005000000000000000000000100000000000001010001000000000000000000000000000000000000000000000000000000000000000000000001010E0D0B0F0C0C010000000000000000000000000000000000010000000024000000000002000000000000000000000100000100030200010002000000320155200000000103000000010000000000060A091D040291A2B3C4E6F7010E0021500E00215000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001005D000D00255000000000000100002835300300010003000000050C";
+const string PhineasHex =
+    "075048494E4541530000000000000000100C0A120E1000000000000000000000000000000000000000000000002805062E0006000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001010D0C0E100F0C010000002D2D1E23230F46000A003750000001000000002400000000000100000000000000000000000100000001020001000200000032017E20000000040600000000000000000001060D05050191A2B3C4E6F7030D0068500D006850000000000B007050000000000000000000000000000000000000000000000000000000000000000000000000000000000100D9000000000000000000000100002838320300010004000100060C";
+
+var bakshi = new CharacterRecord(FromHex(BakshiHex));
+var brotherSean = new CharacterRecord(FromHex(BrotherSeanHex));
+var darkstar = new CharacterRecord(FromHex(DarkstarHex));
+var phineas = new CharacterRecord(FromHex(PhineasHex));
+
+Check("Bakshi is a Cleric/Fighter/Mage", $"{bakshi.Name} {bakshi.RaceName} {bakshi.ClassName}", "BAKSHI Half-Elf Cleric/Fighter/Mage");
+Check("Brother Sean is a cleric", $"{brotherSean.Name} {brotherSean.ClassName}", "BROTHER SEAN Cleric");
+Check("Darkstar is a magic-user", $"{darkstar.Name} {darkstar.ClassName}", "DARKSTAR Mage");
+Check("Phineas is a thief", $"{phineas.Name} {phineas.RaceName} {phineas.ClassName}", "PHINEAS Halfling Thief");
+
+// One bit per class, and a multiclass carries the union of its classes' bits.
+Check("Mage bit", darkstar.Bytes[PorFormat.OffClassMask], (byte)0x01);
+Check("Cleric bit", brotherSean.Bytes[PorFormat.OffClassMask], (byte)0x02);
+Check("Thief bit", phineas.Bytes[PorFormat.OffClassMask], (byte)0x04);
+Check("Fighter bit", thrender.Bytes[PorFormat.OffClassMask], (byte)0x08);
+Check("Fighter/Mage is the two bits together", rhiannon.Bytes[PorFormat.OffClassMask], (byte)0x09);
+Check("Cleric/Fighter/Mage is the three", bakshi.Bytes[PorFormat.OffClassMask], (byte)0x0B);
+Check("A level-5 fighter carries the same fighter bit", altharion.Bytes[PorFormat.OffClassMask], (byte)0x08);
+
+// Every record decoded here must agree with the mask its own class byte implies — the mask is
+// derived from the class, so a character whose two disagreed would break the whole reading.
+Check("Every record's mask matches its class byte",
+      new[] { thrender, rhiannon, altharion, bakshi, brotherSean, darkstar, phineas }
+          .All(r => r.Bytes[PorFormat.OffClassMask] == ClassTables.ClassMaskFor(r.Class)), true);
+// ...and its per-class level bytes, which is the same claim read the other way round.
+Check("...and the classes its level bytes name",
+      new[] { thrender, rhiannon, altharion, bakshi, brotherSean, darkstar, phineas }
+          .All(r => r.Bytes[PorFormat.OffClassMask] == ClassTables.ClassMask(
+              Enumerable.Range(0, PorFormat.ClassLevelCount).Where(i => r.GetClassLevel(i) > 0))), true);
+
+// --- spells per day, solved from real casters ---------------------------------
+// Two more characters from another saved game: the only level-6 casters available, and the only
+// evidence for the top of either table. Between these and the two level-1 casters above, the class
+// rows and the Wisdom bonus are determined rather than assumed — which is how the reference table
+// in ClassRaceBook was found to be wrong (its cleric column was a level out, and its magic-user
+// column wrong at 5 and 6).
+const string AlfredHex =
+    "06414C4652454400000000000000000012121212111264000000000000000003030303031717171717292929002A070013002401010101010101010000000000000000000000000001010101010101000000000000000101010101010101010000000000000000000000000101090C0D0F0E0C06000000000000000000000006000F4500000100000000000000000000ED00130008000600000000000000000000020001000200000032014C79830500021505050300000000000002040004020291A2B3C4E6F70A0000E8440000E8440A00FF440E00EF440900034500000000000000000000000000000000000000000D00F3440C00F74400000000000000000200E2030800104500000000000100002F423901000100060009002409";
+const string TarryHex =
+    "0554415252590000000000000000000012121212120E64000000000000000000000000000F0F0F0F21222F33002907051C001C000000000000000001000100000001000001010001000000000000000000010101010000000000000000000001000101000101000000010001010D0B090D0A0C0600000000000000000000000500704500000100000000000000000000EC0013000800000000000006000001000002000100020000003201B438D70500010F000000040202000000090A061C040291A2B3C4E6F70A0F00484500000000000000000000000006006C4500000000000000000000000007006845000000000B005845080064450000000000000000010034060E00704500000000000100002C423C01000100020006001C0C";
+
+var alfred = new CharacterRecord(FromHex(AlfredHex));
+var tarry = new CharacterRecord(FromHex(TarryHex));
+Check("Alfred is a level-6 cleric",
+      $"{alfred.ClassName} {alfred.GetClassLevel(PorFormat.ClassCleric)} WIS {alfred.Wisdom}", "Cleric 6 WIS 18");
+Check("Tarry is a level-6 magic-user",
+      $"{tarry.ClassName} {tarry.GetClassLevel(PorFormat.ClassMage)}", "Mage 6");
+Check("Alfred's class bit", alfred.Bytes[PorFormat.OffClassMask], (byte)0x02);
+Check("Tarry's class bit", tarry.Bytes[PorFormat.OffClassMask], (byte)0x01);
+
+// Each caster's stored spells a day must come back out of the tables exactly.
+string Slots(CharacterRecord r, int off) => $"{r.Bytes[off]}/{r.Bytes[off + 1]}/{r.Bytes[off + 2]}";
+Check("Level-1 cleric, Wisdom 17 (Brother Sean)",
+      string.Join("/", ClassTables.ClericSlots(1, brotherSean.Wisdom)), Slots(brotherSean, PorFormat.OffClericSlots));
+Check("Level-1 cleric of a Cleric/Fighter/Mage (Bakshi)",
+      string.Join("/", ClassTables.ClericSlots(1, bakshi.Wisdom)), Slots(bakshi, PorFormat.OffClericSlots));
+Check("Level-6 cleric, Wisdom 18 (Alfred)",
+      string.Join("/", ClassTables.ClericSlots(6, alfred.Wisdom)), Slots(alfred, PorFormat.OffClericSlots));
+Check("Level-1 magic-user (Darkstar)",
+      string.Join("/", ClassTables.MageSlots(1)), Slots(darkstar, PorFormat.OffMageSlots));
+Check("Level-1 magic-user of a Cleric/Fighter/Mage (Bakshi)",
+      string.Join("/", ClassTables.MageSlots(1)), Slots(bakshi, PorFormat.OffMageSlots));
+Check("Level-6 magic-user (Tarry)",
+      string.Join("/", ClassTables.MageSlots(6)), Slots(tarry, PorFormat.OffMageSlots));
+// A level-1 cleric gets one spell from its class and the rest from Wisdom — the row this trainer
+// used to show as none at all. Wisdom's 2nd and 3rd-level bonus spells wait for the levels that
+// can cast them, which is what Brother Sean's 3/0/0 at Wisdom 17 shows.
+Check("A level-1 cleric's own class slot",
+      string.Join("/", ClassTables.ClericSlots(1, 9)), "1/0/0");
+Check("Wisdom's higher bonuses wait for the levels that can cast them",
+      string.Join("/", ClassTables.ClericSlots(1, 18)), "3/0/0");
+Check("...and arrive with them", string.Join("/", ClassTables.ClericSlots(5, 18)), "5/5/2");
+// The displayed reference table must say the same thing as the table the trainer computes from.
+Check("The Rules tab's cleric row matches the computed slots",
+      ClassRaceBook.LevelProgression.First(r => r.Level == 6).ClericSpells,
+      string.Join("/", ClassTables.ClericSlots(6, 9)));
+Check("The Rules tab's magic-user row matches too",
+      ClassRaceBook.LevelProgression.First(r => r.Level == 6).MageSpells,
+      string.Join("/", ClassTables.MageSlots(6)));
+
+// Brother Sean also shows how a cleric's spell book is stored: it knows every cleric spell of the
+// levels it can cast, which is what a class change to cleric writes.
+Check("Brother Sean's spells a day",
+      brotherSean.Bytes[PorFormat.OffClericSlots], (byte)3);
+Check("...and he knows every cleric level-1 spell",
+      Enumerable.Range(0, PorFormat.KnownSpellsLen)
+          .Count(i => brotherSean.Bytes[PorFormat.OffKnownSpells + i] != 0), 8);
+Check("...all of them cleric level 1",
+      Enumerable.Range(0, PorFormat.KnownSpellsLen)
+          .Where(i => brotherSean.Bytes[PorFormat.OffKnownSpells + i] != 0)
+          .All(i => SpellBook.InRecordOrder[i] is { School: "Cleric", Level: 1 }), true);
+// Which is exactly what a class change to cleric writes — the game does it this way itself.
+Check("A generated cleric's spell book matches the real one's shape",
+      ClassChange.Plan(brotherSean.Clone(), PorFormat.ClassCleric).KnownSpells
+          .Select((k, i) => k == (brotherSean.Bytes[PorFormat.OffKnownSpells + i] != 0)).All(same => same), true);
+Check("Darkstar the level-1 mage knows four spells",
+      Enumerable.Range(0, PorFormat.KnownSpellsLen)
+          .Count(i => darkstar.Bytes[PorFormat.OffKnownSpells + i] != 0), 4);
+Check("...and has one spell a day", darkstar.Bytes[PorFormat.OffMageSlots], (byte)1);
+
+// --- the class/race tables ----------------------------------------------------
+// The two fighter anchors are four levels apart, so a wrong per-level rule cannot satisfy both.
+Check("Fighter THAC0 at level 1 matches Thrender", ClassTables.Thac0(PorFormat.ClassFighter, 1), thrender.Thac0Base);
+Check("Fighter THAC0 at level 5 matches Altharion", ClassTables.Thac0(PorFormat.ClassFighter, 5), altharion.Thac0Base);
+Check("Fighter saves at level 1 match Thrender",
+      ClassTables.Saves(PorFormat.ClassFighter, 1).SequenceEqual(
+          Enumerable.Range(0, PorFormat.SavesLen).Select(thrender.GetSave)), true);
+Check("Fighter saves at level 5 match Altharion",
+      ClassTables.Saves(PorFormat.ClassFighter, 5).SequenceEqual(
+          Enumerable.Range(0, PorFormat.SavesLen).Select(altharion.GetSave)), true);
+// A multiclass takes the best of its classes in each category, which is what Rhiannon carries.
+Check("Fighter/Mage saves match Rhiannon",
+      ClassTables.SavesFor(new[] { PorFormat.ClassFighter, PorFormat.ClassMage }, new[] { 1, 1 })
+          .SequenceEqual(Enumerable.Range(0, PorFormat.SavesLen).Select(rhiannon.GetSave)), true);
+Check("Fighter/Mage THAC0 base matches Rhiannon",
+      Math.Min(ClassTables.Thac0(PorFormat.ClassFighter, 1), ClassTables.Thac0(PorFormat.ClassMage, 1)),
+      rhiannon.Thac0Base);
+// Saving throws improve (or hold) with level, never worsen — a transcription slip in a row would
+// usually break this before it broke anything else.
+Check("Saving throws never get worse with level", ClassTables.BaseClasses.All(cls =>
+    Enumerable.Range(2, ClassTables.MaxLevel - 1).All(l =>
+        ClassTables.Saves(cls, l).Zip(ClassTables.Saves(cls, l - 1)).All(p => p.First <= p.Second))), true);
+Check("THAC0 never gets worse with level", ClassTables.BaseClasses.All(cls =>
+    Enumerable.Range(2, ClassTables.MaxLevel - 1).All(l =>
+        ClassTables.Thac0(cls, l) <= ClassTables.Thac0(cls, l - 1))), true);
+Check("Thief skills never get worse with level",
+    Enumerable.Range(2, ClassTables.MaxLevel - 1).All(l =>
+        ClassTables.ThiefSkillBase(l).Zip(ClassTables.ThiefSkillBase(l - 1)).All(p => p.First >= p.Second)), true);
+
+// Level caps: the lower of the racial limit and the training hall's.
+Check("Elf fighters stop at 7", ClassTables.LevelCap(PorFormat.RaceElf, PorFormat.ClassFighter), 7);
+Check("Dwarf fighters stop at the hall's 8", ClassTables.LevelCap(PorFormat.RaceDwarf, PorFormat.ClassFighter), 8);
+Check("Halfling fighters stop at 6", ClassTables.LevelCap(PorFormat.RaceHalfling, PorFormat.ClassFighter), 6);
+Check("Half-elf clerics stop at 5", ClassTables.LevelCap(PorFormat.RaceHalfElf, PorFormat.ClassCleric), 5);
+Check("Human clerics stop at the hall's 6", ClassTables.LevelCap(PorFormat.RaceHuman, PorFormat.ClassCleric), 6);
+Check("Thieves have no racial ceiling below the hall's 9",
+      ClassTables.LevelCap(PorFormat.RaceHalfling, PorFormat.ClassThief), 9);
+Check("A dwarf cannot be a magic-user at all", ClassTables.LevelCap(PorFormat.RaceDwarf, PorFormat.ClassMage), 0);
+Check("An elf cannot be a cleric at all", ClassTables.CanTake(PorFormat.RaceElf, PorFormat.ClassCleric), false);
+Check("A multiclass stops at its shortest cap",
+      ClassTables.LevelCapFor(PorFormat.RaceHalfElf,
+          new[] { PorFormat.ClassCleric, PorFormat.ClassFighter, PorFormat.ClassMage }), 5);
+
+// Race legality, entered a second time from the Rule Book's table so the two have to agree.
+{
+    var expectedLegal = new Dictionary<int, int[]>
+    {
+        [PorFormat.RaceHuman] = new[]
+            { PorFormat.ClassCleric, PorFormat.ClassFighter, PorFormat.ClassMage, PorFormat.ClassThief },
+        [PorFormat.RaceElf] = new[]
+            { PorFormat.ClassFighter, PorFormat.ClassMage, PorFormat.ClassThief, PorFormat.ClassFighterMage,
+              PorFormat.ClassFighterThief, PorFormat.ClassFighterMageThief, PorFormat.ClassMageThief },
+        [PorFormat.RaceHalfElf] = new[]
+            { PorFormat.ClassCleric, PorFormat.ClassFighter, PorFormat.ClassMage, PorFormat.ClassThief,
+              PorFormat.ClassClericFighter, PorFormat.ClassClericFighterMage, PorFormat.ClassClericMage,
+              PorFormat.ClassFighterMage, PorFormat.ClassFighterThief, PorFormat.ClassFighterMageThief,
+              PorFormat.ClassMageThief },
+        [PorFormat.RaceDwarf] = new[]
+            { PorFormat.ClassFighter, PorFormat.ClassThief, PorFormat.ClassFighterThief },
+        [PorFormat.RaceGnome] = new[]
+            { PorFormat.ClassFighter, PorFormat.ClassThief, PorFormat.ClassFighterThief },
+        [PorFormat.RaceHalfling] = new[]
+            { PorFormat.ClassFighter, PorFormat.ClassThief, PorFormat.ClassFighterThief },
+    };
+    foreach (var (race, classes) in expectedLegal)
+        Check($"{PorFormat.RaceName(race)} class options",
+              string.Join(",", ClassTables.LegalClasses(race).OrderBy(c => c)),
+              string.Join(",", classes.OrderBy(c => c)));
+    Check("Humans are single-class only",
+          ClassTables.LegalClasses(PorFormat.RaceHuman).All(c => ClassTables.SingleClassesOf(c).Length == 1), true);
+    Check("Only the half-elf can be a Cleric/Fighter/Mage",
+          PorFormat.Races.Select((_, r) => r).Count(r => ClassTables.IsLegal(r, PorFormat.ClassClericFighterMage)), 1);
+    Check("The engine's non-PoR classes are not playable",
+          new[] { 1, 3, 4, 7, 10, 17 }.Any(ClassTables.IsPlayableClass), false);
+}
+
+// The XP table drives what the training hall will honour, so the level it implies has to line up.
+Check("Altharion's XP supports his level 5",
+      ClassTables.LevelForXp(PorFormat.ClassFighter, altharion.Experience), 5);
+Check("...and one more XP short of 5 would be level 4",
+      ClassTables.LevelForXp(PorFormat.ClassFighter, ClassTables.XpForLevel(PorFormat.ClassFighter, 5) - 1), 4);
+Check("Level 1 costs nothing", ClassTables.XpForLevel(PorFormat.ClassFighter, 1), 0L);
+Check("A cleric cannot reach level 7", ClassTables.XpForLevel(PorFormat.ClassCleric, 7), -1L);
+Check("XP never buys past the training cap",
+      ClassTables.BaseClasses.All(c => ClassTables.LevelForXp(c, 10_000_000) == ClassTables.TrainingCap(c)), true);
+
+// --- changing a character's class ---------------------------------------------
+{
+    Check("Class-change ranges are ordered, non-overlapping and inside the record", Enumerable
+        .Range(0, ClassChange.WrittenRanges.Length)
+        .All(i =>
+        {
+            var (off, len) = ClassChange.WrittenRanges[i];
+            bool ok = off >= 0 && len > 0 && off + len <= PorFormat.RecordSize;
+            if (i > 0)
+            {
+                var (prevOff, prevLen) = ClassChange.WrittenRanges[i - 1];
+                ok &= prevOff + prevLen <= off;
+            }
+            return ok;
+        }), true);
+
+    // The level-5 fighter becomes a level-5 magic-user: keeps his level, his hit points and his
+    // experience, and takes the magic-user's THAC0, saves, spell book and spells a day.
+    var mage = altharion.Clone();
+    var toMage = ClassChange.Plan(mage, PorFormat.ClassMage);
+    Check("Class change keeps the level", toMage.Level, 5);
+    Check("...in the new class's level byte", toMage.ClassLevels[PorFormat.ClassMage], 5);
+    Check("...and clears the old one", toMage.ClassLevels[PorFormat.ClassFighter], 0);
+    Check("A level-5 mage's THAC0 base", toMage.Thac0Base, 21);
+    // Altharion's stored current THAC0 is 4 better than his base (Strength 18/89 and a magic
+    // weapon); a class change keeps that equipment credit rather than discarding it.
+    Check("...and its current keeps the equipment credit", toMage.Thac0, 21 - (altharion.Thac0Base - altharion.Thac0));
+    Check("A level-5 mage's saves", string.Join("/", toMage.Saves), "14/13/11/15/12");
+    Check("A level-5 mage's spells a day", string.Join("/", toMage.MageSlots), "4/2/1");
+    Check("...and no cleric spells", toMage.ClericSlots.Sum(), 0);
+    Check("A level-5 mage knows every spell it can cast",
+          toMage.KnownSpells.Count(k => k),
+          SpellBook.InRecordOrder.Count(s => s.School == "Mage" && s.Level <= 3));
+    Check("...and no cleric spells at all",
+          Enumerable.Range(0, PorFormat.KnownSpellsLen)
+              .Any(i => toMage.KnownSpells[i] && SpellBook.InRecordOrder[i].School == "Cleric"), false);
+    Check("A human magic-user raises no warnings", toMage.Warnings.Count, 0);
+
+    ClassChange.Apply(mage, toMage);
+    Check("Applied class", mage.ClassName, "Mage");
+    // The class bitmask has to follow the class byte, or the record still says "fighter" in the
+    // place the engine may well be reading. A fighter's 0x08 must become a magic-user's 0x01.
+    Check("Applied class bitmask", mage.Bytes[PorFormat.OffClassMask], (byte)0x01);
+    Check("...and it no longer carries the fighter bit",
+          (mage.Bytes[PorFormat.OffClassMask] & 0x08) != 0, false);
+    Check("Applied level byte", mage.Bytes[PorFormat.OffLevelHighest], (byte)5);
+    Check("Applied THAC0 base", mage.Thac0Base, 21);
+    Check("Applied saves",
+          Enumerable.Range(0, PorFormat.SavesLen).Select(mage.GetSave).SequenceEqual(toMage.Saves), true);
+    Check("Applied spells a day",
+          $"{mage.Bytes[PorFormat.OffMageSlots]}/{mage.Bytes[PorFormat.OffMageSlots + 1]}/{mage.Bytes[PorFormat.OffMageSlots + 2]}",
+          "4/2/1");
+    // The chosen policy: the character keeps what it earned.
+    Check("Hit points are kept", $"{mage.HpCurrent}/{mage.HpMax}", $"{altharion.HpCurrent}/{altharion.HpMax}");
+    Check("Experience is kept", mage.Experience, altharion.Experience);
+    Check("Abilities are kept",
+          Enumerable.Range(0, PorFormat.StatCount).All(i => mage.GetStat(i) == altharion.GetStat(i)), true);
+    Check("Armor Class is kept (it comes from Dexterity and armour, not class)",
+          mage.ArmorClass, altharion.ArmorClass);
+    Check("Money is kept", mage.Platinum == altharion.Platinum && mage.Gems == altharion.Gems, true);
+    Check("Carried items are kept", mage.Bytes[PorFormat.OffNumberOfItems], altharion.Bytes[PorFormat.OffNumberOfItems]);
+    Check("The item-list pointer is kept",
+          mage.Bytes.Skip(PorFormat.OffItemsPtr).Take(4).SequenceEqual(altharion.Bytes.Skip(PorFormat.OffItemsPtr).Take(4)), true);
+    Check("Nothing changes outside the declared ranges", Enumerable
+        .Range(0, PorFormat.RecordSize)
+        .All(o => mage.Bytes[o] == altharion.Bytes[o] ||
+                  ClassChange.WrittenRanges.Any(r => o >= r.Offset && o < r.Offset + r.Length)), true);
+    Check("A class-changed record still passes the signature", CharacterSignature.Looks(mage.Bytes, 0), true);
+
+    // Changing back has to land on the real record's own numbers — which is the strongest statement
+    // the per-level tables can make: the round trip is measured against a record from a real save.
+    var back = mage.Clone();
+    ClassChange.Apply(back, ClassChange.Plan(back, PorFormat.ClassFighter));
+    Check("Changing back restores the fighter's THAC0 base", back.Thac0Base, altharion.Thac0Base);
+    Check("...its current THAC0", back.Thac0, altharion.Thac0);
+    Check("...its saving throws",
+          Enumerable.Range(0, PorFormat.SavesLen).All(i => back.GetSave(i) == altharion.GetSave(i)), true);
+    Check("...and its class level", back.GetClassLevel(PorFormat.ClassFighter), 5);
+
+    // Multiclass: the dwarf fighter picks up a thief level and the skills that come with it.
+    var rogue = thrender.Clone();
+    var toFighterThief = ClassChange.Plan(rogue, PorFormat.ClassFighterThief);
+    Check("A Fighter/Thief holds a level in each",
+          $"{toFighterThief.ClassLevels[PorFormat.ClassFighter]}/{toFighterThief.ClassLevels[PorFormat.ClassThief]}", "1/1");
+    Check("...saves as its best class",
+          toFighterThief.Saves.SequenceEqual(ClassTables.SavesFor(
+              new[] { PorFormat.ClassFighter, PorFormat.ClassThief }, new[] { 1, 1 })), true);
+    Check("...and gains thief skills with its dwarf and Dexterity adjustments",
+          toFighterThief.ThiefSkills.SequenceEqual(
+              ClassTables.ThiefSkills(1, PorFormat.RaceDwarf, thrender.Dexterity)), true);
+    Check("...and carries both classes' bits", toFighterThief.ClassMask, 0x08 | 0x04);
+    ClassChange.Apply(rogue, toFighterThief);
+    Check("Applied thief skills",
+          Enumerable.Range(0, PorFormat.ThiefSkillsLen).Select(rogue.GetThiefSkill)
+              .SequenceEqual(toFighterThief.ThiefSkills), true);
+    Check("Applied class bitmask for a multiclass", rogue.Bytes[PorFormat.OffClassMask], (byte)0x0C);
+    // A Cleric/Fighter/Mage must come out reading exactly what the real one in the sample party does.
+    var trinity = thrender.Clone();
+    trinity.Race = PorFormat.RaceHalfElf;
+    ClassChange.Apply(trinity, ClassChange.Plan(trinity, PorFormat.ClassClericFighterMage));
+    Check("A made Cleric/Fighter/Mage's mask matches the real Bakshi's",
+          trinity.Bytes[PorFormat.OffClassMask], bakshi.Bytes[PorFormat.OffClassMask]);
+    Check("...and it holds a level in each of the three",
+          $"{trinity.GetClassLevel(PorFormat.ClassCleric)}{trinity.GetClassLevel(PorFormat.ClassFighter)}{trinity.GetClassLevel(PorFormat.ClassMage)}",
+          "111");
+    Check("...casting as both a cleric and a magic-user",
+          trinity.Bytes[PorFormat.OffClericSlots] > 0 && trinity.Bytes[PorFormat.OffMageSlots] > 0, true);
+    // Thrender is lawful good, and a thief cannot be — so the one warning here is that, not the
+    // race/class pairing, which is legal for a dwarf.
+    Check("The only complaint about a dwarf Fighter/Thief is his alignment",
+          string.Join(" | ", toFighterThief.Warnings.Select(w => w.Contains("lawful good") ? "alignment" : w)),
+          "alignment");
+    var neutralDwarf = thrender.Clone();
+    neutralDwarf.Alignment = 3;   // neutral good
+    Check("...and a neutral-good dwarf Fighter/Thief raises none",
+          ClassChange.Plan(neutralDwarf, PorFormat.ClassFighterThief).Warnings.Count, 0);
+
+    // Leaving a caster class has to take the spell book with it.
+    var exMage = mage.Clone();
+    exMage.Bytes[PorFormat.OffMemorizedSpells] = 21;          // something memorized from the old class
+    ClassChange.Apply(exMage, ClassChange.Plan(exMage, PorFormat.ClassFighter));
+    Check("A former mage knows no spells", Enumerable
+        .Range(0, PorFormat.KnownSpellsLen).All(i => exMage.Bytes[PorFormat.OffKnownSpells + i] == 0), true);
+    Check("...has no spells a day",
+          exMage.Bytes[PorFormat.OffMageSlots] + exMage.Bytes[PorFormat.OffClericSlots], 0);
+    Check("...and has nothing memorized", Enumerable
+        .Range(0, PorFormat.MemorizedSpellsLen).All(i => exMage.Bytes[PorFormat.OffMemorizedSpells + i] == 0), true);
+    Check("...and no thief skills", Enumerable
+        .Range(0, PorFormat.ThiefSkillsLen).All(i => exMage.GetThiefSkill(i) == 0), true);
+
+    // A cleric prays for its spells rather than learning them, so it knows the lot up to its level.
+    var priest = altharion.Clone();
+    var toCleric = ClassChange.Plan(priest, PorFormat.ClassCleric);
+    Check("A level-5 cleric knows every cleric spell it can cast",
+          toCleric.KnownSpells.Count(k => k),
+          SpellBook.InRecordOrder.Count(s => s.School == "Cleric" && s.Level <= 3));
+    // Class table 2/2/1 at level 5, plus the Wisdom bonus on the first-level slots.
+    Check("...and its spells a day come from the class table plus Wisdom",
+          string.Join("/", toCleric.ClericSlots),
+          string.Join("/", ClassTables.ClericSlots(5, altharion.Wisdom)));
+
+    // The warnings: an illegal race/class, a capped level, an ability below the class minimum.
+    var dwarfMage = thrender.Clone();
+    Check("A dwarven magic-user is refused by the race table",
+          ClassChange.Plan(dwarfMage, PorFormat.ClassMage).Warnings.Any(w => w.Contains("cannot be")), true);
+
+    var elfHero = altharion.Clone();
+    elfHero.Race = PorFormat.RaceElf;
+    elfHero.SetClassLevel(PorFormat.ClassFighter, 8);
+    var elfPlan = ClassChange.Plan(elfHero, PorFormat.ClassFighter);
+    Check("An elf fighter is capped at 7", elfPlan.Level, 7);
+    Check("...and the plan says so", elfPlan.Warnings.Any(w => w.Contains("capped")), true);
+
+    var dullard = altharion.Clone();
+    dullard.Intelligence = 8;
+    Check("An Intelligence of 8 is below what a magic-user needs",
+          ClassChange.Plan(dullard, PorFormat.ClassMage).Warnings.Any(w => w.Contains("Intelligence")), true);
+
+    var pauper = altharion.Clone();
+    pauper.Experience = 100;
+    Check("Experience short of the level is flagged",
+          ClassChange.Plan(pauper, PorFormat.ClassFighter).Warnings.Any(w => w.Contains("short of")), true);
+
+    var goodThief = altharion.Clone();
+    goodThief.Alignment = 0;   // lawful good
+    Check("A lawful-good thief is flagged",
+          ClassChange.Plan(goodThief, PorFormat.ClassThief).Warnings.Any(w => w.Contains("lawful good")), true);
+
+    // Re-applying the same class is a repair, not a change: it recomputes the derived numbers and
+    // leaves the class byte where it was.
+    var repaired = altharion.Clone();
+    repaired.SetSave(0, 3); repaired.Thac0Base = 5;            // numbers that don't match the class
+    var repair = ClassChange.Plan(repaired, PorFormat.ClassFighter);
+    Check("Re-picking the same class reads as a repair", repair.IsSameClass, true);
+    ClassChange.Apply(repaired, repair);
+    Check("...and it puts the class's own numbers back",
+          repaired.Thac0Base == altharion.Thac0Base && repaired.GetSave(0) == altharion.GetSave(0), true);
+
+    bool refusedPaladin;
+    try { ClassChange.Plan(altharion.Clone(), 3); refusedPaladin = false; }   // paladin — not in this game
+    catch (ArgumentOutOfRangeException) { refusedPaladin = true; }
+    Check("An unplayable class byte is refused", refusedPaladin, true);
+}
+
 Console.WriteLine();
 Console.WriteLine(failures == 0
     ? "ALL CHECKS PASSED — the 285-byte record layout decodes the sample party correctly."

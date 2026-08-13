@@ -92,6 +92,17 @@ public static class PorFormat
 
     public const int OffAcBase = 0xA9;             // stored as 60 - AC
     public const int OffExperience = 0xAC;         // UInt32 LE (single total, not per class)
+
+    /// <summary>
+    /// Class bitmask — one bit per class the character has: mage 0x01, cleric 0x02, thief 0x04,
+    /// fighter 0x08 (so a Fighter/Mage reads 0x09 and a Cleric/Fighter/Mage 0x0B). It duplicates
+    /// what the class byte at <see cref="OffClass"/> and the per-class levels at
+    /// <see cref="OffClassLevels"/> already say, and every character record decoded so far agrees
+    /// with all three — so anything that rewrites a character's class must rewrite this too.
+    /// See <c>docs/reverse-engineering.md</c> §3b.
+    /// </summary>
+    public const int OffClassMask = 0xB0;
+
     public const int OffHpRolled = 0xB1;
 
     // Spells-per-day (cleric L1-3, mage L1-3).
@@ -130,6 +141,17 @@ public static class PorFormat
     public static readonly string[] Races =
         { "Monster", "Dwarf", "Elf", "Gnome", "Half-Elf", "Halfling", "Half-Orc", "Human" };
 
+    // Race byte values, indexing Races. Named so code that has to reason about a race (which
+    // classes it may take, its ability adjustments) never carries a bare number.
+    public const int RaceMonster = 0;
+    public const int RaceDwarf = 1;
+    public const int RaceElf = 2;
+    public const int RaceGnome = 3;
+    public const int RaceHalfElf = 4;
+    public const int RaceHalfling = 5;
+    public const int RaceHalfOrc = 6;
+    public const int RaceHuman = 7;
+
     public static readonly string[] Classes =
     {
         "Cleric", "Druid", "Fighter", "Paladin", "Ranger", "Mage", "Thief", "Monk",
@@ -137,6 +159,22 @@ public static class PorFormat
         "Cleric/Thief", "Fighter/Mage", "Fighter/Thief", "Fighter/Mage/Thief",
         "Mage/Thief", "Monster"
     };
+
+    // Class byte values, indexing Classes. Only the combinations Pool of Radiance itself offers at
+    // character creation are named — the engine's druid/paladin/ranger/monk values exist in the
+    // table above but no PoR character can be created with them.
+    public const int ClassCleric = 0;
+    public const int ClassFighter = 2;
+    public const int ClassMage = 5;
+    public const int ClassThief = 6;
+    public const int ClassClericFighter = 8;
+    public const int ClassClericFighterMage = 9;
+    public const int ClassClericMage = 11;
+    public const int ClassClericThief = 12;
+    public const int ClassFighterMage = 13;
+    public const int ClassFighterThief = 14;
+    public const int ClassFighterMageThief = 15;
+    public const int ClassMageThief = 16;
 
     public static readonly string[] Alignments =
     {

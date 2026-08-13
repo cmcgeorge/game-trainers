@@ -18,6 +18,7 @@ public partial class MainWindow : Window
         _vm.Confirm = message => MessageBox.Show(this, message, "Pool of Radiance Trainer",
             MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK;
         _vm.SaveEditor.Confirm = _vm.Confirm;
+        _vm.PartyGen.Confirm = _vm.Confirm;
         Loaded += OnLoaded;
         Closed += OnClosed;
     }
@@ -40,6 +41,21 @@ public partial class MainWindow : Window
     private void MaxMoney_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxMoney();
     private void MaxEverything_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxEverything();
     private void RandomizeIconColors_Click(object sender, RoutedEventArgs e) => Vm(sender)?.RandomizeIconColors();
+
+    // A class change rewrites the character's whole combat profile and clears its spell book, and
+    // the numbers it replaces (a fighter's saving throws, a thief's skills) aren't recoverable by
+    // changing back — so the plan, warnings and all, is put in front of the user first.
+    private void ChangeClass_Click(object sender, RoutedEventArgs e)
+    {
+        if (Vm(sender) is not { } character) return;
+        if (!_vm.Confirm($"Change {character.Name}'s class?\n\n{character.ClassChangePreview}\n\n" +
+                         "This cannot be undone."))
+        {
+            _vm.Status = "Class change cancelled.";
+            return;
+        }
+        _vm.Status = character.ApplyClassChange();
+    }
 
     // The Combat tab's monster fields are refreshed from live memory every poll tick, which would
     // wipe out a half-typed value. GotKeyboardFocus/LostKeyboardFocus bubble from the boxes to the

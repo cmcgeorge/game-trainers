@@ -68,15 +68,21 @@ public static class ClassRaceBook
 
     /// <summary>Per-level progression: hit dice, spell slots (L1/L2/L3), thief backstab multiplier.
     /// Spells shown as "L1/L2/L3" slot counts; "—" means the class is capped or has no spells at
-    /// that level. From the AD&amp;D 1e PHB tables as implemented in Pool of Radiance.</summary>
+    /// that level. From the AD&amp;D 1e PHB tables as implemented in Pool of Radiance.
+    ///
+    /// <para>The spell columns are the class's own slots, <i>before</i> a cleric's Wisdom bonus —
+    /// so a level-1 cleric with Wisdom 17 casts three first-level spells, not one. They were
+    /// corrected against the game's own saved characters (see <see cref="ClassTables"/>): the
+    /// cleric column used to be a level out (level 1 shown as none), and the magic-user column was
+    /// wrong at levels 5 and 6. `test/FormatCheck` now pins both against real records.</para></summary>
     public static readonly IReadOnlyList<LevelProgressionRow> LevelProgression = new List<LevelProgressionRow>
     {
-        new(1, "1d10", "1d8", "0/—/—",  "1d4", "1/—/—",  "1d6", "x2", "Starting level"),
-        new(2, "2d10", "2d8", "1/—/—",  "2d4", "2/—/—",  "2d6", "x2", ""),
+        new(1, "1d10", "1d8", "1/—/—",  "1d4", "1/—/—",  "1d6", "x2", "Starting level"),
+        new(2, "2d10", "2d8", "2/—/—",  "2d4", "2/—/—",  "2d6", "x2", ""),
         new(3, "3d10", "3d8", "2/1/—",  "3d4", "2/1/—",  "3d6", "x2", "Cleric & Mage gain 2nd-level spells"),
-        new(4, "4d10", "4d8", "2/2/—",  "4d4", "3/2/—",  "4d6", "x2", ""),
-        new(5, "5d10", "5d8", "2/2/1",  "5d4", "3/2/1",  "5d6", "x3", "Cleric & Mage gain 3rd-level spells (Fireball!); Thief backstab x3"),
-        new(6, "6d10", "6d8", "3/3/1",  "6d4", "4/3/2",  "6d6", "x3", "Cleric & Mage level cap"),
+        new(4, "4d10", "4d8", "3/2/—",  "4d4", "3/2/—",  "4d6", "x2", ""),
+        new(5, "5d10", "5d8", "3/3/1",  "5d4", "4/2/1",  "5d6", "x3", "Cleric & Mage gain 3rd-level spells (Fireball!); Thief backstab x3"),
+        new(6, "6d10", "6d8", "3/3/2",  "6d4", "4/2/2",  "6d6", "x3", "Cleric & Mage level cap"),
         new(7, "7d10", "—",   "—",      "—",   "—",      "7d6", "x3", ""),
         new(8, "8d10", "—",   "—",      "—",   "—",      "8d6", "x3", "Fighter level cap"),
         new(9, "—",    "—",   "—",      "—",   "—",      "9d6", "x4", "Thief level cap; backstab x4"),

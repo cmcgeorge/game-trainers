@@ -1,9 +1,16 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using PoolOfRadianceTrainer.Game;
 using PoolOfRadianceTrainer.Memory;
 using PoolOfRadianceTrainer.Mvvm;
 
 namespace PoolOfRadianceTrainer.ViewModels;
+
+/// <summary>One class the change-class picker offers, and whether the character's race may take it.</summary>
+public sealed record ClassOption(int Value, string Name, bool Legal)
+{
+    public string Display => Legal ? Name : Name + "   (not for this race)";
+}
 
 /// <summary>
 /// Editable view over a single located character/monster record. Every setter mutates the
@@ -85,6 +92,7 @@ public sealed class CharacterViewModel : ObservableObject
         }
 
         BuildRawBytes();
+        RebuildClassOptions();
     }
 
     private void BuildRawBytes()
@@ -123,12 +131,22 @@ public sealed class CharacterViewModel : ObservableObject
     public int RaceIndex
     {
         get => Record.Race;
-        set { Record.Race = value; Poke(PorFormat.OffRace, 1); OnPropertyChanged(); RaiseDerived(); }
+        set
+        {
+            Record.Race = value; Poke(PorFormat.OffRace, 1); OnPropertyChanged(); RaiseDerived();
+            RebuildClassOptions();   // a different race allows a different set of classes
+        }
     }
+    /// <summary>The raw class byte. Writing it changes the label on the sheet and nothing else —
+    /// see <see cref="ApplyClassChange"/> for the edit that also brings the derived numbers along.</summary>
     public int ClassIndex
     {
         get => Record.Class;
-        set { Record.Class = value; Poke(PorFormat.OffClass, 1); OnPropertyChanged(); RaiseDerived(); }
+        set
+        {
+            Record.Class = value; Poke(PorFormat.OffClass, 1); OnPropertyChanged(); RaiseDerived();
+            OnPropertyChanged(nameof(ClassChangePreview));
+        }
     }
     public int AlignmentIndex
     {
@@ -230,6 +248,127 @@ public sealed class CharacterViewModel : ObservableObject
         Record.Status = 0; Poke(PorFormat.OffStatus, 1);
         MaxMoney();
         RefreshEditors(); RaiseDerived();
+    }
+
+    /// <summary>
+    /// Replaces this party member with a freshly generated character (see
+    /// <see cref="PartyGenerator"/>), writing only the record ranges the generator owns — the
+    /// character's money, carried items and place in the game's linked lists are left exactly as
+    /// they were, so the new person inherits the old one's possessions rather than the game losing
+    /// track of them.
+    ///
+    /// <para>The identity fields (name, race, class, gender) change together with the bytes in
+    /// memory, so the poll loop's <see cref="CharacterRecord.IsSameCreatureAs"/> check still
+    /// recognises this address on the next tick and keeps refreshing it.</para>
+    /// </summary>
+    public void ApplyGenerated(RolledCharacter rolled)
+    {
+        ArgumentNullException.ThrowIfNull(rolled);
+        rolled.StampOnto(Record);
+        foreach (var (offset, length) in RolledCharacter.WrittenRanges) Poke(offset, length);
+
+        // A spell freeze holds a snapshot of the memorized-spell block taken from the character who
+        // used to be here; re-take it from the new record so the freeze can't restore their spells.
+        if (FreezeSpells)
+        {
+            _spellSnapshot = new byte[PorFormat.MemorizedSpellsLen];
+            Array.Copy(Record.Bytes, PorFormat.OffMemorizedSpells, _spellSnapshot, 0, PorFormat.MemorizedSpellsLen);
+        }
+        RefreshAll();
+    }
+
+    // --- class change ---------------------------------------------------------
+    /// <summary>The classes offered by the change-class picker: what this race may take, or every
+    /// playable class when <see cref="AllowIllegalClasses"/> is on.</summary>
+    public ObservableCollection<ClassOption> ClassChangeOptions { get; } = new();
+
+    private bool _allowIllegalClasses;
+    /// <summary>Offer class/race combinations the game itself would refuse (a dwarven magic-user).
+    /// The record holds whatever is written, but the game's own screens may disagree with it.</summary>
+    public bool AllowIllegalClasses
+    {
+        get => _allowIllegalClasses;
+        set { if (SetProperty(ref _allowIllegalClasses, value)) RebuildClassOptions(); }
+    }
+
+    private int _classChangeTarget = -1;
+    /// <summary>The class the picker is pointed at (a class byte).</summary>
+    public int ClassChangeTarget
+    {
+        get => _classChangeTarget;
+        set { if (SetProperty(ref _classChangeTarget, value)) OnPropertyChanged(nameof(ClassChangePreview)); }
+    }
+
+    private void RebuildClassOptions()
+    {
+        int previous = _classChangeTarget;
+        var legal = ClassTables.LegalClasses(Record.Race);
+
+        ClassChangeOptions.Clear();
+        foreach (int cls in ClassTables.PlayableClasses)
+        {
+            bool ok = legal.Contains(cls);
+            if (!ok && !_allowIllegalClasses) continue;
+            ClassChangeOptions.Add(new ClassOption(cls, PorFormat.ClassName(cls), ok));
+        }
+
+        // Keep the picker where the user left it if that class is still offered; otherwise fall back
+        // to the character's current class, and only then to whatever is first in the list.
+        bool Offered(int cls) => ClassChangeOptions.Any(o => o.Value == cls);
+        ClassChangeTarget = Offered(previous) ? previous
+            : Offered(Record.Class) ? Record.Class
+            : ClassChangeOptions.FirstOrDefault()?.Value ?? -1;
+
+        OnPropertyChanged(nameof(ClassChangePreview));
+    }
+
+    /// <summary>What the picked class change would do, as the panel and the confirm dialog show it:
+    /// the new levels and derived numbers, then any warnings, then the consequences worth knowing.</summary>
+    public string ClassChangePreview
+    {
+        get
+        {
+            if (!ClassTables.IsPlayableClass(_classChangeTarget)) return "Pick a class.";
+            try
+            {
+                var plan = ClassChange.Plan(Record, _classChangeTarget);
+                var sb = new StringBuilder(plan.Summary);
+                foreach (var w in plan.Warnings) sb.Append("\n⚠  ").Append(w);
+                foreach (var n in plan.Notes) sb.Append("\n·  ").Append(n);
+                return sb.ToString();
+            }
+            catch (Exception ex) { return "Can't plan that change: " + ex.Message; }
+        }
+    }
+
+    /// <summary>
+    /// Applies the picked class change: writes the new class and every number that depends on it —
+    /// per-class levels, THAC0, saving throws, thief skills, spells known and spells per day — and
+    /// leaves hit points, experience, abilities, money and items alone. Returns the status line.
+    /// </summary>
+    public string ApplyClassChange()
+    {
+        if (!ClassTables.IsPlayableClass(_classChangeTarget)) return "Pick a class first.";
+
+        var plan = ClassChange.Plan(Record, _classChangeTarget);
+        ClassChange.Apply(Record, plan);
+        foreach (var (offset, length) in ClassChange.WrittenRanges) Poke(offset, length);
+
+        // The freeze holds a snapshot of the old class's memorized spells; retake it from the record
+        // the change just cleared, or the next tick would put them back.
+        if (FreezeSpells)
+        {
+            _spellSnapshot = new byte[PorFormat.MemorizedSpellsLen];
+            Array.Copy(Record.Bytes, PorFormat.OffMemorizedSpells, _spellSnapshot, 0, PorFormat.MemorizedSpellsLen);
+        }
+
+        RefreshAll();
+        OnPropertyChanged(nameof(ClassChangePreview));
+
+        string warnings = plan.Warnings.Count == 0 ? "" : " " + string.Join(" ", plan.Warnings);
+        return $"{Record.Name} is now a {plan.ToName} ({plan.LevelText}). " +
+               $"THAC0 {plan.Thac0}, saves {string.Join("/", plan.Saves)}. Hit points and experience unchanged." +
+               warnings;
     }
 
     /// <summary>

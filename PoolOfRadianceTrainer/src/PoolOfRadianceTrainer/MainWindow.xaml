@@ -193,6 +193,33 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
 
+                                    <!-- Change class (recomputes everything the class decides) -->
+                                    <TextBlock Text="Change class" Style="{StaticResource Section}"/>
+                                    <Border Background="{StaticResource Panel2}" BorderBrush="{StaticResource Line}"
+                                            BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,6">
+                                        <StackPanel>
+                                            <TextBlock TextWrapping="Wrap" Style="{StaticResource Hint}" Margin="0,0,0,6"
+                                                       Text="The Class box above writes the label and nothing else. This changes the class properly: it keeps the character's level and hit points, and rewrites everything the class decides — the per-class levels, THAC0, saving throws, thief skills, spells known and spells per day. Experience, abilities, Armor Class, money and items are left alone."/>
+                                            <WrapPanel>
+                                                <StackPanel Width="200" Margin="0,0,10,6">
+                                                    <TextBlock Text="New class"/>
+                                                    <ComboBox ItemsSource="{Binding ClassChangeOptions}"
+                                                              DisplayMemberPath="Display"
+                                                              SelectedValuePath="Value"
+                                                              SelectedValue="{Binding ClassChangeTarget}"/>
+                                                </StackPanel>
+                                                <CheckBox Content="Allow combinations this race can't take"
+                                                          IsChecked="{Binding AllowIllegalClasses}"
+                                                          VerticalAlignment="Bottom" Margin="0,0,10,10"
+                                                          ToolTip="Offer every class the record can hold, including ones the game would refuse for this race (a dwarven magic-user). The record keeps whatever is written; the game's own screens may not agree with it."/>
+                                                <Button Content="🎓 Change class" Click="ChangeClass_Click"
+                                                        VerticalAlignment="Bottom" Margin="0,0,0,6"/>
+                                            </WrapPanel>
+                                            <TextBlock Text="{Binding ClassChangePreview}" TextWrapping="Wrap"
+                                                       FontFamily="Consolas" Foreground="{StaticResource FgDim}"/>
+                                        </StackPanel>
+                                    </Border>
+
                                     <!-- Money -->
                                     <TextBlock Text="Money &amp; treasure" Style="{StaticResource Section}"/>
                                     <ItemsControl ItemsSource="{Binding Coins}">
@@ -1282,6 +1309,96 @@
                                         </StackPanel>
                                     </WrapPanel>
                                 </Expander>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </TabItem>
+
+                <!-- ===== Party generator tab ===== -->
+                <TabItem Header="🧝 Party" DataContext="{Binding PartyGen}">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="4" MaxWidth="760" HorizontalAlignment="Left">
+                                <TextBlock Text="Generate a party" Style="{StaticResource Section}"/>
+                                <TextBlock TextWrapping="Wrap" Style="{StaticResource Hint}" Margin="0,0,0,8"
+                                           Text="Rolls a whole party of good-aligned level-1 characters in race/class combinations the game allows — front-line fighters, a healer, a scout and a magic-user, following the party the Rule Book recommends. Abilities go to the class that needs them, and every derived number (hit points, AC, THAC0, saving throws, thief skills, starting spells) is filled in to match. Then write the party over the one in the running game, or over the characters in a saved game. Both replace characters that already exist — neither can add new ones, because how many members a party has is the game's own bookkeeping."/>
+
+                                <!-- 1 · roll -->
+                                <Border Background="{StaticResource Panel2}" BorderBrush="{StaticResource Line}"
+                                        BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,4,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="1 · Roll" Style="{StaticResource Section}" Margin="0"/>
+                                        <WrapPanel Margin="0,4,0,0">
+                                            <StackPanel Margin="0,0,16,6">
+                                                <TextBlock Text="Characters"/>
+                                                <ComboBox Width="70" ItemsSource="{Binding PartySizeOptions}"
+                                                          SelectedItem="{Binding PartySize}"
+                                                          ToolTip="How many to roll. A short party keeps the roles that matter: four is always a fighter, a cleric, a magic-user and a thief."/>
+                                            </StackPanel>
+                                            <CheckBox Content="Heroic rolls" IsChecked="{Binding HeroicRolls}"
+                                                      VerticalAlignment="Center" Margin="0,0,16,6"
+                                                      ToolTip="Roll four dice per ability and drop the lowest, instead of the game's own three."/>
+                                            <Button Content="🎲 Roll a new party" Command="{Binding RollCommand}"
+                                                    VerticalAlignment="Center"/>
+                                        </WrapPanel>
+                                        <TextBlock Text="{Binding RollStyleNote}" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding Summary}" Foreground="{StaticResource Accent}"
+                                                   TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- 2 · the rolled party -->
+                                <ItemsControl ItemsSource="{Binding Preview}" Margin="0,8,0,0">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource Panel2}" BorderBrush="{StaticResource Line}"
+                                                    BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,6">
+                                                <StackPanel>
+                                                    <DockPanel>
+                                                        <TextBlock DockPanel.Dock="Right" Text="{Binding Role}"
+                                                                   Style="{StaticResource Hint}" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                                                   Foreground="{StaticResource Accent}" TextWrapping="Wrap"/>
+                                                    </DockPanel>
+                                                    <TextBlock Text="{Binding StatsText}" FontFamily="Consolas" Margin="0,4,0,0"/>
+                                                    <TextBlock Text="{Binding CombatText}" Style="{StaticResource Hint}"
+                                                               TextWrapping="Wrap"/>
+                                                    <TextBlock Text="{Binding SpellsText}" Style="{StaticResource Hint}"
+                                                               TextWrapping="Wrap"
+                                                               Visibility="{Binding SpellsText, Converter={x:Static vm:NullToVisibility.CollapsedIfNull}}"/>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <!-- 3 · write it somewhere -->
+                                <Border Background="{StaticResource Panel2}" BorderBrush="{StaticResource Line}"
+                                        BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,2,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="2 · Apply to the running game" Style="{StaticResource Section}" Margin="0"/>
+                                        <TextBlock Text="{Binding LiveTargetSummary}" Style="{StaticResource Hint}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                        <TextBlock TextWrapping="Wrap" Style="{StaticResource Hint}" Margin="0,0,0,6"
+                                                   Text="Writes the rolled characters over the party in memory, in marching order. Money and carried items stay with each slot, so readied armour may no longer suit the new class until it is re-readied in the game. Save in the game afterwards to keep them."/>
+                                        <Button Content="🧝 Replace the live party" Command="{Binding ApplyLiveCommand}"
+                                                HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Background="{StaticResource Panel2}" BorderBrush="{StaticResource Line}"
+                                        BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,8,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="3 · Or write it into a saved game" Style="{StaticResource Section}" Margin="0"/>
+                                        <TextBlock Text="{Binding SaveTargetSummary}" Style="{StaticResource Hint}"
+                                                   TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                        <TextBlock TextWrapping="Wrap" Style="{StaticResource Hint}" Margin="0,0,0,6"
+                                                   Text="Rewrites the CHRDATn.SAV records of the save loaded on the Powers/Inventory tab. The whole save folder is backed up first. Close the game before doing this — a running game holds the party in memory and will overwrite the files when it next saves."/>
+                                        <Button Content="💾 Write into the loaded save" Command="{Binding ApplySaveCommand}"
+                                                HorizontalAlignment="Left"/>
+                                    </StackPanel>
+                                </Border>
                             </StackPanel>
                         </ScrollViewer>
                     </Border>

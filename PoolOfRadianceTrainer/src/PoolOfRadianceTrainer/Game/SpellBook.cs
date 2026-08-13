@@ -75,6 +75,39 @@ public static class SpellBook
         new("Mage", 3, "Slow", "Halves enemy movement and attacks (no save)."),
     };
 
+    /// <summary>
+    /// The same spells in the order the character record's known-spell block (<see
+    /// cref="PorFormat.OffKnownSpells"/>) flags them: one byte per spell, grouped by spell
+    /// <i>level</i> first and school second — cleric 1 (8), mage 1 (13), cleric 2 (7), mage 2 (7),
+    /// cleric 3 (9), mage 3 (11) = 55 bytes.
+    ///
+    /// <para>That is not the order <see cref="All"/> lists them in (which groups by school), so a
+    /// flag index must be looked up here, never there. The ordering is the game's own: START.EXE
+    /// carries the spell-name table verbatim at file offset 0x00E450, running Bless · Curse · Cure
+    /// Light Wounds … · Sleep · Find Traps … in exactly this sequence. The bundled sample party
+    /// confirms it — the elf Fighter/Mage's four known-spell flags land at indices 10, 17, 18 and
+    /// 20, which under this order are Detect Magic, Read Magic, Shield and Sleep: four
+    /// <i>magic-user level 1</i> spells, and a plausible starting spell book. Under the
+    /// school-first order of <see cref="All"/> the same four bytes would decode to cleric level 2
+    /// and 3 spells on a character with no cleric level at all.</para>
+    /// </summary>
+    public static readonly IReadOnlyList<SpellInfo> InRecordOrder =
+        (from level in new[] { 1, 2, 3 }
+         from school in new[] { "Cleric", "Mage" }
+         from spell in All
+         where spell.Level == level && spell.School == school
+         select spell).ToList();
+
+    /// <summary>The record's known-spell flag index for one spell, or -1 if there is no such spell.
+    /// Both schools carry a "Detect Magic" and the two Protection spells, so the school is part of
+    /// the key.</summary>
+    public static int RecordIndexOf(string school, string name)
+    {
+        for (int i = 0; i < InRecordOrder.Count; i++)
+            if (InRecordOrder[i].School == school && InRecordOrder[i].Name == name) return i;
+        return -1;
+    }
+
     public static IEnumerable<SpellInfo> Search(string? term)
     {
         if (string.IsNullOrWhiteSpace(term)) return All;

@@ -103,6 +103,7 @@ the record start (the name-length byte). Fields the trainer edits are shown in *
 | `0xA0` | 1 | **alignment** | enum below |
 | `0xA9` | 1 | AC base | stored `60 − value`; the unarmored 10 baseline |
 | `0xAC`–`0xAF` | 4 | **experience** | UInt32 LE — a single total, not per-class |
+| `0xB0` | 1 | **class bitmask** | mage `0x01`, cleric `0x02`, thief `0x04`, fighter `0x08`; a multiclass is the union (§3b) |
 | `0xB1` | 1 | HP rolled | raw die roll before CON bonus/draining |
 | `0xB2`–`0xB4` | 3 | cleric spells/day | L1–3 |
 | `0xB5`–`0xB7` | 3 | mage spells/day | L1–3 |
@@ -126,6 +127,93 @@ the record start (the name-length byte). Fields the trainer edits are shown in *
 - **Alignment** (`0xA0`): 0 LG · 1 LN · 2 LE · 3 NG · 4 TN · 5 NE · 6 CG · 7 CN · 8 CE
 - **Gender** (`0x9E`): 0 male · 1 female
 - **Status** (`0x10C`): 0 okay · 1 animated · 2 tempgone · 3 running · 4 unconscious · 5 dying · 6 dead · 7 stoned · 8 gone
+
+---
+
+## 3a. The known-spell block's ordering (`0x33`–`0x69`)
+
+The 55 bytes at `0x33` are one flag per learnable spell — but *in which order*? The trainer's own
+`SpellBook` lists spells school-first (all the cleric spells, then all the magic-user ones), and
+reading the block that way decodes the sample party's elf Fighter/Mage as knowing two cleric level-2
+spells and a cleric level-3 spell, on a character with no cleric level at all.
+
+The game answers it directly. `START.EXE` carries the spell-name table verbatim at file offset
+`0x00E450`, and its sequence is grouped by **spell level first, school second**:
+
+| Flags | Spells |
+|---|---|
+| `0`–`7` | cleric 1 — Bless, Curse, Cure Light Wounds, Cause Light Wounds, Detect Magic, Protection From Evil, Protection From Good, Resist Cold |
+| `8`–`20` | magic-user 1 — Burning Hands … Shield, Shocking Grasp, **Sleep** |
+| `21`–`27` | cleric 2 — Find Traps … Spiritual Hammer |
+| `28`–`34` | magic-user 2 — Detect Invisibility … Strength |
+| `35`–`43` | cleric 3 — Animate Dead … Bestow Curse |
+| `44`–`54` | magic-user 3 — Blink … Slow |
+
+8 + 13 + 7 + 7 + 9 + 11 = **55**, exactly the block's length. Under this order Rhiannon's four flags
+(indices 10, 17, 18, 20) read as Detect Magic, Read Magic, Shield and **Sleep** — four magic-user
+level-1 spells, which is precisely a new mage's starting spell book. Four flags landing inside the
+13-wide magic-user level-1 window by chance is a ~0.3% coincidence, so the ordering is settled.
+
+`SpellBook.InRecordOrder` exposes the block order (as distinct from the display order), and
+`FormatCheck` pins both the sequence and Rhiannon's four spells.
+
+Note that this is the *known*-spell block; the 21 bytes of **memorized** spells at `0x17` are a
+different structure and are not decoded — the trainer only ever snapshots and restores them
+verbatim (the spell freeze), or clears them.
+
+---
+
+## 3b. `0xB0` — the class bitmask
+
+The byte between the experience total and the rolled hit points was unidentified until a class-change
+feature needed to know what a class change might be leaving behind. Diffing the sample party's
+caster against its non-casters turned it up, and it is a **bitmask, one bit per class**:
+
+| Bit | Class | A character holding it |
+|---|---|---|
+| `0x01` | magic-user | Darkstar (Mage 1) reads `0x01` |
+| `0x02` | cleric | Brother Sean (Cleric 1) reads `0x02` |
+| `0x04` | thief | Phineas (Thief 1) reads `0x04` |
+| `0x08` | fighter | Thrender (Fighter 1) and Altharion (Fighter 5) both read `0x08` |
+
+A multiclass carries the union: Rhiannon the Fighter/Mage reads `0x09`, Bakshi the
+Cleric/Fighter/Mage `0x0B`. Checked across **71 character records** found in four save folders — 15
+distinct characters covering six class combinations, at levels 1 to 9 — it agrees with the per-class
+level bytes at `0x96` every single time, with no exceptions.
+
+So the record states a character's class in three places: the class byte at `0x2F`, the per-class
+levels at `0x96`, and this mask. Anything that rewrites one has to rewrite all three, or the record
+contradicts itself — which is exactly the bug this found in the party generator and the class-change
+feature, both of which were writing the first two and leaving the third describing whoever used to
+hold the slot. Whether the engine reads the mask (to decide who gets a Memorize option, say) or
+merely keeps it in step is not established; the trainer writes it because a record that disagrees
+with itself is not worth shipping either way.
+
+## 3c. Spells per day, solved from real casters
+
+The class spell tables were carried over from the Rule Book as printed in `ClassRaceBook`. Real
+saved characters disagree with them, and the characters win. Seven casters at different levels and
+Wisdoms determine the rows outright:
+
+| Character | Class & level | Wisdom | Stored `0xB2`/`0xB5` | = class row + Wisdom bonus |
+|---|---|---|---|---|
+| Brother Sean | Cleric 1 | 17 | 3/0/0 | 1/0/0 + (2,0,0) |
+| Bakshi | Cleric 1 (of a C/F/M) | 17 | 3/0/0 | 1/0/0 + (2,0,0) |
+| Dirten | Cleric 5 | 16 | 5/5/1 | 3/3/1 + (2,2,0) |
+| Alfred | Cleric 6 | 18 | 5/5/3 | 3/3/2 + (2,2,1) |
+| Darkstar | Mage 1 | — | 1/0/0 | 1/0/0 |
+| Tarry, Carry | Mage 6 | — | 4/2/2 | 4/2/2 |
+
+Two things fall out. A **level-1 cleric gets one spell from its class**, not none as the table
+printed — the rest of Brother Sean's three are Wisdom's. And **Wisdom's higher-level bonus spells
+wait for the levels that can cast them**: at Wisdom 17 he is owed a 2nd- and a 3rd-level spell too,
+and gets neither until he is high enough, which is why his row is 3/0/0 rather than 3/2/1.
+
+The corrected rows are the standard 1e ones — cleric 1, 2, 2/1, 3/2, 3/3/1, 3/3/2 and magic-user 1,
+2, 2/1, 3/2, 4/2/1, 4/2/2. `ClassRaceBook.LevelProgression` (what the Rules tab shows) had the
+cleric column a level out and the magic-user column wrong at levels 5 and 6; both are fixed, and
+`FormatCheck` now checks the displayed table against the computed one so they cannot drift apart
+again.
 
 ---
 
@@ -309,6 +397,87 @@ The trainer mirrors the approach a live memory editor must take:
 The record parser (`Game/CharacterRecord.cs`) is regression-tested in `test/FormatCheck` against
 the verbatim 285-byte records of Thrender and Rhiannon extracted from the dump, so a future change
 that breaks a field is caught headlessly (`dotnet run --project test/FormatCheck`).
+
+### 6a. Writing a *whole character* in (the party generator)
+
+Editing one field is a poke. Replacing a character — what `Game/PartyGenerator.cs` does — means
+writing about half the record at once, and the interesting part is which half.
+
+**What it writes**, and what pins each value:
+
+| Field(s) | Value | Anchored by |
+|---|---|---|
+| name, abilities, STR% | rolled | — |
+| race, class, gender, alignment, age | rolled | ages match the sample party (dwarf 52, elf 180) |
+| class levels `0x96`+, level `0x73`, attack level `0x6B` | 1 | both sample records carry level 1 in all three |
+| HP max/current/rolled | class die at maximum (averaged over a multiclass) + CON bonus | Rhiannon's 7 = (d10 + d4) ÷ 2 at CON 14 |
+| THAC0 base `0x2D` / current `0x110` | class row; current = base − STR to-hit | Thrender: base 20, STR 17, current 19 |
+| AC base `0xA9` / current `0x111` | 10 / 10 − DEX adjustment | both records store base 10; the unarmored-10-minus-DEX rule is confirmed outright by *Curse of the Azure Bonds*' item-less sample party |
+| saving throws `0x6D` | class row; best-of per category for a multiclass | Thrender 14/15/16/17/17 (fighter row); Rhiannon 14/13/11/15/12 (best of fighter and mage, category by category) |
+| thief skills `0x77` | level-1 percentages + racial + DEX adjustments, or zeroed | every non-thief record decoded so far is all zeroes |
+| movement base `0x72` / current `0x11C` | 12 | both sample records |
+| class bitmask `0xB0` | the union of the character's class bits | §3b |
+| known spells `0x33` | cleric level 1s flagged for clerics; Sleep, Magic Missile and two more for mages | §3a |
+| memorized `0x17`, drain `0x74`–`0x76`, XP `0xAC`, status `0x10C` | cleared | a slot's previous occupant may have been drained, or hold spells the new class cannot cast |
+
+Note the dwarf's saving throws: 14/15/16/17/17 is the plain fighter row with **no racial bonus**, so
+the engine applies dwarven magic resistance somewhere other than these five bytes — and the
+generator doesn't add one either.
+
+**What it deliberately doesn't write**: the money counters (`0x88`–`0x95`), the item count and list
+pointer (`0xC7`–`0xCB`), the thirteen equipped-item pointers (`0xCC`–`0xFF`), the effects pointer
+(`0x7F`), encumbrance (`0x102`), the party linked-list pointer (`0x104`), the combat pointer
+(`0x108`) and the combat-icon bytes. The pointers are the game's own bookkeeping — clobbering them
+loses items or breaks the party list — and the possessions belong to the *slot*, not the person in
+it. `RolledCharacter.WrittenRanges` is the explicit list of ranges written, which is also what the
+live path pokes into the running game; `FormatCheck` asserts that stamping a generated character
+over Thrender's record changes no byte outside them.
+
+Because the identity fields (name, race, class, gender) change in memory at the same moment they
+change in the trainer's copy, the poll loop's `IsSameCreatureAs` check still recognises the address
+on its next tick — a live replacement doesn't need a re-scan.
+
+### 6b. Changing a character's class, and the level-5 anchor
+
+Writing the class byte at `0x2F` on its own only changes the label. `Game/ClassChange.cs` changes
+the class *and* everything the class decides — the per-class levels at `0x96`, the class bitmask at
+`0xB0` (§3b — the byte this feature's own diffing turned up), THAC0 at `0x2D`/`0x110`,
+the saving throws at `0x6D`, thief skills at `0x77`, the known-spell block at `0x33` and spells per
+day at `0xB2`/`0xB5` — while leaving hit points, experience, abilities, Armor Class, the level-drain
+bytes, money, items and every pointer alone. The character keeps its level and its hit points; a
+level-5 fighter becomes a level-5 magic-user with a fighter's 25 hit points, which no legitimately
+played character could be and is precisely what the feature is for.
+
+Doing that needs the class tables *per level*, not just at level 1 — and the two dump records are
+both level 1, so nothing in them could distinguish a per-level rule from a constant. The third
+fixture closes that gap: **ALTHARION**, the verbatim 285-byte `CHRDATA1.SAV` of a real GOG save, a
+level-5 human fighter. It reads:
+
+| Field | Value | What it settles |
+|---|---|---|
+| THAC0 base `0x2D` | **16** | four better than the level-1 fighter's 20, four levels up — the fighter's line is `21 − level`, not a constant |
+| saves `0x6D`–`0x71` | **11/12/13/13/14** | exactly the published fighter level-5/6 row |
+| class level `0x98`, level `0x73`, attack level `0x6B` | 5, 5, 5 | all three track the class level together |
+| AC base `0xA9` | 10 | the unarmored baseline holds at level 5, so AC is not level-derived |
+| movement `0x72` | 12 | unchanged from level 1 |
+| thief skills `0x77`–`0x7E` | all zero | a non-thief carries none, at any level |
+
+So the fighter column is measured at two levels and the level-5 saving-throw row is confirmed
+outright. The cleric, magic-user and thief columns, and everything above level 5, follow the same
+published tables but have no record to check against — `ClassTables` says which is which in its own
+docs rather than implying the whole thing was measured.
+
+The strongest test the harness runs on this is a round trip: change the real level-5 fighter to a
+magic-user and back, and the record must land on its *own* stored THAC0 base, current THAC0 and five
+saving throws again. That only passes if the fighter row, the magic-user row and the
+equipment-credit rule (current THAC0 keeps `oldBase − oldCurrent`, since Strength and gear don't
+change) are all right.
+
+What the generator **cannot** do is add a party member. In memory the party is a linked list the
+engine builds; on disk the member count lives somewhere in `SAVGAM?.DAT`, which is not decoded (the
+saves available here all hold a single character, so there is nothing to difference). The feature
+therefore rewrites the characters a party already has, and says so when the party it rolled is
+larger than the one it found.
 
 ---
 

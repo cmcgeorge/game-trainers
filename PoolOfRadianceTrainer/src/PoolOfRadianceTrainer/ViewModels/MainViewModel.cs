@@ -60,6 +60,9 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     /// <summary>Auto-re-rolls a new character on the create-a-character screen until a target roll is hit.</summary>
     public CharacterRollerViewModel Roller { get; }
 
+    /// <summary>Rolls a whole good-aligned party and writes it over the live party or a saved one.</summary>
+    public PartyGeneratorViewModel PartyGen { get; }
+
     // --- state ---------------------------------------------------------------
     private ProcessEntry? _selectedProcess;
     public ProcessEntry? SelectedProcess { get => _selectedProcess; set { SetProperty(ref _selectedProcess, value); RaiseCommands(); } }
@@ -227,6 +230,10 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             () => IsAttached ? SelectedProcess?.Id : null,
             s => Status = s);
 
+        // Writing a generated party into the live game is a record edit like any other, so its
+        // status line carries the same in-battle caveat the party-wide buttons do.
+        PartyGen = new PartyGeneratorViewModel(() => Party, SaveEditor, s => Status = WithCombatCaveat(s));
+
         RefreshProcesses();
         TryAutoAttach();
     }
@@ -306,6 +313,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         _freezeSpells = false; OnPropertyChanged(nameof(FreezeSpells));
         OnPropertyChanged(nameof(FreezeAll));
         OnPropertyChanged(nameof(IsAttached));
+        PartyGen.Refresh();      // the live party is gone; the generator's readout must say so
         RaiseCommands();
         Status = "Detached.";
     }
@@ -343,6 +351,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             if (GodMode) foreach (var c in Party) c.FreezeHp = true;
             if (FreezeStatus) foreach (var c in Party) c.FreezeStatus = true;
             if (FreezeSpells) foreach (var c in Party) c.FreezeSpells = true;
+            PartyGen.Refresh();   // the party the generator would write over has just changed
             Status = Party.Count == 0 && Enemies.Count == 0
                 ? "No records found. Make sure a party is loaded (past the title screen), then Re-scan."
                 : $"Found {Party.Count} character(s) and {Enemies.Count} combatant/monster record(s).";
