@@ -36,3 +36,7 @@ Commit subjects are imperative, sentence-case summaries; join related changes wi
 ## Domain Notes
 
 Never write to combat-state memory mid-battle — it hangs the game; edit out of combat or via the offline save editor. Back up saves (`CHRDATA?.SAV`) before experimenting.
+
+"Combat-state memory" means the engine's **per-fight block** at record offset `0x108` — 24 bytes per combatant that the engine rebuilds every round (see `docs/reverse-engineering.md` §6). The trainer never writes it. The 285-byte **character record** is a different thing and is safe to write during a battle: freezing party HP through a fight is exactly what god mode does. What it isn't is reliable — the engine has already copied some fields into the fight — so `MainViewModel.IsBattleActive` drives a caveat on the status line rather than a block on the write. Don't "fix" that by disabling party edits in combat; it would break god mode.
+
+Live records are re-read every poll tick and checked against the character they were found as (`CharacterRecord.IsSameCreatureAs`) before their bytes are adopted, because the game frees and reuses heap slots across area and combat transitions. Anything that follows a remembered address — the party panel, the combat sweep, the item-list head pointer in `LiveInventoryViewModel` — must go through that check rather than trusting a successful read.

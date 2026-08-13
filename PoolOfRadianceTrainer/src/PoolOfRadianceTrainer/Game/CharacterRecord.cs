@@ -180,6 +180,16 @@ public sealed class CharacterRecord
     /// <summary>Best guess of whether this record is a monster rather than a player character.</summary>
     public bool LooksLikeMonster => Race == 0 || Class == 17;
 
+    // Bounds for LooksLikeLiveCombatant. AD&D 1st edition tops out at AC -10 (plate +5 and a
+    // shield +5) and the best THAC0 in the game is 5; the ranges below leave headroom either side
+    // and still exclude what a zero-filled or text-filled buffer decodes to, which is what they
+    // exist for. A scratch buffer reads AC 60 / THAC0 60 (both bytes zero, and the record stores
+    // 60 - value), and ASCII bytes decode to large negatives — neither is inside these bounds.
+    public const int MinPlausibleAc = -12;
+    public const int MaxPlausibleAc = 12;
+    public const int MinPlausibleThac0 = 0;
+    public const int MaxPlausibleThac0 = 26;
+
     /// <summary>
     /// Does this record hold a creature the game could actually be fighting with, as opposed to a
     /// scratch buffer that happens to match the record *shape*? The signature scan can straddle a
@@ -190,8 +200,28 @@ public sealed class CharacterRecord
     /// </summary>
     public bool LooksLikeLiveCombatant =>
         HpMax > 0 && HpCurrent <= HpMax &&
-        ArmorClass is >= -12 and <= 12 &&
-        Thac0 is >= 0 and <= 26;
+        ArmorClass >= MinPlausibleAc && ArmorClass <= MaxPlausibleAc &&
+        Thac0 >= MinPlausibleThac0 && Thac0 <= MaxPlausibleThac0;
+
+    /// <summary>
+    /// Do two records describe the same creature? Used by the poll loop to notice a heap slot the
+    /// game has freed and handed to something else, rather than decoding it as the character who
+    /// used to live there — and then writing that character's frozen HP into it.
+    ///
+    /// <para>Compares name, race, class and gender: the fields that identify a creature and that
+    /// nothing short of the character-creation screen changes. Deliberately <i>not</i> max HP —
+    /// that would look like a strong discriminator and is the obvious thing to add, but it moves
+    /// legitimately (a level-up at a training hall, a Manual of Bodily Health), and a party member
+    /// whose max HP had gone up would stop refreshing for the rest of the session. Everything else
+    /// worth comparing — current HP, status, money, experience — is exactly what a fight or an
+    /// errand changes.</para>
+    /// </summary>
+    public bool IsSameCreatureAs(CharacterRecord other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        return Name == other.Name && Race == other.Race &&
+               Class == other.Class && Gender == other.Gender;
+    }
 
     /// <summary>The single most-representative "level" — the highest non-zero class level.</summary>
     public int EffectiveLevel

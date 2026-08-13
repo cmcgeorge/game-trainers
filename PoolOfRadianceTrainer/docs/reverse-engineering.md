@@ -382,22 +382,60 @@ picks out exactly the Slums' known illusory wall at (1, 0) and nothing else.
 
 **Verification.** Rendering all 29 blocks and matching them against this repo's transcribed Slums map
 scores **1.000** on GEO2 block 20, and a live scan of the running DOSBox process finds that same
-512-byte wall array resident verbatim — the game loads the block into RAM unchanged. Every other area
-was identified the same way against the printed maps in the bundled clue book (0.86–0.97, against a
-runner-up of ~0.6 in each case):
+512-byte wall array resident verbatim — the game loads the block into RAM unchanged.
 
-| area | block | | area | block |
-|------|-------|-|------|-------|
-| New Phlan (15 rows) | GEO3:0 | | Kovel Mansion | GEO3:14 |
-| Slums | GEO2:20 | | Cadorna Textile House | GEO4:2 |
-| Sokal Keep | GEO4:21 | | Wealthy Area & Temple of Bane | GEO1:31 |
-| Kuto's Well | GEO8:29 | | Valjevo Castle SW / NW / NE / SE | GEO5:6 / 5:3 / 5:4 / 5:5 |
-| Podol Plaza | GEO1:18 | | Mendor's Library | GEO2:15 |
+Every other block was identified against the printed maps in the bundled clue book
+(`Cluebook.pdf`, which ships with the GOG release), by an automated match rather than by eye: the
+page scan is thresholded along each grid line, which yields the same wall/no-wall grid the decoder
+produces, and the two are scored by **Matthews correlation over interior edges only** — the outer
+border is ink on every map and carries no signal, and plain agreement would let a nearly wall-free
+block score well against any sparse map just for being mostly blank. The pipeline reproduces the
+known assignments first (Kovel Mansion 1.000, Slums 0.992, Sokal Keep 0.935, Cadorna 0.814), which
+is what licenses the rest:
 
-The four Valjevo quadrants score lower against the clue book (~0.75) because most of each map is
-hedge maze, which the book draws in a different style; they are pinned instead by their edge exits,
-which form a consistent 2×2 — NW leads east and south, NE west and south, SW east and north, SE west
-and north — and that agrees with the clue book's ranking.
+| area | block | score | | area | block | score |
+|------|-------|-------|-|------|-------|-------|
+| New Phlan (15 rows) | GEO3:0 | — | | Nomad Camp | GEO7:17 | 0.44 |
+| Slums | GEO2:20 | 0.99 | | Kobold Caves | GEO8:13 | 0.98 |
+| Sokal Keep | GEO4:21 | 0.94 | | Yarash's Pyramid L1 west | GEO7:22 | 0.26 |
+| Kuto's Well | GEO8:29 | — | | Yarash's Pyramid L1 east | GEO6:25 | 0.20 † |
+| Kuto's Well Catacombs | GEO8:32 | 0.88 | | Yarash's Pyramid L2 | GEO7:23 | 0.81 |
+| Podol Plaza | GEO1:18 | — | | Yarash's Pyramid L3 | GEO8:27 | 0.40 |
+| Mendor's Library | GEO2:15 | — | | Lizard Man Keep | GEO8:16 | 0.49 |
+| Kovel Mansion | GEO3:14 | 1.00 | | Lizard Man Catacombs | GEO8:30 | 0.96 |
+| Cadorna Textile House | GEO4:2 | 0.81 | | Buccaneer's Base | GEO6:1 | 0.94 |
+| Wealthy Area | GEO1:31 | — | | Outpost of Zhentil Keep | GEO6:28 | 0.98 |
+| Temple of Bane | GEO1:24 | 0.99 | | Stojanow Gate | GEO2:9 | 0.97 |
+| Valhingen Graveyard | GEO4:10 | 0.57 | | Valjevo SW / NW / NE / SE | GEO5:6 / 5:3 / 5:4 / 5:5 | ~0.5 |
+| Inner Tower, upper | GEO5:7 | 0.88 | | Inner Tower, lower | GEO7:26 | 0.50 |
+
+Scores below ~0.6 are still decisive — what matters is the margin over the runner-up, not the
+absolute value. The clue book overlays glyphs the game has no notion of (tombstones on the
+graveyard, swamp and rubbled walls on the Lizard Man Keep, trees and a stream on the Nomad Camp),
+and every one of those adds ink that no decoded block can match; Valhingen scores 0.57 against a
+runner-up of 0.098, the Lizard Man Keep 0.49 while winning 2,382 of the 2,401 grid alignments tried.
+The four Valjevo quadrants score ~0.5 for the same reason — most of each map is hedge maze, drawn in
+a style of its own — and are pinned instead by their edge exits, which form a consistent 2×2: NW
+leads east and south, NE west and south, SW east and north, SE west and north.
+
+† **The pyramid and the tower are the weakest links.** Yarash's pyramid is printed as four maps
+(level 1 split across the page gutter into a west and an east half, then levels 2 and 3) and the
+Inner Tower as two small ones, and their five remaining blocks were settled as a set rather than
+individually: level 2 matches at 0.81 outright, and the other four fall out of picking the
+assignment that maximises the total. Two independent signals agree on the split — edge matching, and
+comparing the clue book's *hatched* impassable squares against the squares the decoder derives as
+unreachable, which is what identifies GEO6:25 as the pyramid's east half (its walkable region is the
+top seven rows, the rest sealed, exactly as the book draws it; the alternatives score negative).
+
+**Two maps are only as good as that argument**: GEO7:26 as the Inner Tower's lower level and GEO8:27
+as pyramid level 3. Their geometry is right — these are the game's own blocks either way — but the
+two labels could in principle be swapped with each other. Everything else in the table is anchored
+either on a decisive score or on the assignment being forced.
+
+**The Inner Tower is a partial level.** The clue book draws both tower floors as 8×8 maps, and the
+upper one matches GEO5:7's columns 1–8, rows 4–11 at 0.878 — the block's remaining squares carry no
+walls at all, and it is the only level in the game with no outer border wall. So the schematic for
+it shows a small structure adrift in an open field; that is what the block contains.
 
 **Floors.** The game stores no floor terrain, so "impassable" is derived: a square sealed on all four
 sides, or cut off from the level's main walkable region, can never be stood on. In New Phlan the

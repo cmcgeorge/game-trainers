@@ -87,15 +87,54 @@ public static class CharacterLocator
         // combat arena. Sort by address so the party reads top-to-bottom in game order.
         hits.Sort((a, b) => a.Address.CompareTo(b.Address));
 
-        // DOSBox can map the same guest data at two different host addresses (e.g. the active
-        // heap copy and a stale backup buffer).  After sorting, the lowest address is the live
-        // copy; drop every later hit whose 285 bytes are byte-for-byte identical to an earlier one.
-        var seenContent = new HashSet<string>();
+        return Dedupe(hits);
+    }
+
+    /// <summary>
+    /// Drops the extra copies DOSBox produces when it maps the same guest RAM at more than one host
+    /// address, without losing genuinely distinct creatures that happen to read the same.
+    ///
+    /// <para>Byte-identical records alone are not proof of aliasing: two same-species monsters can be
+    /// byte-for-byte equal at the moment a fight starts, and collapsing them would quietly lose a
+    /// combatant. What separates the two cases is distance. The game keeps the party and the combat
+    /// arena inside one 640 KiB DOS heap, so real creatures are always within
+    /// <see cref="ArenaRadius"/> of each other; a second mapping of that heap is a different host
+    /// region entirely, far outside it. So an identical record is treated as an alias only when it
+    /// is further away than any real creature could be.</para>
+    /// </summary>
+    public static List<LocatedCharacter> Dedupe(List<LocatedCharacter> hits)
+    {
+        // Keyed on a hash of the record bytes rather than a hex string — this runs once per hit of
+        // a full-process scan, and the string would be 570 chars of garbage each time.
+        var kept = new Dictionary<ulong, List<LocatedCharacter>>();
         var deduped = new List<LocatedCharacter>(hits.Count);
+
         foreach (var h in hits)
-            if (seenContent.Add(Convert.ToHexString(h.Record.Bytes)))
-                deduped.Add(h);
+        {
+            ulong key = Fnv1a(h.Record.Bytes);
+            if (!kept.TryGetValue(key, out var sameHash))
+                kept[key] = sameHash = new List<LocatedCharacter>();
+
+            bool isAlias = false;
+            foreach (var prior in sameHash)
+            {
+                if (!h.Record.Bytes.AsSpan().SequenceEqual(prior.Record.Bytes)) continue;   // hash collision
+                nuint gap = h.Address > prior.Address ? h.Address - prior.Address : prior.Address - h.Address;
+                if (gap > (nuint)ArenaRadius) { isAlias = true; break; }
+            }
+            if (isAlias) continue;
+
+            sameHash.Add(h);
+            deduped.Add(h);
+        }
         return deduped;
+    }
+
+    private static ulong Fnv1a(byte[] bytes)
+    {
+        ulong hash = 14695981039346656037;
+        foreach (byte b in bytes) hash = (hash ^ b) * 1099511628211;
+        return hash;
     }
 
     // --- combat-arena sweep --------------------------------------------------
@@ -156,14 +195,31 @@ public static class CharacterLocator
         }
 
         hits.Sort((a, b) => a.Address.CompareTo(b.Address));
-        return hits;
+
+        // The sweep window can span a second mapping of the same heap, and unlike the full scan
+        // nothing here would notice: the same fight would be listed twice. Dedupe on the same
+        // rule the full scan uses.
+        return Dedupe(hits);
     }
 
     /// <summary>
     /// Re-reads a single record into a caller-supplied scratch buffer (length >= record size),
     /// for the poll loop — reusing one buffer across all characters avoids per-tick allocation.
     /// Returns true if the full record was read.
+    ///
+    /// <para>A successful read is not on its own proof the record is still the one that was found
+    /// there: the game frees and reuses heap slots across area and combat transitions, so an
+    /// address remembered from the last scan can come back holding something else entirely. Pass
+    /// <paramref name="expected"/> to have the bytes checked against the record's identity before
+    /// they are accepted — the poll loop does, so a recycled slot drops the character rather than
+    /// decoding a stranger's bytes under their name (and, worse, seeding freeze writes from them).</para>
     /// </summary>
-    public static bool Reread(ProcessMemory mem, nuint address, byte[] buffer) =>
-        mem.Read(address, buffer, PorFormat.RecordSize) == PorFormat.RecordSize;
+    public static bool Reread(ProcessMemory mem, nuint address, byte[] buffer,
+                              CharacterRecord? expected = null)
+    {
+        if (mem.Read(address, buffer, PorFormat.RecordSize) != PorFormat.RecordSize) return false;
+        if (expected == null) return true;
+        return CharacterSignature.Looks(buffer, 0) &&
+               new CharacterRecord(buffer).IsSameCreatureAs(expected);
+    }
 }

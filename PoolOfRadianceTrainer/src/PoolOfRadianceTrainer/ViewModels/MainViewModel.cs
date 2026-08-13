@@ -72,6 +72,32 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
 
     public bool IsAttached => _mem is { IsOpen: true };
 
+    /// <summary>
+    /// Is a battle on screen right now? True while the arena sweep can see live monster records,
+    /// which is the same test the game itself effectively uses — a creature's per-fight block at
+    /// <c>0x108</c> is null outside combat and non-null during one (see
+    /// <c>docs/reverse-engineering.md</c> §6).
+    ///
+    /// <para>This drives the warnings on record edits, not a block on them. The character record is
+    /// not the combat state: the engine runs a fight off that separate per-combatant block and
+    /// rebuilds it every round, so writing the record mid-battle is safe — freezing party HP through
+    /// a fight is exactly what god mode is for. What it isn't is <i>reliable</i>: fields the engine
+    /// has already copied into the fight can read back unchanged until the battle ends, so a "Max
+    /// EVERYTHING" during a round can look like it did nothing. <see cref="CombatCaveat"/> says so
+    /// rather than the trainer silently doing nothing.</para>
+    /// </summary>
+    public bool IsBattleActive => Enemies.Count > 0;
+
+    /// <summary>Appended to the status line for a party/record edit made during a battle.</summary>
+    public string CombatCaveat => IsBattleActive
+        ? " Battle in progress: the engine runs the fight off its own per-combatant block, so some " +
+          "fields won't take effect until it ends. HP and status freezes do hold — and the Combat " +
+          "tab edits the creature records the fight is actually reading."
+        : "";
+
+    /// <summary>Status text for an edit, with the battle caveat appended when one is on.</summary>
+    private string WithCombatCaveat(string text) => text + CombatCaveat;
+
     private bool _isScanning;
     public bool IsScanning { get => _isScanning; set { SetProperty(ref _isScanning, value); RaiseCommands(); } }
 
@@ -179,9 +205,16 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         MaxEverythingPartyCommand = new RelayCommand(_ => ForEachParty(c => c.MaxEverything()), _ => Party.Count > 0);
         MaxMoneyPartyCommand = new RelayCommand(_ => ForEachParty(c => c.MaxMoney()), _ => Party.Count > 0);
         RandomizeIconColorsPartyCommand = new RelayCommand(_ => ForEachParty(c => c.RandomizeIconColors()), _ => Party.Count > 0);
-        KillEnemyCommand = new RelayCommand(_ => { SelectedEnemy?.KillNow(); NoteKill(1); }, _ => SelectedEnemy != null);
-        KillAllEnemiesCommand = new RelayCommand(_ => { foreach (var e in Enemies) e.KillNow(); NoteKill(Enemies.Count); },
-            _ => Enemies.Count > 0);
+        KillEnemyCommand = new RelayCommand(_ =>
+        {
+            if (!ConfirmKill(1)) return;
+            SelectedEnemy?.KillNow(); NoteKill(1);
+        }, _ => SelectedEnemy != null);
+        KillAllEnemiesCommand = new RelayCommand(_ =>
+        {
+            if (!ConfirmKill(Enemies.Count)) return;
+            foreach (var e in Enemies) e.KillNow(); NoteKill(Enemies.Count);
+        }, _ => Enemies.Count > 0);
         WeakenEnemyCommand = new RelayCommand(_ => { SelectedEnemy?.WeakenNow(); NoteWeaken(1); }, _ => SelectedEnemy != null);
         WeakenAllEnemiesCommand = new RelayCommand(_ => { foreach (var e in Enemies) e.WeakenNow(); NoteWeaken(Enemies.Count); },
             _ => Enemies.Count > 0);
@@ -320,6 +353,23 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     }
 
     // --- combat actions ------------------------------------------------------
+
+    /// <summary>
+    /// Asks the user to confirm an irreversible action. The window supplies a real dialog; left
+    /// unset (headless) every action goes ahead, so this is a UI courtesy, not a safety mechanism.
+    /// </summary>
+    public Func<string, bool> Confirm { get; set; } = _ => true;
+
+    /// <summary>
+    /// Kill forfeits the encounter's treasure and XP, and there is no undo once the records are
+    /// zeroed — the status line explaining that only appears after the click, which is too late to
+    /// be a warning. Ask first.
+    /// </summary>
+    private bool ConfirmKill(int n) => Confirm(
+        (n == 1 ? "Zero this enemy's record?" : $"Zero all {n} enemy records?") +
+        "\n\nThe engine never processes this as a kill, so the encounter pays no XP and leaves no " +
+        "treasure — and it cannot be undone.\n\nUse Weaken instead to win the fight and keep the loot.");
+
     // Both messages exist because the difference between the two buttons is not visible on screen
     // until the fight is over and the treasure screen is (or isn't) offered.
     private void NoteWeaken(int n) => Status = n == 1
@@ -334,13 +384,13 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     private void ForEachParty(Action<CharacterViewModel> action)
     {
         foreach (var c in Party) action(c);
-        Status = "Applied to the whole party.";
+        Status = WithCombatCaveat("Applied to the whole party.");
     }
 
     public void HealParty()
     {
         foreach (var c in Party) c.FullHeal();
-        Status = "Party healed.";
+        Status = WithCombatCaveat("Party healed.");
     }
 
     // --- poll loop -----------------------------------------------------------
@@ -362,17 +412,23 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     private void PollTick()
     {
         if (_mem == null) return;
+        // Each record is checked against the character it was found as before its bytes are
+        // adopted: the game frees and reuses heap slots across area and combat transitions, and a
+        // slot that has been handed to something else would otherwise be decoded under this
+        // character's name — and, since ApplyFreeze writes back through the same address, would be
+        // stamped with their HP too. A slot that fails the check is left showing its last known
+        // state until the next Scan.
         foreach (var c in Party)
         {
             c.ApplyFreeze();
-            if (CharacterLocator.Reread(_mem, c.Address, _pollBuf)) c.RefreshLiveSummary(_pollBuf);
+            if (CharacterLocator.Reread(_mem, c.Address, _pollBuf, c.Record)) c.RefreshLiveSummary(_pollBuf);
         }
 
         if (++_tick % 2 == 0) SweepEnemies();
 
         foreach (var e in Enemies)
         {
-            if (CharacterLocator.Reread(_mem, e.Address, _pollBuf)) e.RefreshLiveSummary(_pollBuf);
+            if (CharacterLocator.Reread(_mem, e.Address, _pollBuf, e.Record)) e.RefreshLiveSummary(_pollBuf);
         }
         // The combat editor watches a creature that is being hit while you look at it, so unlike
         // the party panel its fields do track the record — except while they're being typed into.
@@ -431,6 +487,13 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         foreach (var vm in next) Enemies.Add(vm);
         // Clearing the collection drives the list box's selection to null; put it back.
         SelectedEnemy = selected != null && next.Contains(selected) ? selected : next.FirstOrDefault();
+
+        // A battle starting or ending changes what an edit to a party record will actually do.
+        if ((before == 0) != (next.Count == 0))
+        {
+            OnPropertyChanged(nameof(IsBattleActive));
+            OnPropertyChanged(nameof(CombatCaveat));
+        }
 
         // The Kill buttons key off Enemies.Count, and nothing else re-queries them when a battle
         // starts while the user's hands are off the trainer.

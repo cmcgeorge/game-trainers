@@ -142,6 +142,12 @@ walls**, water and impassable squares, plus keyed locations with coordinates. Th
 decoded from the game's own level data (`GEO*.DAX` — see `docs/reverse-engineering.md` §7a), not
 transcribed, so it matches what you walk into.
 
+**All 29 of the game's levels are there**, not just the city districts: the Phlan blocks and their
+undersides (Kuto's Well catacombs), the Temple of Bane and Valhingen Graveyard, every wilderness
+location you can enter — Nomad Camp, Kobold Caves, all four levels of Yarash's Pyramid, the Lizard
+Man Keep and its catacombs, the Buccaneer's Base, the Outpost of Zhentil Keep — and the whole
+endgame: Stojanow Gate, the four Valjevo Castle quadrants, and both floors of the Inner Tower.
+
 The **wilderness** — the overland Moonsea map you reach by boat once Sokal Keep is cleared — is
 there too, 42×33 with its terrain (plains, swamp, forest, hills, mountains, river, deep water) and
 every lettered landmark: the city-edge squares back to Phlan, the boat landings, Yarash's Pyramid,
@@ -246,9 +252,16 @@ test/FormatCheck/                    headless verification against ground-truth 
   exercise.
 - Edits take effect the next time the game reads the field (e.g. opening the character screen).
   During combat, the game may track a separate combatant copy — use god mode / the combat panel /
-  the memory scanner for live-fight edits.
-- Some emulators can map guest RAM more than once, so the scan may list a record twice; they point at
-  the same character.
+  the memory scanner for live-fight edits. The status line says so while a battle is on screen,
+  because a party edit made mid-round can look like it did nothing.
+- Some emulators can map guest RAM more than once. The scan drops the duplicate mapping, but only
+  when the identical record is further away than any real creature could be: two same-species
+  monsters standing next to each other in one fight are byte-for-byte identical at the start of it,
+  and both are kept.
+- Offline save edits go to the files, so the trainer warns if the game is still running — it will
+  overwrite them the next time it saves. Set `POOLRAD_SAVE_ROOTS` (a `;`-separated list of folders)
+  if your install is somewhere the save-folder search doesn't look.
+- **💀 Kill** asks for confirmation: it forfeits the encounter's treasure and XP and cannot be undone.
 - Setting values absurdly high (255 HP, huge money) is safe for the trainer, though the game's own UI
   may display very large numbers oddly — that's cosmetic.
 - Always keep a backup of your save (`CHRDATA?.SAV` / `SAVE*`) before experimenting.

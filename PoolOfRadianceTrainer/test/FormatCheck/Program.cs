@@ -1,4 +1,6 @@
+using System.IO;
 using PoolOfRadianceTrainer.Game;
+using PoolOfRadianceTrainer.Memory;
 
 // Headless verification of the CharacterRecord parser against ground-truth bytes captured
 // from a live DOSBox-X memory dump of the sample party (see .docs/reverse-engineering.md).
@@ -196,6 +198,33 @@ Check("Recharge changed the wand", wand.Recharge(99), true);
 Check("Recharge set charges to 99", wand.Charges, 99);
 Check("Recharge left count at 0 (no clone)", wand.Count, 0);
 
+// Recharge guards itself rather than trusting the caller to have checked IsRechargeable: on a
+// single item the "recharge" byte is the stack count, so an unguarded call would turn one sling
+// into a stack of them. This is the case the guard exists for.
+var lone = new ItemEntry(sling.Raw, 0);
+lone.SetCount(1);
+Check("Recharging a single item is refused", lone.Recharge(99), false);
+Check("...and its count byte is untouched", lone.Count, 1);
+
+// IsChargedItem rests on the name-part byte at 0x31 alone (the type byte's wand/staff/rod ranges
+// aren't verified, and a wrong guard there would reintroduce the cloning bug). That makes the three
+// name-part values load-bearing, so pin them: nothing else in the 0..255 range may classify as
+// charged, and each of the three must.
+int chargedNameParts = 0;
+for (int np = 0; np <= 255; np++)
+{
+    var probe = new ItemEntry(sling.Raw, 0);
+    probe.Raw[ItemEntry.OffNamePart1] = (byte)np;
+    if (probe.IsChargedItem) chargedNameParts++;
+}
+Check("Exactly three name parts read as charged", chargedNameParts, 3);
+foreach (var (name, part) in new[] { ("rod", ItemEntry.NamePartRod), ("stave", ItemEntry.NamePartStave), ("wand", ItemEntry.NamePartWand) })
+{
+    var probe = new ItemEntry(sling.Raw, 0);
+    probe.Raw[ItemEntry.OffNamePart1] = part;
+    Check($"Name part {part} ({name}) is charged", probe.IsChargedItem, true);
+}
+
 // --- item name rendering ----------------------------------------------------
 // Real .ITM records read out of a GOG install's CHRDATA1.ITM (verbatim 63-byte records). The name
 // field is the game's own inventory *line*, so it carries the readied column and, for stacked
@@ -241,6 +270,124 @@ var jewelry = new ItemEntry(FromHex(
 Check("Stacked pseudo-item keeps its count text", jewelry.DisplayName, "Jewelry 3");
 Check("...even though the count byte is 0", jewelry.Count, 0);
 
+// --- duplicate inventory: the item-count quirk -------------------------------
+// DuplicateInventory copies the source's raw item-count byte instead of deriving it from the number
+// of records copied. The two legitimately disagree in real saves — the bundled sample party's
+// Darkstar stores count 4 with only 3 .ITM records and loads fine — so the copy mirrors a
+// known-good character byte for byte rather than imposing a pairing nothing has verified. That is a
+// deliberate contract, and this pins it so a later "tidy-up" can't quietly change it.
+{
+    string dir = Path.Combine(Path.GetTempPath(), "por-formatcheck-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(dir);
+    try
+    {
+        SaveCharacter Make(string tag, int countByte, int itemCount)
+        {
+            var savBytes = new byte[PorFormat.RecordSize];
+            savBytes[PorFormat.OffNumberOfItems] = (byte)countByte;
+            var c = new SaveCharacter
+            {
+                Index = 1,
+                SavPath = Path.Combine(dir, tag + ".SAV"),
+                SpcPath = Path.Combine(dir, tag + ".SPC"),
+                ItmPath = Path.Combine(dir, tag + ".ITM"),
+                SavBytes = savBytes,
+                Record = new CharacterRecord(savBytes),
+            };
+            for (int i = 0; i < itemCount; i++) c.Items.Add(new ItemEntry(readiedShield.Raw));
+            return c;
+        }
+
+        var from = Make("SRC", countByte: 4, itemCount: 3);   // the Darkstar shape: byte 4, 3 records
+        var onto = Make("DST", countByte: 1, itemCount: 1);
+        int copied = SaveGame.DuplicateInventory(from, onto);
+
+        Check("Duplicate copies every source item", copied, 3);
+        Check("Duplicate mirrors the source's count byte, not its item count",
+              onto.SavBytes[PorFormat.OffNumberOfItems], (byte)4);
+        Check("...even though only 3 records were written", onto.Items.Count, 3);
+        Check("Duplicate points the item head at 'present'",
+              onto.SavBytes[PorFormat.OffItemsPtr] != 0 || onto.SavBytes[PorFormat.OffItemsPtr + 1] != 0, true);
+        Check("Duplicate wrote the .ITM file",
+              new FileInfo(onto.ItmPath).Length, (long)(3 * ItemEntry.RecordSize));
+    }
+    finally { try { Directory.Delete(dir, recursive: true); } catch { /* temp dir */ } }
+}
+
+// --- live-record identity ----------------------------------------------------
+// The poll loop re-reads each located record every tick and must notice when the game has freed
+// that heap slot and handed it to something else, rather than decoding a stranger under the old
+// name — and then stamping them with the old character's frozen HP. Identity is the fields a fight
+// does not rewrite; HP, status, money and XP all move while the same creature is being played.
+var same = new CharacterRecord(FromHex(ThrenderHex));
+same.HpCurrent = 3; same.Status = 4; same.Experience = 999; same.Gold = 12;
+Check("A battered record is still the same character", thrender.IsSameCreatureAs(same), true);
+Check("...and identity is symmetric", same.IsSameCreatureAs(thrender), true);
+
+var other = new CharacterRecord(FromHex(RhiannonHex));
+Check("A different party member is not", thrender.IsSameCreatureAs(other), false);
+
+var renamed = new CharacterRecord(FromHex(ThrenderHex));
+renamed.Name = "GRISHNAK";
+Check("A recycled slot with a new name is not", thrender.IsSameCreatureAs(renamed), false);
+
+// Max HP is deliberately not part of identity: it moves at a training hall, and treating that as a
+// different creature would stop a levelled-up party member refreshing for the rest of the session.
+var levelled = new CharacterRecord(FromHex(ThrenderHex));
+levelled.HpMax = thrender.HpMax + 6;
+Check("A level-up does not break identity", thrender.IsSameCreatureAs(levelled), true);
+
+var reclassed = new CharacterRecord(FromHex(ThrenderHex));
+reclassed.Class = thrender.Class + 1;
+Check("A different class reads as a different creature", thrender.IsSameCreatureAs(reclassed), false);
+
+// The AC/THAC0 plausibility bounds are load-bearing — they are what keeps a stray buffer that
+// happens to match the record *shape* out of the combat list — so pin what they admit and reject.
+Check("Live-combatant AC lower bound", CharacterRecord.MinPlausibleAc, -12);
+Check("Live-combatant AC upper bound", CharacterRecord.MaxPlausibleAc, 12);
+Check("Live-combatant THAC0 upper bound", CharacterRecord.MaxPlausibleThac0, 26);
+var zeroed = new CharacterRecord(new byte[PorFormat.RecordSize]);
+Check("A zero-filled buffer decodes to AC 60", zeroed.ArmorClass, 60);
+Check("...and is refused as a live combatant", zeroed.LooksLikeLiveCombatant, false);
+
+// --- scan deduplication ------------------------------------------------------
+// DOSBox can map the same guest RAM at two host addresses, so the scan sees each record twice and
+// has to drop the copy. It cannot do that on identical bytes alone: two same-species monsters are
+// byte-for-byte equal at the moment a fight starts, and collapsing them would lose a combatant off
+// the list — and with it whichever one the Kill/Weaken buttons were aimed at. Distance is what
+// separates the cases: the party and the arena share one 640 KiB DOS heap, so real creatures are
+// always close together, while a second mapping of that heap is far outside it.
+{
+    var kobold = FromHex(RhiannonHex);
+    LocatedCharacter At(ulong addr) => new((nuint)addr, new CharacterRecord(kobold));
+
+    var twins = CharacterLocator.Dedupe(new List<LocatedCharacter>
+        { At(0x10000000), At(0x10000210) });                       // two records, 528 bytes apart
+    Check("Identical records side by side are both kept", twins.Count, 2);
+
+    var aliased = CharacterLocator.Dedupe(new List<LocatedCharacter>
+        { At(0x10000000), At(0x10000000 + (ulong)CharacterLocator.ArenaRadius + 0x1000) });
+    Check("The same record seen in a second mapping is dropped", aliased.Count, 1);
+    Check("...and the lower (live) address is the one kept", (ulong)aliased[0].Address, 0x10000000UL);
+
+    var different = CharacterLocator.Dedupe(new List<LocatedCharacter>
+        { new((nuint)0x10000000, new CharacterRecord(FromHex(ThrenderHex))),
+          new((nuint)0x20000000, new CharacterRecord(FromHex(RhiannonHex))) });
+    Check("Different records far apart are both kept", different.Count, 2);
+}
+
+// --- value-scan alignment -----------------------------------------------------
+// An exact-value search walks every byte offset, because game data is not reliably aligned — the
+// party's indoor position is three adjacent bytes wherever the compiler put them. An unknown-value
+// search keeps a candidate per examined offset, so it steps by the value width instead; scanning
+// every offset there would multiply an already huge candidate set by 2 or 4 for a search that gets
+// narrowed down afterwards anyway.
+Check("Exact-value byte scan steps 1", MemorySearcher.StepFor(ScanWidth.Byte, exactValue: true), 1);
+Check("Exact-value 16-bit scan steps 1", MemorySearcher.StepFor(ScanWidth.Int16, exactValue: true), 1);
+Check("Exact-value 32-bit scan steps 1", MemorySearcher.StepFor(ScanWidth.Int32, exactValue: true), 1);
+Check("Unknown 16-bit scan steps 2", MemorySearcher.StepFor(ScanWidth.Int16, exactValue: false), 2);
+Check("Unknown 32-bit scan steps 4", MemorySearcher.StepFor(ScanWidth.Int32, exactValue: false), 4);
+
 // --- map terrain ------------------------------------------------------------
 // Walls/doors are decoded from the game's own GEO*.DAX geometry (see Game/MapTerrainData.cs).
 // These spot-checks anchor the decode to landmarks that are verifiable in the game and clue book.
@@ -267,6 +414,32 @@ Check("New Phlan is 15 rows deep", MapBook.Areas.First(a => a.Name == "New Phlan
 // not sea wall — proof the bottom boundary row is really being read for a 15-row map.
 Check("New Phlan south wall at (0,14)", phlan[0, 14].South, WallKind.Wall);
 Check("New Phlan harbour opens south at (13,14)", phlan[13, 14].South, WallKind.None);
+
+// Every GEO block the game ships is now decoded and named: 29 indoor levels, plus the overland map,
+// which has no GEO block of its own. A count check catches an area being dropped or double-added.
+Check("All 29 indoor levels plus the overland map", MapBook.Areas.Count, 30);
+Check("Every GEO block is used exactly once",
+      MapBook.Areas.Count(a => !a.IsWilderness), 29);
+
+// One anchor per newly decoded area group, on a feature the clue book draws unambiguously.
+// The Temple of Bane's nave is a colonnade: free-standing pillars down rows 7 and 8, which show up
+// as west walls with no north wall to join them to anything.
+var bane = MapBook.Areas.First(a => a.Name == "Temple of Bane").Terrain!;
+Check("Temple of Bane colonnade pillar at (6,7)", bane[6, 7].West, WallKind.Wall);
+Check("Temple of Bane pillar is free-standing", bane[6, 7].North, WallKind.None);
+
+var stojanow = MapBook.Areas.First(a => a.Name == "Stojanow Gate").Terrain!;
+Check("Stojanow southern gate at (8,9) is a door", stojanow[8, 9].North, WallKind.Door);
+Check("Stojanow northern gate at (8,7) is a door", stojanow[8, 7].North, WallKind.Door);
+
+// The tower fills only columns 1-8, rows 4-11 of its block, which is what pins the clue book's 8x8
+// "Upper Level" drawing onto this 16x16 level. Uniquely among the levels the block has no outer
+// border wall at all — the squares outside the tower are simply never used.
+var tower = MapBook.Areas.First(a => a.Name.EndsWith("upper level")).Terrain!;
+Check("Inner Tower west wall at (1,4)", tower[1, 4].West, WallKind.Wall);
+Check("Inner Tower north wall at (1,4)", tower[1, 4].North, WallKind.Wall);
+Check("Inner Tower has no outer border", tower[0, 0].North, WallKind.None);
+Check("Inner Tower solid block at (1,11)", tower[1, 11].Floor, FloorKind.Stone);
 
 // --- wilderness (overland Moonsea map) --------------------------------------
 // Terrain here is transcribed from the clue-book map, not decoded from the game (see

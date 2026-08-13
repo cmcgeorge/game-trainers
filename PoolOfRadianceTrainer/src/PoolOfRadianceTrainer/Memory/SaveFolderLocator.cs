@@ -20,15 +20,48 @@ public static class SaveFolderLocator
     private static readonly string[] EmulatorNames =
         { "dosbox", "dosbox-x", "dosbox-staging", "boxer" };
 
-    /// <summary>Install roots worth checking when the game isn't running.</summary>
-    private static readonly string[] FallbackRoots =
+    /// <summary>
+    /// Install roots worth checking when the game isn't running. These are only a fallback — with
+    /// the game running the search starts from the emulator's own folder and never needs them.
+    ///
+    /// <para>Settable, and read from <c>POOLRAD_SAVE_ROOTS</c> (a <c>;</c>-separated list) at
+    /// startup, so a copy installed somewhere unusual can be found without falling back to typing
+    /// the path in by hand.</para>
+    /// </summary>
+    public static IReadOnlyList<string> FallbackRoots { get; set; } = ReadFallbackRoots();
+
+    private static string[] ReadFallbackRoots()
     {
-        @"C:\Temp\Games",
-        @"C:\GOG Games",
-        @"C:\Program Files (x86)\GOG Galaxy\Games",
-        @"C:\Program Files (x86)\Steam\steamapps\common",
-        @"C:\Program Files\GOG Galaxy\Games",
-    };
+        string[] defaults =
+        {
+            @"C:\Temp\Games",
+            @"C:\GOG Games",
+            @"C:\Program Files (x86)\GOG Galaxy\Games",
+            @"C:\Program Files (x86)\Steam\steamapps\common",
+            @"C:\Program Files\GOG Galaxy\Games",
+        };
+        string? extra = Environment.GetEnvironmentVariable("POOLRAD_SAVE_ROOTS");
+        if (string.IsNullOrWhiteSpace(extra)) return defaults;
+        // Listed first: someone who names a root explicitly means that one.
+        return extra.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Concat(defaults).ToArray();
+    }
+
+    /// <summary>Is an emulator running right now? The offline save editor asks, because the game
+    /// rewrites its save files on its own schedule and an edit applied underneath it is simply
+    /// overwritten when it next saves.</summary>
+    public static bool EmulatorRunning()
+    {
+        foreach (var p in Process.GetProcesses())
+        {
+            bool match = false;
+            try { match = EmulatorNames.Any(n => p.ProcessName.Contains(n, StringComparison.OrdinalIgnoreCase)); }
+            catch { /* exited between enumeration and query */ }
+            finally { p.Dispose(); }
+            if (match) return true;
+        }
+        return false;
+    }
 
     /// <summary>How far below a candidate root to look for the save folder. The GOG layout needs
     /// two (<c>Pool of Radiance\cloud_saves\POOLRAD</c>); more than that just costs a directory walk.</summary>

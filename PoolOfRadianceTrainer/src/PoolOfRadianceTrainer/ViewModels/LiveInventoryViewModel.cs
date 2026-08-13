@@ -87,8 +87,28 @@ public sealed class LiveInventoryCharacterViewModel : ObservableObject
     public nuint Address { get; }
 
     /// <summary>This character's record as located. Its address is stable for the session, so
-    /// re-reading it gives a fresh item-list head pointer whenever the party's items change.</summary>
+    /// re-reading it gives a fresh item-list head pointer whenever the party's items change —
+    /// see <see cref="RefreshRecord"/>, which every item walk goes through.</summary>
     public CharacterRecord Record { get; }
+
+    /// <summary>
+    /// Re-reads this character's 285-byte record from the game before its item list is walked.
+    ///
+    /// <para>Without this the walk starts from whatever the item-list head pointer
+    /// (<see cref="PorFormat.OffItemsPtr"/>) held at scan time, and the game rewrites that pointer
+    /// every time the list changes — looting, selling, dropping, or drinking a potion. A stale head
+    /// means the walk misses newly acquired items, keeps showing ones that are gone, and lets the
+    /// ammo freeze write down a chain the game has already rebuilt.</para>
+    ///
+    /// <para>The record is only adopted if it still decodes as this same character, so a heap slot
+    /// that has been recycled since the scan is refused rather than followed.</para>
+    /// </summary>
+    public bool RefreshRecord(ProcessMemory mem, byte[] scratch)
+    {
+        if (!CharacterLocator.Reread(mem, Address, scratch, Record)) return false;
+        Array.Copy(scratch, 0, Record.Bytes, 0, PorFormat.RecordSize);
+        return true;
+    }
 
     public ObservableCollection<LiveItemViewModel> Items { get; } = new();
 
@@ -134,6 +154,11 @@ public sealed class LiveInventoryViewModel : ObservableObject, ILiveItemHost
     /// <summary>Where the emulated guest's RAM sits in the host process, so the game's own far
     /// pointers can be followed. Fixed for a session; resolved on Scan.</summary>
     private nuint? _guestBase;
+
+    /// <summary>One scratch buffer for re-reading owner records, reused across the party and the
+    /// poll tick — <see cref="LiveInventoryCharacterViewModel.RefreshRecord"/> copies out of it
+    /// immediately, so nothing is allocated per tick.</summary>
+    private readonly byte[] _recordBuf = new byte[PorFormat.RecordSize];
 
     public ObservableCollection<LiveInventoryCharacterViewModel> Characters { get; } = new();
 
@@ -233,7 +258,7 @@ public sealed class LiveInventoryViewModel : ObservableObject, ILiveItemHost
             ? "No party members located — Attach and Scan first."
             : _guestBase == null
                 ? "Located the party, but couldn't follow its item lists. Re-scan out of combat, with the game past the title screen."
-                : $"Located {total} carried item(s) across {Characters.Count} party member(s).";
+                : $"Located {total} carried item(s) across {Characters.Count} party member(s)." + _guestBaseCaveat;
     }
 
     /// <summary>Locates the guest's RAM inside the emulator once per scan, using the first party
@@ -241,12 +266,35 @@ public sealed class LiveInventoryViewModel : ObservableObject, ILiveItemHost
     /// session, so a later character with an odd list can't cost another search.</summary>
     private nuint? ResolveGuestBase(IReadOnlyList<LocatedCharacter> party)
     {
+        _guestBaseCaveat = "";
         if (_mem == null) return null;
+
+        // Take the best-corroborated answer any party member gives, not the first one that walks:
+        // a chain whose length matches its owner's item count is the strong result, and one member
+        // with an odd list shouldn't decide the offset for the whole session when another agrees.
+        ItemLocator.GuestBase? best = null;
         foreach (var lc in party)
-            if (ItemLocator.ResolveGuestBase(_mem, lc) is { } b)
-                return b;
-        return null;
+        {
+            var found = ItemLocator.ResolveGuestBaseDetailed(_mem, lc);
+            if (found is not { } g) continue;
+            if (best is not { } b || (g.CountMatched && !b.CountMatched) ||
+                (g.CountMatched == b.CountMatched && g.ChainLength > b.ChainLength))
+                best = g;
+            if (best is { CountMatched: true, Ambiguous: false }) break;
+        }
+        if (best is not { } r) return null;
+
+        if (!r.CountMatched || r.Ambiguous)
+            _guestBaseCaveat = " The item lists were matched without full corroboration " +
+                               $"({r.ChainLength} item(s) walked against a recorded count of {r.ExpectedCount}" +
+                               (r.Ambiguous ? ", and another location fitted equally well" : "") +
+                               ") — check the list looks right before editing.";
+        return r.Base;
     }
+
+    /// <summary>Appended to the Scan status when the guest→host offset had to be settled on weaker
+    /// evidence than an exact item-count match.</summary>
+    private string _guestBaseCaveat = "";
 
     // --- actions -------------------------------------------------------------
     /// <summary>Told to the user after any identify, because the effect is easy to mistake for a
@@ -258,22 +306,40 @@ public sealed class LiveInventoryViewModel : ObservableObject, ILiveItemHost
     private void IdentifyAll()
     {
         if (_mem == null) return;
-        int n = 0, stale = 0;
+        int n = 0, stale = 0, failed = 0;
         foreach (var c in Characters)
             foreach (var it in c.Items)
                 if (!it.Item.Identified)
                 {
                     if (!Resolve(c, it)) { stale++; continue; }
+                    // Edit a copy: if the write is refused the row must keep describing what the
+                    // game still holds, not what the trainer wanted it to hold.
+                    var edited = it.Item.Clone();
+                    edited.Identify();
+                    if (!_mem.WriteRange(it.Address, edited.Raw, ItemEntry.OffHiddenNames, 1)) { failed++; continue; }
                     it.Item.Identify();
-                    _mem.WriteRange(it.Address, it.Item.Raw, ItemEntry.OffHiddenNames, 1);
                     it.Raise();
                     n++;
                 }
-        Status = stale > 0
-            ? $"Identified {n} live item(s); {stale} item(s) could no longer be found — Re-scan and run again."
-            : n > 0
-                ? $"Identified {n} live item(s) across the party. {NameCacheNote}"
-                : "Every party item is already identified (the ID'd column is ticked for all of them). " + NameCacheNote;
+        Status = Report($"Identified {n} live item(s)", n, stale, failed,
+                        n > 0 ? " " + NameCacheNote : "",
+                        "Every party item is already identified (the ID'd column is ticked for all of them). " + NameCacheNote);
+    }
+
+    /// <summary>
+    /// One status line for the bulk actions, so a partial result reads the same whichever button
+    /// produced it — and so a failed write is never counted as a success.
+    /// </summary>
+    private static string Report(string didText, int done, int stale, int failed, string suffix, string noneText)
+    {
+        if (done == 0 && stale == 0 && failed == 0) return noneText;
+        var parts = new List<string>();
+        if (done > 0) parts.Add(didText);
+        if (stale > 0) parts.Add($"{stale} could no longer be found");
+        if (failed > 0) parts.Add($"{failed} could not be written to the game");
+        string text = string.Join("; ", parts) + ".";
+        if (stale > 0 || failed > 0) text += " Re-scan and run again.";
+        return text + suffix;
     }
 
     // --- ILiveItemHost -------------------------------------------------------
@@ -315,8 +381,16 @@ public sealed class LiveInventoryViewModel : ObservableObject, ILiveItemHost
             return;
         }
         string replaced = dst.DisplayName;
+        // Build the replacement separately so a refused write leaves the row describing the slot
+        // the game still has, rather than showing a copy that never landed.
+        var edited = dst.Item.Clone();
+        edited.CopyFrom(src.Item);
+        if (!_mem.WriteRange(dst.Address, edited.Raw, 0, ItemEntry.RecordSize))
+        {
+            Status = $"Copying onto the '{replaced}' slot failed — Re-scan, then try again.";
+            return;
+        }
         dst.Item.CopyFrom(src.Item);
-        _mem.WriteRange(dst.Address, dst.Item.Raw, 0, ItemEntry.RecordSize);
         dst.Raise();
         Status = $"Copied '{src.DisplayName}' onto the '{replaced}' slot of {c.Name}.";
     }
@@ -334,8 +408,14 @@ public sealed class LiveInventoryViewModel : ObservableObject, ILiveItemHost
             Status = "That item could no longer be found. Re-scan, then try again.";
             return;
         }
+        var edited = it.Item.Clone();
+        edited.Recharge(RechargeCount);
+        if (!_mem.WriteRange(it.Address, edited.Raw, edited.RechargeOffset, 1))
+        {
+            Status = $"Recharging '{it.DisplayName}' failed — Re-scan, then try again.";
+            return;
+        }
         it.Item.Recharge(RechargeCount);
-        _mem.WriteRange(it.Address, it.Item.Raw, it.Item.RechargeOffset, 1);
         it.Raise();
         Status = it.Item.IsChargedItem
             ? $"Recharged '{it.DisplayName}' to {RechargeCount} charges."
@@ -345,22 +425,21 @@ public sealed class LiveInventoryViewModel : ObservableObject, ILiveItemHost
     private void RechargeAll()
     {
         if (_mem == null) return;
-        int n = 0, miss = 0;
+        int n = 0, miss = 0, failed = 0;
         foreach (var c in Characters)
             foreach (var it in c.Items)
                 if (it.Item.IsRechargeable)
                 {
                     if (!Resolve(c, it)) { miss++; continue; }
+                    var edited = it.Item.Clone();
+                    edited.Recharge(RechargeCount);
+                    if (!_mem.WriteRange(it.Address, edited.Raw, edited.RechargeOffset, 1)) { failed++; continue; }
                     it.Item.Recharge(RechargeCount);
-                    _mem.WriteRange(it.Address, it.Item.Raw, it.Item.RechargeOffset, 1);
                     it.Raise();
                     n++;
                 }
-        Status = n == 0
-            ? "No rechargeable items (ammunition or wands) found in the party."
-            : miss > 0
-                ? $"Recharged {n} item(s) to {RechargeCount}; {miss} could no longer be found — Re-scan and run again."
-                : $"Recharged {n} rechargeable item(s) across the party to {RechargeCount}.";
+        Status = Report($"Recharged {n} item(s) to {RechargeCount}", n, miss, failed, "",
+                        "No rechargeable items (ammunition or wands) found in the party.");
     }
 
     /// <summary>Called each poll tick: refreshes what the list shows, then applies the ammo freeze.</summary>
@@ -386,6 +465,7 @@ public sealed class LiveInventoryViewModel : ObservableObject, ILiveItemHost
         if (_mem == null || _guestBase is not { } b) return;
         foreach (var c in Characters)
         {
+            if (!c.RefreshRecord(_mem, _recordBuf)) continue;
             var chain = ItemLocator.FollowChain(_mem, b, c.Record);
             // A chain that reads as empty is far more likely to be a transient (the game rewriting
             // its heap as a menu opens) than the party genuinely dropping everything, so leave the
@@ -429,14 +509,25 @@ public sealed class LiveInventoryViewModel : ObservableObject, ILiveItemHost
     public void ApplyFreeze()
     {
         if (_mem == null || !_freezeAmmo || _guestBase is not { } b) return;
+        int failed = 0;
         foreach (var c in Characters)
+        {
+            if (!c.RefreshRecord(_mem, _recordBuf)) continue;
             foreach (var li in ItemLocator.FollowChain(_mem, b, c.Record))
                 if (li.Item.IsRechargeable && li.Item.RechargeValue != RechargeCount)
                 {
                     li.Item.Recharge(RechargeCount);
-                    _mem.WriteRange(li.Address, li.Item.Raw, li.Item.RechargeOffset, 1);
+                    if (!_mem.WriteRange(li.Address, li.Item.Raw, li.Item.RechargeOffset, 1)) failed++;
                 }
+        }
+        // The freeze runs on the poll timer, so it must not shout every tick; say it once, when the
+        // writes start failing, rather than leaving the toggle looking like it is still working.
+        if (failed > 0 && !_freezeWriteFailed)
+            Status = "Ammo & charge freeze couldn't write to the game — Re-scan, or Detach and Attach again.";
+        _freezeWriteFailed = failed > 0;
     }
+
+    private bool _freezeWriteFailed;
 
     // --- safety --------------------------------------------------------------
     /// <summary>Confirms an item can be safely written: if it is still at its last-scanned address it
@@ -448,6 +539,7 @@ public sealed class LiveInventoryViewModel : ObservableObject, ILiveItemHost
         if (_mem == null) return false;
         if (StillAt(it)) return true;
         if (_guestBase is not { } b) return false;
+        if (!c.RefreshRecord(_mem, _recordBuf)) return false;
 
         foreach (var li in ItemLocator.FollowChain(_mem, b, c.Record))
             if (li.Item.Type == it.Item.Type && li.Item.DisplayName == it.Item.DisplayName)

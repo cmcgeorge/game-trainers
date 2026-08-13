@@ -48,13 +48,43 @@ public static class ItemLocator
         FarPointer.Read(record.Bytes, PorFormat.OffItemsPtr);
 
     /// <summary>
+    /// What <see cref="ResolveGuestBaseDetailed"/> found: the guest→host offset, how well it was
+    /// corroborated, and whether anything else could have been chosen. Reported rather than
+    /// swallowed because this one number underpins every later live item read and write — if it is
+    /// wrong, the trainer edits the wrong bytes of a running game.
+    /// </summary>
+    /// <param name="Base">The resolved guest→host offset.</param>
+    /// <param name="ChainLength">How many items the winning candidate's chain walked.</param>
+    /// <param name="ExpectedCount">The owner record's own item count, which the chain should match.</param>
+    /// <param name="Ambiguous">True when a rival candidate walked an equally good chain from a
+    /// different offset, so the choice between them rested on nothing stronger than order.</param>
+    public readonly record struct GuestBase(nuint Base, int ChainLength, int ExpectedCount, bool Ambiguous)
+    {
+        /// <summary>The chain length agrees with the record's own item count — a coincidence a wrong
+        /// offset is very unlikely to produce.</summary>
+        public bool CountMatched => ChainLength == ExpectedCount;
+    }
+
+    /// <summary>
     /// Works out where the guest's RAM sits in the host process, by finding the host address the
     /// character's first item must be at. DOSBox maps the emulated RAM as one flat block, so a single
     /// guest address paired with its host address fixes the offset for the whole session — and every
     /// candidate is checked by walking the chain with it, which a wrong offset cannot survive.
     /// Returns null when no candidate produces a well-formed list.
     /// </summary>
-    public static nuint? ResolveGuestBase(ProcessMemory mem, LocatedCharacter owner)
+    public static nuint? ResolveGuestBase(ProcessMemory mem, LocatedCharacter owner) =>
+        ResolveGuestBaseDetailed(mem, owner)?.Base;
+
+    /// <summary>
+    /// As <see cref="ResolveGuestBase"/>, but reports how well the answer is corroborated.
+    ///
+    /// <para>Every candidate is scored, rather than the first well-formed chain being taken: a
+    /// chain whose length matches the owner's own item count wins outright, and among candidates
+    /// that only walk cleanly the longest chain wins, because each additional link is another whole
+    /// item record a wrong offset would have had to land on by accident. Ties are broken by the
+    /// lowest offset so the same session resolves the same way twice, and reported as ambiguous.</para>
+    /// </summary>
+    public static GuestBase? ResolveGuestBaseDetailed(ProcessMemory mem, LocatedCharacter owner)
     {
         var head = HeadOf(owner.Record);
         if (head.IsNull) return null;
@@ -63,21 +93,41 @@ public static class ItemLocator
         nuint from = owner.Address > (nuint)BaseSearchWindow ? owner.Address - (nuint)BaseSearchWindow : 0;
         nuint to = owner.Address + (nuint)BaseSearchWindow;
 
-        nuint? best = null;
-        int bestScore = 0;
+        nuint bestBase = 0;
+        int bestLength = 0;
+        bool bestMatched = false, ambiguous = false;
+
         foreach (nuint candidate in ScanForItemRecords(mem, from, to))
         {
             if (candidate < (nuint)head.Linear) continue;
             nuint guestBase = candidate - (nuint)head.Linear;
             int count = Walk(mem, guestBase, head, null);
             if (count == 0) continue;
-            // A chain that walks cleanly is already near-conclusive; one whose length also matches
-            // the record's own item count is conclusive, so prefer that.
-            int score = count == expected ? 2 : 1;
-            if (score > bestScore) { bestScore = score; best = guestBase; }
-            if (bestScore == 2) break;
+            bool matched = count == expected;
+
+            if (bestLength == 0)                                   // first well-formed candidate
+            {
+                bestBase = guestBase; bestLength = count; bestMatched = matched;
+            }
+            else if (matched && !bestMatched)                      // count corroboration beats length
+            {
+                bestBase = guestBase; bestLength = count; bestMatched = true; ambiguous = false;
+            }
+            else if (matched == bestMatched)
+            {
+                if (count > bestLength) { bestBase = guestBase; bestLength = count; ambiguous = false; }
+                else if (count == bestLength && guestBase != bestBase)
+                {
+                    ambiguous = true;
+                    if (guestBase < bestBase) bestBase = guestBase;
+                }
+            }
+
+            // An exact count match on a chain the record itself vouches for cannot be improved on.
+            if (bestMatched && bestLength == expected && !ambiguous) break;
         }
-        return best;
+
+        return bestLength == 0 ? null : new GuestBase(bestBase, bestLength, expected, ambiguous);
     }
 
     /// <summary>The items on a character's list, in the order the game shows them.</summary>

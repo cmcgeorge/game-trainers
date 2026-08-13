@@ -98,15 +98,25 @@ public sealed class MemorySearchViewModel : ObservableObject
         var width = Width;
         if (unknown)
         {
-            RunScan((s, ct) => { s.FirstScanUnknown(width, ct); return $"First scan: {s.Count:N0} candidates."; });
+            RunScan((s, ct) => { s.FirstScanUnknown(width, ct); return FirstScanReport(s); });
         }
         else
         {
             var v = ParseValue();
             if (v == null) { Status = "Enter a value first."; return; }
-            RunScan((s, ct) => { s.FirstScanValue(width, v.Value, ct); return $"First scan: {s.Count:N0} candidates."; });
+            RunScan((s, ct) => { s.FirstScanValue(width, v.Value, ct); return FirstScanReport(s); });
         }
     }
+
+    /// <summary>
+    /// Reports a first scan, and says so when it stopped at the candidate ceiling — otherwise a
+    /// capped scan looks like a complete one, and the address being hunted may simply lie in the
+    /// part of memory the sweep never reached.
+    /// </summary>
+    private static string FirstScanReport(MemorySearcher s) => s.Truncated
+        ? $"First scan stopped at the {MemorySearcher.MaxResults:N0}-candidate ceiling — later memory " +
+          "was not scanned. Narrow with a smaller search: pick an exact value, or a wider value size."
+        : $"First scan: {s.Count:N0} candidates.";
 
     private void Next(ScanCompare cmp, bool requireValue = false)
     {

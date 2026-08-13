@@ -259,6 +259,41 @@ public sealed class SaveEditorViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Asks the user to confirm before an edit that could be lost. The window supplies a real
+    /// dialog; left unset (headless) every edit goes ahead.
+    /// </summary>
+    public Func<string, bool> Confirm { get; set; } = _ => true;
+
+    private bool _warnedGameRunning;
+
+    /// <summary>
+    /// Everything a mutating command must do before it writes: warn once if the game is running,
+    /// then take the session's one-shot backup. Returns false when the user backs out.
+    ///
+    /// <para>The warning matters because these edits go to files, not to the running game: the game
+    /// holds the party in memory and writes the save on its own schedule, so an edit applied
+    /// underneath it survives only until it next saves — and if it saves after the edit, the edit is
+    /// simply gone. The atomic write protects the file from being truncated; it cannot protect it
+    /// from being overwritten a minute later.</para>
+    /// </summary>
+    private bool ReadyToWrite()
+    {
+        if (_save == null) return false;
+        if (!_warnedGameRunning && SaveFolderLocator.EmulatorRunning())
+        {
+            _warnedGameRunning = true;   // ask once per session, not once per button
+            if (!Confirm("Pool of Radiance looks like it is still running.\n\n" +
+                         "Save-file edits are applied to the files on disk, so the running game will " +
+                         "overwrite them the next time it saves — and it may already hold the party in " +
+                         "memory. Quit the game first, or use the live tabs to edit it as it runs.\n\n" +
+                         "Apply the edit anyway?"))
+                return false;
+        }
+        EnsureBackup();
+        return true;
+    }
+
     private void EnsureBackup()
     {
         if (_save == null || _backedUp) return;
@@ -284,7 +319,7 @@ public sealed class SaveEditorViewModel : ObservableObject
 
         try
         {
-            EnsureBackup();
+            if (!ReadyToWrite()) { Status = "Edit cancelled."; return; }
             int totalAdded = 0;
             foreach (var cvm in targets)
             {
@@ -303,7 +338,7 @@ public sealed class SaveEditorViewModel : ObservableObject
         if (_save == null || SelectedCharacter == null || SelectedEffect == null) return;
         try
         {
-            EnsureBackup();
+            if (!ReadyToWrite()) { Status = "Edit cancelled."; return; }
             SelectedCharacter.Model.Effects.Remove(SelectedEffect);
             SaveGame.Write(SelectedCharacter.Model);
             SelectedCharacter.Refresh();
@@ -321,7 +356,7 @@ public sealed class SaveEditorViewModel : ObservableObject
         if (_save == null || owner == null) return;
         try
         {
-            EnsureBackup();
+            if (!ReadyToWrite()) { Status = "Edit cancelled."; return; }
             SaveGame.WriteItems(owner.Model);
             Status = $"{(item.Identified ? "Identified" : "Re-hid")} '{item.DisplayName}' on {owner.Name}. " +
                      $"Backup: {_lastBackup}. Reload the save in the game to see it.";
@@ -348,7 +383,7 @@ public sealed class SaveEditorViewModel : ObservableObject
 
         try
         {
-            EnsureBackup();
+            if (!ReadyToWrite()) { Status = "Edit cancelled."; return; }
             int total = 0, chars = 0;
             foreach (var cvm in targets)
             {
@@ -367,7 +402,7 @@ public sealed class SaveEditorViewModel : ObservableObject
         if (DuplicateSource == SelectedCharacter) { Status = "Pick two different characters."; return; }
         try
         {
-            EnsureBackup();
+            if (!ReadyToWrite()) { Status = "Edit cancelled."; return; }
             int n = SaveGame.DuplicateInventory(DuplicateSource.Model, SelectedCharacter.Model);
             SelectedCharacter.Refresh();
             Status = $"Copied {n} item(s) from {DuplicateSource.Name} onto {SelectedCharacter.Name}, " +

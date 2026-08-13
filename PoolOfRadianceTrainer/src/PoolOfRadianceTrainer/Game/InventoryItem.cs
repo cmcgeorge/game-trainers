@@ -54,7 +54,7 @@ public sealed class ItemEntry
 
     public const int OffNextLink = 0x2A;   // far pointer to the owner's next item
     public const int OffType = 0x2E;
-    private const int OffNamePart1 = 0x31; // base name-part index; marks wands/staves/rods
+    public const int OffNamePart1 = 0x31;  // base name-part index; marks wands/staves/rods
     private const int OffPlus = 0x32;
     public const int OffReadied = 0x34;
     public const int OffHiddenNames = 0x35;
@@ -64,10 +64,12 @@ public sealed class ItemEntry
     public const int OffCharges = 0x3C;    // Property3: current charges for wands/staves/rods
     public const int NameMax = 0x2A;       // 42-byte name field (Pascal: len + up to 41 chars)
 
-    // NamePart1 indices (GB_UTIL_ITM, game 1) for the charge-bearing item classes.
-    private const byte NamePartRod = 67;
-    private const byte NamePartStave = 68;
-    private const byte NamePartWand = 69;
+    // NamePart1 indices (GB_UTIL_ITM, game 1) for the charge-bearing item classes. Public so
+    // FormatCheck can pin them: IsChargedItem rests on these three values alone, and a fourth value
+    // classifying as charged would send Recharge at the wrong byte.
+    public const byte NamePartRod = 67;
+    public const byte NamePartStave = 68;
+    public const byte NamePartWand = 69;
 
     /// <summary>What <see cref="SetIdentified"/> writes back when re-hiding an item that was already
     /// identified when we first read it, so there is no original value to restore. 6 is the value real
@@ -226,8 +228,18 @@ public sealed class ItemEntry
 
     /// <summary>Top up this item's usable resource to <paramref name="value"/> (clamped 1..255):
     /// wand/staff/rod charges at 0x3C, or an ammunition stack count at 0x39. Only the correct single
-    /// byte (<see cref="RechargeOffset"/>) is touched. Returns true if it changed.</summary>
-    public bool Recharge(int value) => IsChargedItem ? SetCharges(value) : SetCount(value);
+    /// byte (<see cref="RechargeOffset"/>) is touched. Returns true if it changed.
+    ///
+    /// <para>An item with nothing to top up is left alone and false is returned. This is the guard,
+    /// not the caller's <see cref="IsRechargeable"/> check: on a single item — a sword, a ring, a
+    /// worn shield — the "recharge" byte is the stack count, and writing it would turn one sword
+    /// into ninety-nine. The class documentation points every consumer at this method, so it has to
+    /// be safe to call on anything.</para></summary>
+    public bool Recharge(int value)
+    {
+        if (!IsRechargeable) return false;
+        return IsChargedItem ? SetCharges(value) : SetCount(value);
+    }
 
     public ItemEntry Clone() => new(Raw);
 }

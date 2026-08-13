@@ -118,6 +118,14 @@ public static class MapBook
             },
             MapAscii.Parse(MapTerrainData.KutosWellTerrain)),
 
+        new("Kuto's Well — Catacombs", 16, 16,
+            "Down the well. Norris the Gray (half-orc Fighter 5) holds the bandit hideout with 5 lizardmen " +
+            "and 9 kobold leaders; he drops a Long Sword +1 and a note from the Boss, and his hoard sits " +
+            "north-east of the catacombs. You cannot rest down here until Norris is dead. The rooms are cut " +
+            "out of rock — the wide stone blocks below are solid, not unexplored.",
+            Array.Empty<MapLocation>(),
+            MapAscii.Parse(MapTerrainData.KutosWellCatacombsTerrain)),
+
         new("Podol Plaza", 16, 16,
             "Auction spy commission — on entry choose 'disguise yourself as monsters'. Garwin escapes " +
             "no matter your bid; witnessing it completes the commission.",
@@ -160,12 +168,213 @@ public static class MapBook
             Array.Empty<MapLocation>(),
             MapAscii.Parse(MapTerrainData.CadornaTerrain)),
 
-        new("Wealthy District & Temple of Bane", 16, 16,
-            "Grinding ground (orcs/hobgoblins/ogres). Enter the Temple of Bane with the leather holy " +
-            "symbols from Podol Plaza for Dust of Disappearance (save it for the final fight) + a Ring of " +
-            "Feather Falling. No keyed locations transcribed — the walls below are the game's own.",
+        new("Wealthy District", 16, 16,
+            "Grinding ground (orcs/hobgoblins/ogres). Mace, the half-orc cleric who runs the Temple of " +
+            "Bane next door, lives in a mansion here. Clearing this block and the temple are one " +
+            "commission. No keyed locations transcribed — the walls below are the game's own.",
             Array.Empty<MapLocation>(),
             MapAscii.Parse(MapTerrainData.WealthyAreaTerrain)),
+
+        new("Temple of Bane", 16, 16,
+            "The great temple of Ilmater, converted to the worship of Bane. Enter with the leather holy " +
+            "symbols from Podol Plaza. Bishop Braccio lends you Dirtan, a 6th-level gnome cleric, if you " +
+            "agree to recover Ilmater's lost artifacts. Mace intends to let you find the hidden treasure " +
+            "and then kill you for it — the payoff is Dust of Disappearance (save it for the final fight) " +
+            "and a Ring of Feather Falling. The colonnade down the middle of the nave is the temple proper.",
+            new MapLocation[]
+            {
+                new("Mace's cultists (8)",  2,  7, "The half-orc cleric's motley group of cultists and slaves."),
+                new("Temple treasure (9)",  5,  5, "Ilmater's hidden artifacts; also marked at (13,9) and (9,12)."),
+                new("Altar chamber (10)",  15,  7, "East end of the nave."),
+            },
+            MapAscii.Parse(MapTerrainData.TempleOfBaneTerrain)),
+
+        new("Valhingen Graveyard", 16, 16,
+            "A cauldron of undead, and the hardest of the city commissions — take it late. Everything here " +
+            "drains levels; bring Restoration scrolls, and remember Tyr's temple can restore them. The " +
+            "vampire must be killed TWICE (once in the crypt, then again over his coffin) before the " +
+            "graveyard clears. Clear the spectres at 13 and 16 before the vampire's room will open.",
+            new MapLocation[]
+            {
+                new("Skeletal hands (1)",       6,  4, "Hands erupt from a grave and attack."),
+                new("Skeleton mausoleum (2)",   5,  6, ""),
+                new("Giant skeleton (3)",       7,  6, "Search after the fight for its treasure."),
+                new("Zombie tower (4)",         5,  9, ""),
+                new("Spectre — zombies (5)",    4, 10, "A spectre creating zombies."),
+                new("Skeleton tower (6)",       1, 12, ""),
+                new("Poison-gas room (7)",      1, 13, "Buff saving throws before entering."),
+                new("Spectre — skeletons (8)",  0, 15, ""),
+                new("Zombies (9)",              9, 15, "Milling outside the mausoleum."),
+                new("Ju-ju zombie (10)",        8, 15, "Search after the fight for its treasure."),
+                new("Mummy crypt (11)",         9, 11, "The fear aura paralyzes — buff saves first."),
+                new("Wight tower (12)",         9,  5, ""),
+                new("Spectre — wights (13)",    9,  7, "Must be cleared to open the vampire's room."),
+                new("Wight mausoleum (14)",    14,  6, ""),
+                new("Wraith (15)",             14,  8, ""),
+                new("Spectre crypt (16)",       9,  1, "Must be cleared to open the vampire's room."),
+                new("Knight's grave (17)",      8,  2, "A gallant knight and his treasure are buried here."),
+                new("Vampire's coffin (18)",   12,  4, "Kill him here the second time to finish him."),
+                new("The vampire (19)",        14,  0, "Needs 13 and 16 cleared first. 18,800 XP."),
+                new("Evil magic-user (20)",     8,  7, "Offers to help — he turns on you for the vampire."),
+            },
+            MapAscii.Parse(MapTerrainData.ValhingenGraveyardTerrain)),
+
+        // ---- Wilderness locations. Each is its own 16×16 level entered from the overland map; the
+        // square that opens it is marked on the Wilderness map below.
+        new("Nomad Camp", 16, 16,
+            "Overland (12, 11) — always visible. Parley rather than attack: stay for the feast, hear the " +
+            "chief out, then fight the kobold army with the nomads for 5,000 gp, a Two-Handed Sword +2 and " +
+            "a Wand of Magic Missiles. The kobolds come in 3 waves; at the third, go with the chief to " +
+            "finish them for the bigger reward. Do not backstab the nomads mid-fight — both sides turn on " +
+            "you. The shaded ring is the tripwire line and the east edge is the stream.",
+            new MapLocation[]
+            {
+                new("Tripwire ring (1)",  3,  8, "Crossing it sets off alarms and the nomads turn out in force. Also at (10,1) and (9,14)."),
+                new("Your hut (2)",       9, 12, "Where they put you up; rest here until the kobolds come."),
+                new("The forest (3)",     0,  9, "Outside the tripwire — caught out here you fight the kobolds alone."),
+            },
+            MapAscii.Parse(MapTerrainData.NomadCampTerrain)),
+
+        new("Kobold Caves", 16, 16,
+            "Overland (6, 15) east — kobold patrols thicken as you approach. Two entrances at the south " +
+            "edge: the small cave is the kobold cavern, the large cave is a wyvern lair that connects to " +
+            "it. Low ceilings cut movement, AC and damage in every fight down here, and the kobolds have " +
+            "trapped the place — move in Search Mode and let a thief disarm what you find.",
+            new MapLocation[]
+            {
+                new("Small cave entrance",   6, 15, "Straight into the kobold cavern."),
+                new("Large cave entrance",  10, 15, "The wyvern lair; you can rest before the wyvern fight."),
+                new("Water trap (1)",        6, 13, "A character falls in; money and items can be lost."),
+                new("Discarded map (2)",     6, 11, "Shows how the kobold and wyvern caves connect."),
+                new("Kobold guide (3)",      8, 12, "Follow him to the wyvern cave; refuse and a deadfall hits you."),
+                new("Net trap (4)",         10,  9, "Kobolds leap on the entangled party."),
+                new("Spike trap (5)",       11,  9, ""),
+                new("Drunken kobold (6)",   12,  9, "Coming from the wyvern side, he takes you to the king."),
+                new("Wyvern roam (7)",      14,  8, ""),
+                new("Wyvern nest (8)",      14,  6, "With its treasure."),
+                new("Crippled kobold (9)",  15,  3, "Search, then give him water for his story."),
+                new("Princess Fatima (10)",  2,  2, "Freed, she fights the kobolds fanatically and can join."),
+                new("Throne room (11)",      6,  3, "Three waves plus ballista fire — heal with 'Continue Combat', you get no rest."),
+                new("King's guard (12)",     8,  1, ""),
+                new("Fate of the king (13)",10,  1, "Confirming his death breaks the kobolds."),
+                new("Efreeti bottle (14)",  11,  0, "Search for it. Tell the truth and he helps you later — keep the bottle."),
+                new("Treasure trove (15)",  12,  1, "The huge kobold hoard."),
+                new("A clue (16)",           4,  3, ""),
+            },
+            MapAscii.Parse(MapTerrainData.KoboldCavesTerrain)),
+
+        // Yarash's pyramid on Sorcerer's Isle. Level 1 is two separate 16×16 levels — the clue book
+        // prints them as the "west half" and "east half" of one drawing, joined by the secret entrance.
+        new("Yarash's Pyramid — Level 1 west", 16, 16,
+            "Rowboat from the overland shore at (6, 16). The mad sorcerer Yarash is poisoning the Stojanow " +
+            "River, turning lizardmen into freshwater sahuagin. Three sets of teleporters (A, B and C) run " +
+            "the pyramid; throwing a rock through a portal toggles where it goes. You can rest on either " +
+            "half of level 1 once that half's random encounters are done. The sealed cells the schematic " +
+            "shows are teleport destinations — you arrive in them, you cannot walk in.",
+            Array.Empty<MapLocation>(),
+            MapAscii.Parse(MapTerrainData.PyramidWestTerrain)),
+
+        new("Yarash's Pyramid — Level 1 east", 16, 16,
+            "The east half of the pyramid's base, reached through the secret entrance between the halves " +
+            "or by teleporter. Same rules as the west half.",
+            Array.Empty<MapLocation>(),
+            MapAscii.Parse(MapTerrainData.PyramidEastTerrain)),
+
+        new("Yarash's Pyramid — Level 2", 16, 16,
+            "The middle level; safe to rest anywhere. Free the enslaved lizardmen — be Nice — for the " +
+            "friend-word SAVIOR, which buys you the alliance at Lizard Man Keep without a bloodbath.",
+            Array.Empty<MapLocation>(),
+            MapAscii.Parse(MapTerrainData.PyramidLevel2Terrain)),
+
+        new("Yarash's Pyramid — Level 3", 16, 16,
+            "The top level, where Yarash himself is. Password NOKNOK. The colour dial at (5, 0) aims the " +
+            "treasure teleporter: Blue = the way out, Copper / Silver / Gold = three treasure rooms with " +
+            "3 random magic items each. Kill Yarash and the river starts to clear.",
+            Array.Empty<MapLocation>(),
+            MapAscii.Parse(MapTerrainData.PyramidLevel3Terrain)),
+
+        new("Lizard Man Keep", 16, 16,
+            "Overland (11, 8) — obvious among the trees. An old wizard's field blocks spellcasting over " +
+            "the whole keep, so this is a melee fight. The old chief is being usurped by a young warrior: " +
+            "give the old lizardman SAVIOR (from Yarash's level 2) and champion him in single combat " +
+            "against Drythh to win the alliance without fighting the tribe. Rubbled walls and swamp " +
+            "squares are drawn as ordinary floor below — only the game's walls are shown.",
+            new MapLocation[]
+            {
+                new("Hole to catacombs (1)", 10,  4, ""),
+                new("Hole to catacombs (2)",  2,  7, ""),
+                new("Hole to catacombs (3)",  6, 12, ""),
+                new("Hole to catacombs (4)",  4,  6, ""),
+                new("Hole to catacombs (5)",  5,  9, ""),
+                new("Hole to catacombs (6)",  9,  6, ""),
+                new("Stairs down (7)",        9,  8, "The proper way into the catacombs."),
+                new("Ambush (8)",             3,  3, "Lizard men and giant lizards waiting."),
+                new("Giant lizards (9)",      5,  6, "They inhabit this building."),
+            },
+            MapAscii.Parse(MapTerrainData.LizardManKeepTerrain)),
+
+        new("Lizard Man Catacombs", 16, 16,
+            "Under the keep, through any of the six holes or the stairs at (9, 8). Lizard men ambush from " +
+            "the pools until they are all dead; once they are, swim the pools for the treasure the castle's " +
+            "original owners left — 3× Shield +2 among it. The first time you come down, every remaining " +
+            "giant lizard attacks at once.",
+            Array.Empty<MapLocation>(),
+            MapAscii.Parse(MapTerrainData.LizardManCatacombsTerrain)),
+
+        new("Buccaneer's Base", 16, 16,
+            "Overland (12, 31) — only appears once you take the commission to rescue the Bivant heir. " +
+            "The fast way out: scout first, then open the animal pen to start a stampede, free the boy " +
+            "while the guards chase animals, and run for the front gate. The longer you stay in the " +
+            "compound the more buccaneer groups you fight on the way out.",
+            new MapLocation[]
+            {
+                new("Front gate (1)",         7,  0, "The only exit; guarded, but the guards can be distracted by the stampede."),
+                new("Merchant's camp (2)",    8, 10, "Safe to camp here as long as you like."),
+                new("Captain's guards (3)",   7, 11, ""),
+                new("Captain's quarters (4)", 8, 14, ""),
+                new("Barracks (5)",           6,  3, "Forcing your way in starts a fight. Also at (10,3), (2,7), (10,7), (5,10) and (12,10)."),
+                new("Guard tower (6)",        6,  0, "Forcing your way in starts a fight. Towers ring the compound."),
+                new("Animal pen (7)",        13,  7, "Release the animals to stampede — the diversion that makes the rescue easy."),
+                new("Slave pen (8)",          7,  8, "The boy is kept here, under guard."),
+                new("Slave-pen guards (9)",   7,  6, "They leave if the animals stampede."),
+                new("Huckster (10)",          2, 11, "Sells a pass to see the buccaneer captain."),
+            },
+            MapAscii.Parse(MapTerrainData.BuccaneerBaseTerrain)),
+
+        new("Outpost of Zhentil Keep", 16, 16,
+            "Overland (3, 32) — only enterable once you carry Cadorna's diplomatic pouch. The pouch asks " +
+            "the Keepers to return you to Phlan with your heads on a pike; they try that night. Set a " +
+            "watch, survive the ambush, and kill the Commandant for a Javelin of Lightning (one of the few " +
+            "things that hurts the final dragon), Plate Mail +2 and a Ring of Fire Resistance.",
+            new MapLocation[]
+            {
+                new("Front gate (1)",           7,  0, "Guarded. Also at (8,0)."),
+                new("Guard tower (2)",          1,  1, "Towers at the four corners and mid-walls: (14,1), (6,6), (10,6), (1,15), (14,15)."),
+                new("Commandant's quarters (3)",7,  9, "Where you first meet him — and where you kill him."),
+                new("Party's quarters (4)",     6,  1, "Where the guards put you before and after dinner. Also at (10,1)."),
+                new("Barracks (5)",             5,  3, "Forcing your way in starts a fight. Six more around the walls."),
+                new("Stables (6)",             12,  8, "They smell bad."),
+            },
+            MapAscii.Parse(MapTerrainData.ZhentilKeepOutpostTerrain)),
+
+        // ---- The endgame.
+        new("Stojanow Gate", 16, 16,
+            "The fortified gate on the road to Valjevo Castle. Buy the merchant's wagon (250 gp, daylight " +
+            "only) as a disguise: the bugbear patrol takes 15 gp and waves you through, letting you hit " +
+            "each guard tower separately by surprise. Undisguised you bash both gates under volleys of " +
+            "boulders and fight everything at once. Knock opens the gates; up to 3× Ring of Protection +2 " +
+            "is the reward. (The DOS game has no fire trap or flooded passage — those are NES additions.)",
+            new MapLocation[]
+            {
+                new("Merchant in wagon (1)",  4, 14, "Daylight only; 250 gp for the wagon. Also at (11,14)."),
+                new("Bugbear patrol (2)",     8, 11, "Disguised and unseen through, you pass free."),
+                new("Southern gate (3)",      8,  9, "Barred by massive beams — Knock or massive Strength."),
+                new("Northern gate (4)",      8,  7, "The same again; guards throw boulders if you bash it."),
+                new("Ettin ambush (5)",       8,  6, "Both towers' ettins meet you here if you opened both gates by force."),
+                new("West tower (6)",         4,  8, "Level-6 mage + aides + 3 ettins. Surprise them if you sneaked past."),
+                new("East tower (7)",        11,  8, "The same garrison again — if the alarm sounds you meet both."),
+            },
+            MapAscii.Parse(MapTerrainData.StojanowGateTerrain)),
 
         // The endgame castle is four separate 16×16 levels, not one big map: each quadrant is its
         // own GEO block, and they connect at the row-4/row-11 edge gaps that ring the hedge maze.
@@ -193,6 +402,33 @@ public static class MapBook
                 new("Flame Tongue Long Sword +2 (well)", 15, 10, "Down the well in this quadrant."),
             },
             MapAscii.Parse(MapTerrainData.ValjevoSETerrain)),
+
+        // The two-storey tower in the middle of the hedge maze. Both levels are small — the tower
+        // occupies one corner of its 16×16 block and the rest of the block is sealed off.
+        new("Valjevo Castle — Inner Tower, lower level", 16, 16,
+            "Reached through the hedge maze: the stairs are behind an illusory wall in the NW quadrant, or " +
+            "in through the SE entrance. Medusa's chamber is down here — equip mirrors; she has only ~30 HP, " +
+            "so hit her hard on the first round. The false 'Tyranthraxus' holds court in the throne room; " +
+            "parley and you can walk away with Long Sword +5, Ring of Protection +3 and Gauntlets of Ogre " +
+            "Power without a fight.",
+            Array.Empty<MapLocation>(),
+            MapAscii.Parse(MapTerrainData.InnerTowerLowerTerrain)),
+
+        new("Valjevo Castle — Inner Tower, upper level", 16, 16,
+            "The top of the tower, and the end of the game. Safe to rest anywhere up here until you meet " +
+            "Tyranthraxus. Genheeris, a level-7 mage, offers to join — take him for the Wand of Lightning " +
+            "Bolt. Then two back-to-back fights with no rest between: ~12 eighth-level fighters, then " +
+            "Tyranthraxus in the bronze dragon. Spread out against the lightning breath, use Dust of " +
+            "Disappearance, and answer 'attack' when he offers to let each character join him.",
+            new MapLocation[]
+            {
+                new("Stairs to lower level (1)", 5,  4, "The tower occupies columns 1–8, rows 4–11 of this block."),
+                new("Trap-door room (2)",        7,  5, "The trap door drops to Medusa's chamber — glancing down can petrify."),
+                new("Waiting room (3)",          1,  7, "Messengers for Genheeris and Tyranthraxus. Parley → Nice sends one to Genheeris."),
+                new("Genheeris' office (4)",     2,  4, "Promise to attack Tyranthraxus at once and he joins."),
+                new("Tyranthraxus' lair (5)",    2,  9, "Buff everything before you step in. The Pool of Radiance is at (2, 10)."),
+            },
+            MapAscii.Parse(MapTerrainData.InnerTowerUpperTerrain)),
 
         // The overland map. Terrain here is transcribed from the clue book, not decoded from the
         // game's level data (the wilderness has no GEO block) — see WildernessMap for why.

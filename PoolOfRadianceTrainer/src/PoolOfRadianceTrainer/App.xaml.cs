@@ -1,8 +1,6 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Threading;
-#if DEBUG
-using System.IO;
-#endif
 
 namespace PoolOfRadianceTrainer;
 
@@ -75,9 +73,35 @@ public partial class App : Application
         }
 #endif
 
-        MessageBox.Show(
-            "An unexpected error occurred:\n\n" + e.Exception.Message,
-            "Pool of Radiance Trainer", MessageBoxButton.OK, MessageBoxImage.Warning);
+        // An exception that reaches the dispatcher escaped whichever operation raised it, so what
+        // it was doing — a partial record write, a half-applied freeze, a scan mid-narrow — did not
+        // finish. Carrying on with the same view-model state is how a trainer ends up writing
+        // nonsense into a running game, so the message says what happened, the full diagnostics go
+        // to a log beside the executable rather than being thrown away with the message box, and
+        // the user chooses between closing and continuing at their own risk.
+        string log = WriteCrashLog(e.Exception);
+        var choice = MessageBox.Show(
+            "An unexpected error occurred:\n\n" + e.Exception.Message +
+            "\n\nThe operation did not finish, so the trainer may be out of step with the game. " +
+            "Closing now is the safe option; if you continue, Detach and Attach again before editing " +
+            "anything.\n\nDetails written to:\n" + log +
+            "\n\nClose the trainer?",
+            "Pool of Radiance Trainer", MessageBoxButton.YesNo, MessageBoxImage.Error);
         e.Handled = true;
+        if (choice == MessageBoxResult.Yes) Shutdown(1);
+    }
+
+    /// <summary>Writes the full exception beside the executable and returns the path (or the reason
+    /// it couldn't be written — a logging failure must not itself take the app down).</summary>
+    private static string WriteCrashLog(Exception ex)
+    {
+        try
+        {
+            string path = Path.Combine(AppContext.BaseDirectory,
+                $"crash-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+            File.WriteAllText(path, $"{DateTime.Now:u}{Environment.NewLine}{ex}");
+            return path;
+        }
+        catch (Exception logFailure) { return "(could not write a log: " + logFailure.Message + ")"; }
     }
 }

@@ -14,6 +14,10 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         DataContext = _vm;
+        // The view-model asks before anything irreversible; give it a real dialog to ask with.
+        _vm.Confirm = message => MessageBox.Show(this, message, "Pool of Radiance Trainer",
+            MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK;
+        _vm.SaveEditor.Confirm = _vm.Confirm;
         Loaded += OnLoaded;
         Closed += OnClosed;
     }
