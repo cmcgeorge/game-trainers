@@ -17,6 +17,7 @@ Each game lives in its own self-contained folder with its own solution/project, 
 | `BeachHead2000Trainer/` | BeachHead 2000 (Digital Fusion / WizardWorks, 2000) — native Win32 | net8.0-windows |
 | `Civilization3ConquestsTrainer/` | Sid Meier's Civilization III: Conquests (Firaxis Games / Atari, 2003) — native Win32 | net8.0-windows |
 | `ColonizationTrainer/` | Sid Meier's Colonization (MicroProse, 1994) | net8.0-windows |
+| `CurseOfTheAzureBondsTrainer/` | Curse of the Azure Bonds (SSI, 1989) | net8.0-windows |
 | `DarklandsTrainer/` | Darklands (MicroProse, 1992) | net8.0-windows |
 | `DarkDesigns1Trainer/` | Dark Designs I: Grelminar's Staff (Softdisk / Big Blue Disk, 1990) | net8.0-windows |
 | `DragonWarsTrainer/` | Dragon Wars (Interplay, 1989) | net8.0-windows |

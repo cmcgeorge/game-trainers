@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>CoabTrainer</AssemblyName>
+    <RootNamespace>CurseOfTheAzureBondsTrainer</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\GameTrainers.Common\GameTrainers.Common.csproj" />
+  </ItemGroup>
+
+  <!-- Curse keeps its own divergent Mvvm, NativeMethods and value-scan MemorySearcher, so the
+       Common.Memory namespace is not blanket-imported (its MemorySearcher would collide). Only
+       the identical ProcessMemory/MemoryRegion are pulled from Common via aliases. -->
+  <ItemGroup>
+    <Using Include="GameTrainers.Common.Memory.ProcessMemory" Alias="ProcessMemory" />
+    <Using Include="GameTrainers.Common.Memory.MemoryRegion" Alias="MemoryRegion" />
+    <!-- The create-screen roller taps the 'n' key to re-roll via Common's scancode-based SendInput
+         wrapper; it works with DOSBox/SDL emulators where PostMessage can't. -->
+    <Using Include="GameTrainers.Common.Memory.KeyboardSender" Alias="KeyboardSender" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+</Project>
