@@ -143,6 +143,17 @@
     times the game port itself, so it needs 'cycles=fixed 12000' (not max) and
     'joysticktype=2axis' (not auto) in dosbox.conf, and a pad on Windows joystick
     slot 0.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer BardsTaleTrilogy
+    Builds and launches The Bard's Tale Trilogy trainer. A native Win32 target,
+    so no DOSBox: start TheBardsTaleTrilogy.exe (the Steam remaster), load or
+    begin a game, then Attach. The trainer follows a pointer chain from
+    GameAssembly.dll to the party and characters with no value searching, and
+    can teach any spell (including ZZGO and NUKE), set item charges to zero for
+    infinite uses, and edit HP/SP/XP/level/gold/attributes. 'BardsTaleTrilogy'
+    is enough to be unique; note that a bare 'BardsTale' also matches
+    BardsTale1Trainer.
 #>
 [CmdletBinding()]
 param(
