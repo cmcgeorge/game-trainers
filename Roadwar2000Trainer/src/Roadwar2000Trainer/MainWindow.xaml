@@ -1,0 +1,546 @@
+<Window x:Class="Roadwar2000Trainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Roadwar 2000 Trainer" Height="820" Width="1200"
+        Background="{StaticResource Bg}" FontFamily="Segoe UI" FontSize="13">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ==== attach bar ==================================================== -->
+        <Border Grid.Row="0" Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}"
+                BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Emulator" Style="{StaticResource Section}" Margin="0,0,10,0"/>
+                    <ComboBox Width="360" ItemsSource="{Binding Emulators}"
+                              SelectedItem="{Binding SelectedEmulator}"/>
+                    <Button Content="Refresh list" Command="{Binding RefreshEmulatorsCommand}" Margin="8,0,6,0"/>
+                    <Button Content="Attach" Command="{Binding AttachCommand}"/>
+                    <Button Content="Detach" Command="{Binding DetachCommand}"/>
+                    <Button Content="Re-read now" Command="{Binding RefreshNowCommand}"/>
+                </StackPanel>
+                <TextBlock Text="{Binding Status}" Style="{StaticResource Hint}" Margin="0,6,0,0"/>
+                <TextBlock Text="{Binding LocateDetail}" Style="{StaticResource Hint}"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ==== tabs ========================================================== -->
+        <TabControl Grid.Row="1" Background="Transparent" BorderBrush="{StaticResource Line}"
+                    BorderThickness="1" Padding="10">
+
+            <!-- Gang -->
+            <TabItem Header="Gang">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid DataContext="{Binding Gang}" Margin="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Margin="0,0,14,0">
+                            <TextBlock Text="Gang" Style="{StaticResource Section}"/>
+                            <TextBlock Text="Name (max 20 characters)" Style="{StaticResource Hint}"/>
+                            <TextBox Text="{Binding GangName, UpdateSourceTrigger=LostFocus}" MaxLength="19"/>
+
+                            <TextBlock Text="Supplies" Style="{StaticResource Section}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Food"/>
+                                <TextBox   Grid.Row="0" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Food, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Tires"/>
+                                <TextBox   Grid.Row="1" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Tires, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="Fuel (stored)"/>
+                                <TextBox   Grid.Row="2" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Fuel, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="Ammo"/>
+                                <TextBox   Grid.Row="3" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Ammo, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="4" Grid.Column="0" Text="Guns"/>
+                                <TextBox   Grid.Row="4" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Guns, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="5" Grid.Column="0" Text="Medical"/>
+                                <TextBox   Grid.Row="5" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Medical, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="6" Grid.Column="0" Text="Antitoxin"/>
+                                <TextBox   Grid.Row="6" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Antitoxin, UpdateSourceTrigger=LostFocus}"/>
+                            </Grid>
+                            <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0">
+                                <Run Text="The Gang Status screen prints fuel less the two moves' worth every vehicle keeps in its tank, so it will read "/>
+                                <Run Text="{Binding DisplayedFuel, Mode=OneWay}" Foreground="{StaticResource Accent}"/>
+                                <Run Text=" rather than the stored figure. X)amine Supplies shows the stored one."/>
+                            </TextBlock>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" Margin="0,0,14,0">
+                            <TextBlock Text="Crew by rank" Style="{StaticResource Section}"/>
+                            <ItemsControl ItemsSource="{Binding Crew}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="110"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding Name}"/>
+                                            <TextBox Grid.Column="1" Text="{Binding Count, UpdateSourceTrigger=LostFocus}"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0">
+                                <Run Text="Total crew: "/>
+                                <Run Text="{Binding TotalCrew, Mode=OneWay}" Foreground="{StaticResource Accent}"/>
+                                <Run Text="   Seats: "/>
+                                <Run Text="{Binding PassengerCapacity, Mode=OneWay}" Foreground="{StaticResource Accent}"/>
+                            </TextBlock>
+
+                            <TextBlock Text="Cronies and specials" Style="{StaticResource Section}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="110"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Doctor"/>
+                                <TextBox   Grid.Row="0" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Doctor, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="1" Text="Drill sergeant"/>
+                                <TextBox   Grid.Row="1" Grid.Column="1" Margin="0,0,0,4" Text="{Binding DrillSergeant, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="2" Text="Politician"/>
+                                <TextBox   Grid.Row="2" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Politician, UpdateSourceTrigger=LostFocus}"/>
+                            </Grid>
+                            <TextBlock Text="0 means the gang has no such crony; higher is more skilful."
+                                       Style="{StaticResource Hint}" Margin="0,0,0,6"/>
+                            <CheckBox Content="Radio Direction Finder" IsChecked="{Binding HasRadioDirectionFinder}"/>
+                            <CheckBox Content="Snow tires (halves winter penalties)" IsChecked="{Binding HasSnowTires}"/>
+                            <CheckBox Content="Fuel special (roughly halves consumption)" IsChecked="{Binding HasFuelSpecial}"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="Fleet and world" Style="{StaticResource Section}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="120"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Max vehicles"/>
+                                <TextBox   Grid.Row="0" Grid.Column="1" Margin="0,0,0,4" Text="{Binding MaxVehicles, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="1" Text="Day of year"/>
+                                <TextBox   Grid.Row="1" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Day, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="2" Text="Hour index"/>
+                                <TextBox   Grid.Row="2" Grid.Column="1" Margin="0,0,0,4" Text="{Binding TimeOfDay, UpdateSourceTrigger=LostFocus}"/>
+                            </Grid>
+                            <TextBlock Style="{StaticResource Hint}">
+                                <Run Text="Clock reads "/>
+                                <Run Text="{Binding Clock, Mode=OneWay}" Foreground="{StaticResource Accent}"/>
+                                <Run Text=" (the day starts at 6:00 AM, so hour index 0 is 6 AM)."/>
+                            </TextBlock>
+
+                            <TextBlock Text="Read-outs" Style="{StaticResource Section}"/>
+                            <TextBlock><Run Text="Location: "/><Run Text="{Binding Location, Mode=OneWay}" Foreground="{StaticResource Accent}"/></TextBlock>
+                            <TextBlock><Run Text="Vehicles: "/><Run Text="{Binding VehicleCount, Mode=OneWay}" Foreground="{StaticResource Accent}"/></TextBlock>
+                            <TextBlock><Run Text="Cargo capacity: "/><Run Text="{Binding TotalCapacity, Mode=OneWay}" Foreground="{StaticResource Accent}"/></TextBlock>
+                            <TextBlock><Run Text="Supplies carried: "/><Run Text="{Binding SuppliesCarried, Mode=OneWay}" Foreground="{StaticResource Accent}"/></TextBlock>
+                            <TextBlock><Run Text="Fuel per move: "/><Run Text="{Binding FuelConsumption, Mode=OneWay}" Foreground="{StaticResource Accent}"/></TextBlock>
+
+                            <TextBlock Text="Quick actions" Style="{StaticResource Section}"/>
+                            <WrapPanel>
+                                <Button Content="Top up supplies" Command="{Binding MaxSuppliesCommand}"/>
+                                <Button Content="Max crew" Command="{Binding MaxCrewCommand}"/>
+                                <Button Content="Hire all cronies + RDF" Command="{Binding HireCroniesCommand}"/>
+                                <Button Content="Refill for a long haul" Command="{Binding RefillCommand}"/>
+                                <Button Content="Max everything" Command="{Binding MaxEverythingCommand}"/>
+                            </WrapPanel>
+
+                            <TextBlock Text="Freezes" Style="{StaticResource Section}"/>
+                            <StackPanel DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                                <CheckBox Content="Freeze food" IsChecked="{Binding FreezeFood}"/>
+                                <CheckBox Content="Freeze fuel" IsChecked="{Binding FreezeFuel}"/>
+                                <CheckBox Content="Freeze ammo" IsChecked="{Binding FreezeAmmo}"/>
+                                <CheckBox Content="Freeze crew" IsChecked="{Binding FreezeCrew}"/>
+                                <CheckBox Content="Keep vehicles repaired" IsChecked="{Binding FreezeVehicles}"/>
+                                <TextBlock Text="A freeze pins the value it had when you ticked the box, re-applied about twice a second."
+                                           Style="{StaticResource Hint}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- Vehicles -->
+            <TabItem Header="Vehicles">
+                <Grid DataContext="{Binding Vehicles}" Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1.4*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Add:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <ComboBox Width="220" ItemsSource="{Binding VehicleTypes}" SelectedItem="{Binding NewVehicleType}"/>
+                        <Button Content="Add one" Command="{Binding AddVehicleCommand}" Margin="8,0,6,0"/>
+                        <Button Content="Fill fleet to 15" Command="{Binding FillFleetCommand}"/>
+                        <Button Content="Drop last vehicle" Command="{Binding RemoveLastCommand}"/>
+                        <Button Content="Repair all" Command="{Binding RepairAllCommand}"/>
+                        <Button Content="Upgrade all" Command="{Binding MaximizeAllCommand}"/>
+                    </StackPanel>
+
+                    <DataGrid Grid.Row="1" Grid.Column="0" Margin="0,0,10,0" AutoGenerateColumns="False"
+                              IsReadOnly="True" SelectionMode="Single"
+                              ItemsSource="{Binding Slots}" SelectedItem="{Binding Selected}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding Number}" Width="34"/>
+                            <DataGridCheckBoxColumn Header="In use" Binding="{Binding InUse, Mode=OneWay}" Width="52"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding TypeName}" Width="180"/>
+                            <DataGridTextColumn Header="Structure" Binding="{Binding Structure}" Width="70"/>
+                            <DataGridTextColumn Header="Max" Binding="{Binding StructureMax}" Width="50"/>
+                            <DataGridTextColumn Header="Tires" Binding="{Binding Tires}" Width="50"/>
+                            <DataGridTextColumn Header="MPH" Binding="{Binding MaxSpeedMph}" Width="55"/>
+                            <DataGridTextColumn Header="Crew" Binding="{Binding CrewAboard}" Width="50"/>
+                            <DataGridTextColumn Header="Spaces" Binding="{Binding CarryingCapacity}" Width="60"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <ScrollViewer Grid.Row="1" Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel DataContext="{Binding Selected}">
+                            <TextBlock Text="Selected vehicle" Style="{StaticResource Section}"/>
+                            <TextBlock Text="{Binding Summary}" Style="{StaticResource Hint}" Margin="0,0,0,8"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="150"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Structure"/>
+                                <TextBox   Grid.Row="0" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Structure, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="1" Text="Structure max"/>
+                                <TextBox   Grid.Row="1" Grid.Column="1" Margin="0,0,0,4" Text="{Binding StructureMax, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="2" Text="Tires"/>
+                                <TextBox   Grid.Row="2" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Tires, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="3" Text="Tires max"/>
+                                <TextBox   Grid.Row="3" Grid.Column="1" Margin="0,0,0,4" Text="{Binding TiresMax, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="4" Text="Max speed (tens MPH)"/>
+                                <TextBox   Grid.Row="4" Grid.Column="1" Margin="0,0,0,4" Text="{Binding MaxSpeed, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="5" Text="Manoeuvrability"/>
+                                <TextBox   Grid.Row="5" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Maneuver, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="6" Text="Braking"/>
+                                <TextBox   Grid.Row="6" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Braking, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="7" Text="Acceleration"/>
+                                <TextBox   Grid.Row="7" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Acceleration, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="8" Text="Armour left"/>
+                                <TextBox   Grid.Row="8" Grid.Column="1" Margin="0,0,0,4" Text="{Binding ProtectLeft, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="9" Text="Armour right"/>
+                                <TextBox   Grid.Row="9" Grid.Column="1" Margin="0,0,0,4" Text="{Binding ProtectRight, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="10" Text="Armour front"/>
+                                <TextBox   Grid.Row="10" Grid.Column="1" Margin="0,0,0,4" Text="{Binding ProtectFront, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="11" Text="Armour back / top"/>
+                                <StackPanel Grid.Row="11" Grid.Column="1" Orientation="Horizontal">
+                                    <TextBox Width="60" Margin="0,0,6,4" Text="{Binding ProtectBack, UpdateSourceTrigger=LostFocus}"/>
+                                    <TextBox Width="60" Margin="0,0,0,4" Text="{Binding ProtectTop, UpdateSourceTrigger=LostFocus}"/>
+                                </StackPanel>
+                            </Grid>
+                            <TextBlock Text="Armour runs 0 (open air) to 5 (solid metal); 5 is complete protection for the crew behind it."
+                                       Style="{StaticResource Hint}" Margin="0,4,0,8"/>
+                            <WrapPanel DataContext="{Binding DataContext.Vehicles, RelativeSource={RelativeSource AncestorType=Window}}">
+                                <Button Content="Repair this one" Command="{Binding RepairSelectedCommand}"/>
+                                <Button Content="Upgrade this one" Command="{Binding MaximizeSelectedCommand}"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- Cities -->
+            <TabItem Header="Cities">
+                <Grid DataContext="{Binding Cities}" Margin="4">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="Filter" Margin="0,0,6,0"/>
+                        <TextBox Width="240" Text="{Binding Filter, UpdateSourceTrigger=PropertyChanged}"/>
+                        <Button Content="Fill this cache" Command="{Binding FillCacheCommand}" Margin="10,0,6,0"/>
+                        <Button Content="Fill every cache" Command="{Binding FillAllCachesCommand}"/>
+                        <Button Content="Clear this town" Command="{Binding ClearSelectedCommand}"/>
+                        <Button Content="Clear every town" Command="{Binding ClearAllCommand}"/>
+                        <Button Content="Restock supplies" Command="{Binding RestockAllCommand}"/>
+                        <Button Content="Go there" Command="{Binding TeleportToCityCommand}"/>
+                    </StackPanel>
+
+                    <DataGrid Grid.Row="1" AutoGenerateColumns="False" SelectionMode="Single"
+                              ItemsSource="{Binding View}" SelectedItem="{Binding Selected}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#" Binding="{Binding Index}" Width="40" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="City" Binding="{Binding Name}" Width="180" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Map" Binding="{Binding MapName}" Width="55" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="X" Binding="{Binding X}" Width="40" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Y" Binding="{Binding Y}" Width="40" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Supply" Binding="{Binding Size}" Width="60"/>
+                            <DataGridTextColumn Header="Held by" Binding="{Binding ResidentName}" Width="170" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Code" Binding="{Binding Resident}" Width="50"/>
+                            <DataGridTextColumn Header="Strength" Binding="{Binding Strength}" Width="65"/>
+                            <DataGridTextColumn Header="Food" Binding="{Binding CacheFood}" Width="55"/>
+                            <DataGridTextColumn Header="Tires" Binding="{Binding CacheTires}" Width="55"/>
+                            <DataGridTextColumn Header="Fuel" Binding="{Binding CacheFuel}" Width="55"/>
+                            <DataGridTextColumn Header="Guns" Binding="{Binding CacheGuns}" Width="55"/>
+                            <DataGridTextColumn Header="Med" Binding="{Binding CacheMedical}" Width="55"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <TextBlock Grid.Row="2" Style="{StaticResource Hint}" Margin="0,6,0,0"
+                               Text="'Held by' is the faction the engine put in the town. Setting it to 0 (No one) stops residential encounters there. It does NOT hand you the town for the purpose of the E)mpire screen -- see docs/reverse-engineering.md, which records exactly what was probed and ruled out. Caches hold at most 255 of each of the five stashable supplies, and only a town you are standing in can be drawn on with T)ransfer."/>
+                </Grid>
+            </TabItem>
+
+            <!-- Map -->
+            <TabItem Header="Map">
+                <Grid DataContext="{Binding Map}" Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="270"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border BorderBrush="{StaticResource Line}" BorderThickness="1" Background="{StaticResource Panel}"
+                            Margin="0,0,10,0">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                            <Image x:Name="MapImage" Source="{Binding Image}" Stretch="None"
+                                   HorizontalAlignment="Left" VerticalAlignment="Top"
+                                   MouseLeftButtonDown="MapImage_MouseLeftButtonDown" Cursor="Cross"/>
+                        </ScrollViewer>
+                    </Border>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Overland map" Style="{StaticResource Section}"/>
+                        <TextBlock Text="{Binding Source}" Style="{StaticResource Hint}"/>
+                        <TextBlock Text="{Binding SquareDescription}" Margin="0,8,0,0"/>
+                        <TextBlock Text="{Binding TargetDescription}" Margin="0,4,0,8" TextWrapping="Wrap"/>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="70"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Target X"/>
+                            <TextBox   Grid.Row="0" Grid.Column="1" Margin="0,0,0,4" Text="{Binding TargetX, UpdateSourceTrigger=LostFocus}"/>
+                            <TextBlock Grid.Row="1" Text="Target Y"/>
+                            <TextBox   Grid.Row="1" Grid.Column="1" Margin="0,0,0,4" Text="{Binding TargetY, UpdateSourceTrigger=LostFocus}"/>
+                        </Grid>
+                        <WrapPanel Margin="0,6,0,0">
+                            <Button Content="Teleport here" Command="{Binding TeleportCommand}"/>
+                            <Button Content="Redraw" Command="{Binding ReloadCommand}"/>
+                        </WrapPanel>
+                        <WrapPanel>
+                            <Button Content="Show west map" Command="{Binding ShowWestCommand}"/>
+                            <Button Content="Show east map" Command="{Binding ShowEastCommand}"/>
+                        </WrapPanel>
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="The two map buttons only apply while detached. Attached, the map drawn is always the one the gang is actually on."/>
+
+                        <TextBlock Text="Legend" Style="{StaticResource Section}"/>
+                        <TextBlock Style="{StaticResource Hint}"
+                                   Text="Gold = city (the darker the core, the bigger the metropolis). Pale = road. Olive = farmland. Dark green = forest. Tan = desert. Grey-green = plains. Dull red = ruins. Blue-black = water, mountain and wilderness, which the gang cannot enter. The red square is the gang."/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                   Text="Click a square to set it as the target, then press Teleport. X runs 1..48 west to east and Y runs 0..41 north to south -- the engine's own convention, which is why X starts at one."/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- Save editor -->
+            <TabItem Header="Save Editor">
+                <Grid DataContext="{Binding SaveEditor}" Margin="4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="330"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                        <TextBlock Text="Game folder" Style="{StaticResource Section}"/>
+                        <TextBox Text="{Binding Folder, UpdateSourceTrigger=LostFocus}"/>
+                        <WrapPanel Margin="0,6,0,0">
+                            <Button Content="Rescan" Command="{Binding ScanFolderCommand}"/>
+                            <Button Content="Browse..." Command="{Binding BrowseCommand}"/>
+                        </WrapPanel>
+                        <TextBlock Text="Saves" Style="{StaticResource Section}"/>
+                        <ListBox Height="150" ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile}"/>
+                        <Button Content="Open" Command="{Binding OpenSelectedCommand}" Margin="0,6,0,0"/>
+                        <TextBlock Text="{Binding Status}" Style="{StaticResource Hint}" Margin="0,8,0,0"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,8,0,0"
+                                   Text="Roadwar asks for a diskette in drive A: but the PC build writes the .RWS into whatever directory it was started from -- normally the game folder itself."/>
+                    </StackPanel>
+
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding HasSave, Converter={StaticResource BoolToVis}}">
+                        <StackPanel>
+                            <TextBlock Text="Gang" Style="{StaticResource Section}"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="130"/>
+                                    <ColumnDefinition Width="200"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Name"/>
+                                <TextBox   Grid.Row="0" Grid.Column="1" Margin="0,0,0,4" MaxLength="19" Text="{Binding GangName, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="1" Text="Food"/>
+                                <TextBox   Grid.Row="1" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Food, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="2" Text="Tires"/>
+                                <TextBox   Grid.Row="2" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Tires, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="3" Text="Fuel"/>
+                                <TextBox   Grid.Row="3" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Fuel, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="4" Text="Ammo"/>
+                                <TextBox   Grid.Row="4" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Ammo, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="5" Text="Guns"/>
+                                <TextBox   Grid.Row="5" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Guns, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="6" Text="Medical"/>
+                                <TextBox   Grid.Row="6" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Medical, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="7" Text="Antitoxin"/>
+                                <TextBox   Grid.Row="7" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Antitoxin, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="8" Text="Max vehicles"/>
+                                <TextBox   Grid.Row="8" Grid.Column="1" Margin="0,0,0,4" Text="{Binding MaxVehicles, UpdateSourceTrigger=LostFocus}"/>
+                                <TextBlock Grid.Row="9" Text="Day"/>
+                                <TextBox   Grid.Row="9" Grid.Column="1" Margin="0,0,0,4" Text="{Binding Day, UpdateSourceTrigger=LostFocus}"/>
+                            </Grid>
+
+                            <TextBlock Text="Fleet" Style="{StaticResource Section}"/>
+                            <ListBox Height="160" ItemsSource="{Binding Fleet}"/>
+
+                            <TextBlock Text="Actions" Style="{StaticResource Section}"/>
+                            <WrapPanel>
+                                <Button Content="Max everything" Command="{Binding MaxOutCommand}"/>
+                                <Button Content="Clear all residents" Command="{Binding ClearResidentsCommand}"/>
+                                <Button Content="Fill all caches" Command="{Binding FillCachesCommand}"/>
+                                <Button Content="Compare with running game" Command="{Binding CompareWithGameCommand}"/>
+                                <Button Content="Save" Command="{Binding SaveCommand}"/>
+                            </WrapPanel>
+                            <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,0"
+                                       Text="Saving backs the original up to &lt;name&gt;.RWS.bak the first time only, so the pristine copy survives repeated edits. Close the game, or at least do not save from inside it afterwards, or it will overwrite the file with what is in memory."/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- Reference -->
+            <TabItem Header="Reference">
+                <TabControl DataContext="{Binding Reference}" Background="Transparent"
+                            BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="6">
+                    <TabItem Header="Vehicles">
+                        <DataGrid ItemsSource="{Binding Vehicles}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Type" Binding="{Binding Name}" Width="180"/>
+                                <DataGridTextColumn Header="Mass" Binding="{Binding Mass}" Width="50"/>
+                                <DataGridTextColumn Header="Struct" Binding="{Binding Structure}" Width="55"/>
+                                <DataGridTextColumn Header="MPH" Binding="{Binding Speed}" Width="55"/>
+                                <DataGridTextColumn Header="Man" Binding="{Binding Maneuver}" Width="45"/>
+                                <DataGridTextColumn Header="Brk" Binding="{Binding Braking}" Width="45"/>
+                                <DataGridTextColumn Header="Acc" Binding="{Binding Acceleration}" Width="45"/>
+                                <DataGridTextColumn Header="Missile L/R/F/B" Binding="{Binding MissileFactors}" Width="110"/>
+                                <DataGridTextColumn Header="Armour L/R/F/B/T" Binding="{Binding Protection}" Width="120"/>
+                                <DataGridTextColumn Header="Vol" Binding="{Binding Volleys}" Width="40"/>
+                                <DataGridTextColumn Header="Tires" Binding="{Binding Tires}" Width="55"/>
+                                <DataGridTextColumn Header="Board L/R/F/B" Binding="{Binding Boarding}" Width="105"/>
+                                <DataGridTextColumn Header="Int" Binding="{Binding Interior}" Width="45"/>
+                                <DataGridTextColumn Header="Top" Binding="{Binding Topside}" Width="45"/>
+                                <DataGridTextColumn Header="Fuel" Binding="{Binding Fuel}" Width="45"/>
+                                <DataGridTextColumn Header="Spaces" Binding="{Binding Capacity}" Width="60"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Loot sites">
+                        <DataGrid ItemsSource="{Binding Loot}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Site" Binding="{Binding Name}" Width="200"/>
+                                <DataGridTextColumn Header="Frequency plains/farm/city/road" Binding="{Binding Frequency}" Width="230"/>
+                                <DataGridTextColumn Header="Yield" Binding="{Binding Yield}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="Gazetteer">
+                        <DataGrid ItemsSource="{Binding Cities}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="#" Binding="{Binding Id}" Width="45"/>
+                                <DataGridTextColumn Header="City" Binding="{Binding Name}" Width="200"/>
+                                <DataGridTextColumn Header="Supply" Binding="{Binding Size}" Width="70"/>
+                                <DataGridTextColumn Header="Map" Binding="{Binding Map}" Width="60"/>
+                                <DataGridTextColumn Header="X" Binding="{Binding X}" Width="45"/>
+                                <DataGridTextColumn Header="Y" Binding="{Binding Y}" Width="45"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+                    <TabItem Header="People and places">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <Grid Margin="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                                    <TextBlock Text="Crew ranks (best first)" Style="{StaticResource Section}"/>
+                                    <ItemsControl ItemsSource="{Binding Ranks}"/>
+                                    <TextBlock Text="Foot-gangs" Style="{StaticResource Section}"/>
+                                    <ItemsControl ItemsSource="{Binding Footgangs}"/>
+                                    <TextBlock Text="Vehicle upgrade shops" Style="{StaticResource Section}"/>
+                                    <ItemsControl ItemsSource="{Binding Improvements}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                                    <TextBlock Text="City residents" Style="{StaticResource Section}"/>
+                                    <ItemsControl ItemsSource="{Binding Residents}"/>
+                                    <TextBlock Text="Named road gangs" Style="{StaticResource Section}"/>
+                                    <ItemsControl ItemsSource="{Binding RoadGangs}"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="G.U.B. scientists" Style="{StaticResource Section}"/>
+                                    <ItemsControl ItemsSource="{Binding Scientists}"/>
+                                    <TextBlock Text="Terrain codes" Style="{StaticResource Section}"/>
+                                    <ItemsControl ItemsSource="{Binding Terrain}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Text="{Binding}" Style="{StaticResource Mono}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Grid>
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
+            </TabItem>
+        </TabControl>
+
+        <TextBlock Grid.Row="2" Style="{StaticResource Hint}" Margin="2,8,0,0"
+                   Text="Roadwar 2000 (SSI, 1987) - the trainer finds the game's data segment by signature, so nothing needs searching by hand. Edits go straight into the running game; use the Save Editor for offline changes."/>
+    </Grid>
+</Window>

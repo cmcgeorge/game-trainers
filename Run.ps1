@@ -145,6 +145,17 @@
     slot 0.
 
 .EXAMPLE
+    .\Run.ps1 -Trainer Roadwar
+    Builds and launches the Roadwar 2000 trainer. Start START.EXE in DOSBox and get
+    past the title screens, then Attach -- the anchor is in the executable's own
+    initialised data, so it locates as soon as the program is loaded, whether or not
+    a game has been started (about 700 ms, no value searching). Roadwar keeps its
+    whole mutable world in one 6,512-byte slab of the data segment, and its .RWS save
+    file is a verbatim image of that slab, so the Save Editor tab edits saves offline
+    with the same code. Note that the game asks for a diskette in drive A: but writes
+    saves into the directory it was started from -- normally the game folder itself.
+
+.EXAMPLE
     .\Run.ps1 -Trainer BardsTaleTrilogy
     Builds and launches The Bard's Tale Trilogy trainer. A native Win32 target,
     so no DOSBox: start TheBardsTaleTrilogy.exe (the Steam remaster), load or

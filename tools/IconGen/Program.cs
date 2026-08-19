@@ -40,6 +40,7 @@ internal static class Program
         new("Pool of Radiance",     "PoolOfRadianceTrainer",       DrawPoolOfRadiance),
         new("Quest for Glory I",    "QuestForGlory1Trainer",       DrawQuestForGlory),
         new("Railroad Tycoon",      "RailroadTycoonTrainer",       DrawRailroadTycoon),
+        new("Roadwar 2000",         "Roadwar2000Trainer",          DrawRoadwar),
         new("Shogun",               "ShogunTrainer",               DrawShogun),
         new("Sword of the Samurai", "SwordOfTheSamuraiTrainer",    DrawSwordOfSamurai),
         new("Syndicate Plus",       "SyndicatePlusTrainer",        DrawSyndicate),
@@ -215,6 +216,33 @@ internal static class Program
         new(c.X + r * Math.Cos(angleDeg * Math.PI / 180), c.Y + r * Math.Sin(angleDeg * Math.PI / 180));
 
     // --- per-game icons ------------------------------------------------------
+
+    /// <summary>US highway shield with a lane stripe running through it - Roadwar 2000's own
+    /// title art is a highway shield, and the whole game is a road trip across the interstates.</summary>
+    private static void DrawRoadwar(DrawingContext dc)
+    {
+        DrawTile(dc);
+        var shield = Brush(0xE0, 0xB3, 0x41);
+        var shieldDk = Brush(0x8A, 0x6A, 0x1C);
+        var road = Brush(0x1C, 0x1F, 0x28);
+        var stripe = Brush(0xEC, 0xEA, 0xE2);
+
+        // The shield outline: a rounded top with two shoulders, tapering to a point.
+        var body = Poly(
+            P(128, 40), P(176, 56), P(208, 52), P(212, 96),
+            P(200, 150), P(128, 216), P(56, 150), P(44, 96),
+            P(48, 52), P(80, 56));
+        dc.DrawGeometry(shield, new Pen(shieldDk, 6), body);
+
+        // A dark carriageway band across the middle, with a broken centre line.
+        dc.DrawGeometry(road, null, Poly(
+            P(52, 104), P(204, 104), P(196, 140), P(60, 140)));
+        for (int i = 0; i < 4; i++)
+        {
+            double x = 70 + i * 34;
+            dc.DrawRectangle(stripe, null, new Rect(x, 116, 20, 10));
+        }
+    }
 
     /// <summary>Steering wheel — Autoduel is a car-combat RPG.</summary>
     private static void DrawAutoduel(DrawingContext dc)
