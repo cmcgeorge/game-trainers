@@ -390,6 +390,20 @@ The trainer mirrors the approach a live memory editor must take:
    fields landing on zero padding. Since AC/THAC0 are stored as `60 − value`, those zeroes decode
    to AC 60 / THAC0 60, which no creature can have, so `CharacterRecord.LooksLikeLiveCombatant`
    rejects them (both fixture records are in `FormatCheck`).
+   The one creature that band would wrongly reject is the trainer's own: Weaken stamps AC 20
+   precisely *because* it is off the scale a real creature occupies, so a weakened monster failed
+   the plausibility test and dropped out of the sweep — the panel called the battle over while it
+   was still being fought, and the standing auto-weaken toggle would have weakened each encounter
+   once and then gone quiet. `CharacterRecord.LooksWeakened` exempts it, on the **armour-class pair
+   alone** (both bytes reading the stored form of AC 20) rather than by widening the band. The
+   temptation is to make the exemption more specific by testing everything Weaken writes — HP 1,
+   THAC0 20 — but those are fields the *game* moves: a monster cleric heals its ally, and the engine
+   re-derives current THAC0 from the base minus a to-hit adjustment (§8). Either would falsify the
+   mark while AC 20 was still stamped, which is the original drop-out again by another route. AC is
+   the one field nothing but the trainer touches at that value, and both bytes at exactly 40 is
+   discrimination enough — the buffers this guards against decode to AC 60. The stricter all-five
+   test still exists as `CharacterRecord.IsWeakened`, but it answers a different question: has the
+   auto pass anything left to do to this creature.
 5. For anything **not** in the record — the party's map X/Y and facing, the in-combat clock,
    encounter counters — a **Cheat-Engine-style scanner** (`Memory/MemorySearcher.cs`) narrows
    candidates by first-scan/increased/decreased, mirroring the reverse-engineering loop itself.

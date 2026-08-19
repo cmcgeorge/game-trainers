@@ -293,6 +293,10 @@
                             <DockPanel Grid.Column="0" Margin="0,0,8,0">
                                 <TextBlock DockPanel.Dock="Top" Text="COMBATANTS / MONSTERS" Style="{StaticResource Section}"/>
                                 <StackPanel DockPanel.Dock="Bottom">
+                                    <CheckBox Content="🔁 Auto-weaken every battle" IsChecked="{Binding AutoWeaken}" Margin="0,0,0,2"
+                                              ToolTip="Leave this ticked and every encounter is put on 1 HP, AC 20, THAC0 20 as it starts — no clicking. The party still lands the killing blows, so bodies, treasure and XP all count."/>
+                                    <CheckBox Content="🔁 Auto-kill every battle" IsChecked="{Binding AutoKill}" Margin="0,0,0,6"
+                                              ToolTip="Zeroes every encounter's records as it starts. The engine counts none of it as kills, so no battle pays XP or leaves treasure while this is on — auto-weaken is the one that keeps the loot."/>
                                     <Button Content="🩸 Weaken selected (1 HP)" Command="{Binding WeakenEnemyCommand}"
                                             ToolTip="Leaves it alive on 1 HP, AC 20, THAC0 20 — your next hit kills it through the game's own damage routine, so the body, its treasure and the XP all count."/>
                                     <Button Content="🩸 Weaken ALL enemies (1 HP)" Command="{Binding WeakenAllEnemiesCommand}"
@@ -301,7 +305,7 @@
                                             ToolTip="Zeroes the record. The engine does not process this as a kill — no body, no treasure, no XP. For escaping a fight, not for looting it."/>
                                     <Button Content="☠ Kill ALL enemies" Command="{Binding KillAllEnemiesCommand}"
                                             ToolTip="Zeroes every enemy record. Forfeits the encounter's treasure and XP — use Weaken to win a fight you want to loot."/>
-                                    <TextBlock Text="Monsters appear here on their own while a battle is on screen and clear when it ends — no re-scan needed. Weaken to win a fight and keep the loot; Kill only zeroes the records, which the engine never counts as kills (the fight tends to end in a surrender, paying nothing)."
+                                    <TextBlock Text="Monsters appear here on their own while a battle is on screen and clear when it ends — no re-scan needed. Weaken to win a fight and keep the loot; Kill only zeroes the records, which the engine never counts as kills (the fight tends to end in a surrender, paying nothing). Tick an Auto box to have it applied to every encounter as it starts."
                                                Style="{StaticResource Hint}" Margin="0,4,0,0" TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ListBox ItemsSource="{Binding Enemies}" SelectedItem="{Binding SelectedEnemy}" Margin="0,0,0,8">

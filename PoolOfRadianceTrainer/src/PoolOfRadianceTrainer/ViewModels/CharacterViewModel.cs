@@ -397,14 +397,50 @@ public sealed class CharacterViewModel : ObservableObject
     /// </summary>
     public void WeakenNow()
     {
-        Record.HpCurrent = 1; Poke(PorFormat.OffHpCur, 1);
-        Record.ArmorClass = 20; Poke(PorFormat.OffAcCur, 1);
-        Record.ArmorClassBase = 20; Poke(PorFormat.OffAcBase, 1);
-        Record.Thac0 = 20; Poke(PorFormat.OffThac0Cur, 1);
-        Record.Thac0Base = 20; Poke(PorFormat.OffThac0Base, 1);
+        Record.HpCurrent = CharacterRecord.WeakenedHp; Poke(PorFormat.OffHpCur, 1);
+        Record.ArmorClass = CharacterRecord.WeakenedAc; Poke(PorFormat.OffAcCur, 1);
+        Record.ArmorClassBase = CharacterRecord.WeakenedAc; Poke(PorFormat.OffAcBase, 1);
+        Record.Thac0 = CharacterRecord.WeakenedThac0; Poke(PorFormat.OffThac0Cur, 1);
+        Record.Thac0Base = CharacterRecord.WeakenedThac0; Poke(PorFormat.OffThac0Base, 1);
         OnPropertyChanged(nameof(HpCurrent)); OnPropertyChanged(nameof(ArmorClass));
         OnPropertyChanged(nameof(Thac0)); RaiseDerived();
     }
+
+    /// <summary>
+    /// Is this creature already out of the fight? True once it is dying, dead, petrified or off the
+    /// battlefield (statuses 5, 6, 7, and 2/8) — the states an automatic sweep must leave alone,
+    /// because writing a hit point back into a corpse is the one way these edits can put a creature
+    /// the party already beat back on its feet.
+    ///
+    /// <para>Hit points settle it before status does, since the engine stamps the status a tick
+    /// later than the blow: 0 is finished, and so is anything reading <i>above</i> max. That second
+    /// test is not redundant — current HP is an unsigned byte, so a creature the engine has taken
+    /// below zero reads back as 251 rather than -5, and <c>&lt;= 0</c> alone would wave it through
+    /// as a healthy creature and stand it up on 1 HP. <see cref="CharacterRecord.LooksLikeLiveCombatant"/>
+    /// guards the same wrap the same way.</para>
+    ///
+    /// <para>Status 4 (Unconscious) is deliberately <i>not</i> here. On a monster with hit points
+    /// left it means slept or held, not beaten — it wakes up and goes on fighting, so an automatic
+    /// pass has every reason to act on it. Unconsciousness that came from damage is already caught
+    /// by the hit-point test above.</para>
+    /// </summary>
+    public bool IsOutOfTheFight =>
+        Record.HpCurrent <= 0 || Record.HpCurrent > Record.HpMax ||
+        Record.Status is 2 or 5 or 6 or 7 or 8;
+
+    /// <summary>
+    /// Does an automatic pass have anything to do to this creature? False for one already standing
+    /// in the weakened state, so the auto sweep isn't re-writing five bytes per monster per tick,
+    /// and false for one already out of the fight (see <see cref="IsOutOfTheFight"/>). Tested
+    /// against <see cref="CharacterRecord.IsWeakened"/> rather than the looser mark the arena sweep
+    /// goes by, so a creature healed off its last hit point is weakened again.
+    /// </summary>
+    public bool NeedsWeakening => !IsOutOfTheFight && !Record.IsWeakened;
+
+    /// <summary>Does an automatic pass have anything to zero? False for a creature already out of
+    /// the fight, so the sweep neither re-writes a dead record every tick nor rewrites a "gone"
+    /// creature back into a body on the field.</summary>
+    public bool NeedsKilling => !IsOutOfTheFight;
 
     /// <summary>
     /// Zero this record's current HP and mark it dead — the combat panel uses it to drop a monster.

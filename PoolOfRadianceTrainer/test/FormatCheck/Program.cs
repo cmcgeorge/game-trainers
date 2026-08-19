@@ -1,6 +1,7 @@
 using System.IO;
 using PoolOfRadianceTrainer.Game;
 using PoolOfRadianceTrainer.Memory;
+using PoolOfRadianceTrainer.ViewModels;
 
 // Headless verification of the CharacterRecord parser against ground-truth bytes captured
 // from a live DOSBox-X memory dump of the sample party (see .docs/reverse-engineering.md).
@@ -349,6 +350,90 @@ Check("Live-combatant THAC0 upper bound", CharacterRecord.MaxPlausibleThac0, 26)
 var zeroed = new CharacterRecord(new byte[PorFormat.RecordSize]);
 Check("A zero-filled buffer decodes to AC 60", zeroed.ArmorClass, 60);
 Check("...and is refused as a live combatant", zeroed.LooksLikeLiveCombatant, false);
+
+// A creature the trainer has weakened sits at AC 20 — deliberately outside the plausible band,
+// since that is what makes the party's next blow unmissable. The arena sweep has to go on
+// recognising it anyway, or auto-weaken would weaken a fight once and then report it over while it
+// was still being fought. Two tests, and the difference between them is load-bearing: LooksWeakened
+// (the sweep's admission mark) reads only the armour-class pair, the one thing the game has no
+// reason to move, while IsWeakened (has the auto pass anything left to do?) demands all five.
+var weakened = new CharacterRecord(FromHex(OrcHex));
+weakened.HpCurrent = CharacterRecord.WeakenedHp;
+weakened.ArmorClass = CharacterRecord.WeakenedAc;
+weakened.ArmorClassBase = CharacterRecord.WeakenedAc;
+weakened.Thac0 = CharacterRecord.WeakenedThac0;
+weakened.Thac0Base = CharacterRecord.WeakenedThac0;
+Check("Weakened AC is outside the plausible band", weakened.ArmorClass > CharacterRecord.MaxPlausibleAc, true);
+Check("A weakened orc carries the weakened mark", weakened.LooksWeakened, true);
+Check("...and is fully weakened", weakened.IsWeakened, true);
+Check("...and is still a live combatant", weakened.LooksLikeLiveCombatant, true);
+Check("...and is still a monster", weakened.LooksLikeMonster, true);
+Check("An untouched orc carries no weakened mark", orc.LooksWeakened, false);
+Check("...and is not fully weakened", orc.IsWeakened, false);
+Check("A zero-filled buffer carries no weakened mark", zeroed.LooksWeakened, false);
+
+// The reason the mark is only the AC pair. A monster cleric heals its weakened ally, or the engine
+// recomputes its THAC0 from the base minus a to-hit adjustment: the creature must stay in the sweep
+// (it is still on the battlefield, still wearing AC 20) but must read as needing weakening again.
+var healed = new CharacterRecord(weakened.Bytes);
+healed.HpCurrent = healed.HpMax;
+Check("A healed weakened orc keeps the mark", healed.LooksWeakened, true);
+Check("...so the sweep still lists it", healed.LooksLikeLiveCombatant, true);
+Check("...but it is no longer fully weakened", healed.IsWeakened, false);
+
+var retargeted = new CharacterRecord(weakened.Bytes);
+retargeted.Thac0 = 19;                             // engine recompute, not a scratch buffer
+Check("A re-derived THAC0 keeps the mark", retargeted.LooksWeakened, true);
+Check("...and stays a live combatant", retargeted.LooksLikeLiveCombatant, true);
+Check("...but reads as needing weakening again", retargeted.IsWeakened, false);
+
+// Half the mark is no mark: one AC byte at 20 is the shape a stray buffer could stumble into, so
+// the record drops back to being judged on the plausibility band alone — which AC 20 fails.
+var oneAcByte = new CharacterRecord(weakened.Bytes);
+oneAcByte.ArmorClassBase = 6;
+Check("One armour-class byte alone is not the mark", oneAcByte.LooksWeakened, false);
+Check("...so AC 20 is refused as a live combatant", oneAcByte.LooksLikeLiveCombatant, false);
+
+// Current HP is an unsigned byte, so a creature the engine takes below zero reads back wrapped
+// (-5 as 251) rather than negative. Both the record's own plausibility test and the auto pass's
+// out-of-the-fight guard have to catch that, or a corpse gets stood back up on 1 hit point.
+var overshot = new CharacterRecord(FromHex(OrcHex));
+overshot.HpCurrent = 251;
+Check("A below-zero hit point reads back wrapped", overshot.HpCurrent > overshot.HpMax, true);
+Check("...and is refused as a live combatant", overshot.LooksLikeLiveCombatant, false);
+
+// --- what the automatic combat passes will and won't touch -----------------------------------
+// The auto-weaken/auto-kill toggles run off these two predicates twice a second, so what they
+// exclude is the whole of their safety: a creature already out of the fight must never be written
+// to (that is what would put a corpse back on the battlefield), and a creature already in the
+// target state must not be re-written every tick.
+static CharacterViewModel Combatant(CharacterRecord r) =>
+    new(new OfflineHost(), new LocatedCharacter(0x1000, r));
+
+Check("A healthy orc needs weakening", Combatant(new CharacterRecord(FromHex(OrcHex))).NeedsWeakening, true);
+Check("...and needs killing", Combatant(new CharacterRecord(FromHex(OrcHex))).NeedsKilling, true);
+Check("An already weakened orc needs nothing", Combatant(new CharacterRecord(weakened.Bytes)).NeedsWeakening, false);
+Check("A healed weakened orc needs weakening again", Combatant(new CharacterRecord(healed.Bytes)).NeedsWeakening, true);
+
+var dead = new CharacterRecord(FromHex(OrcHex));
+dead.HpCurrent = 0; dead.Status = 6;
+Check("A dead orc is out of the fight", Combatant(dead).IsOutOfTheFight, true);
+Check("...so nothing weakens it", Combatant(dead).NeedsWeakening, false);
+Check("...and nothing kills it twice", Combatant(dead).NeedsKilling, false);
+
+var gone = new CharacterRecord(FromHex(OrcHex));
+gone.Status = 8;                                   // fled, disintegrated, turned undead
+Check("A creature that is gone is out of the fight", Combatant(gone).IsOutOfTheFight, true);
+Check("...so it is never written back into a body", Combatant(gone).NeedsKilling, false);
+
+Check("An overshot hit point counts as out of the fight", Combatant(overshot).IsOutOfTheFight, true);
+Check("...so no pass stands it back up", Combatant(overshot).NeedsWeakening, false);
+
+// Slept or held is not beaten — the creature wakes up and fights on, so the passes do act on it.
+var slept = new CharacterRecord(FromHex(OrcHex));
+slept.Status = 4;                                  // Unconscious, with hit points left
+Check("A slept orc is still in the fight", Combatant(slept).IsOutOfTheFight, false);
+Check("...and is weakened like any other", Combatant(slept).NeedsWeakening, true);
 
 // --- scan deduplication ------------------------------------------------------
 // DOSBox can map the same guest RAM at two host addresses, so the scan sees each record twice and
@@ -1268,4 +1353,13 @@ static byte[] FromHex(string hex)
     for (int i = 0; i < bytes.Length; i++)
         bytes[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
     return bytes;
+}
+
+/// <summary>An <see cref="ICharacterHost"/> that is never attached, so a view-model built on it
+/// edits its record buffer and writes nowhere. Enough to exercise the predicates the automatic
+/// combat passes gate on without a running game.</summary>
+file sealed class OfflineHost : ICharacterHost
+{
+    public bool IsAttached => false;
+    public bool WriteBytes(nuint recordAddress, byte[] source, int offset, int length) => false;
 }

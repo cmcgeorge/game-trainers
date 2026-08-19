@@ -76,6 +76,16 @@ THAC0 20, so your next blow can't miss and can't fail to kill — and because th
 killing blow, the body drops, its treasure joins the encounter's, and the XP is credited. Use it on
 one enemy or the whole arena.
 
+**🔁 Auto-weaken every battle** is the same thing left switched on. Tick it and the poll loop
+puts every creature the arena sweep is listing on 1 HP as it appears, so an encounter is already
+won by the time the first round is drawn and nothing has to be clicked between fights. It skips a
+creature that is already weakened, and one that is already dead or off the field, so it never
+re-writes a record needlessly and never stands a corpse back up; a creature you are hand-editing in
+the panel beside it is left alone too, until you click away. A monster that has merely been slept or
+held is still an enemy, and gets weakened like any other. **🔁 Auto-kill every battle** is
+the standing form of Kill, with Kill's cost — it asks once before switching on, because while it is
+ticked no encounter pays XP or leaves treasure.
+
 **💀 Kill** zeroes the records instead. That edits the character sheet, not the fight: the engine
 never runs its death routine, so the creatures finish the round and the battle tends to end in a
 surrender — which pays no XP and no treasure. It's for walking away from a fight, not for looting

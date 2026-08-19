@@ -190,6 +190,39 @@ public sealed class CharacterRecord
     public const int MinPlausibleThac0 = 0;
     public const int MaxPlausibleThac0 = 26;
 
+    // The exact state the trainer's "Weaken" leaves a creature in: alive on its last hit point,
+    // impossible to miss and unable to hit back. Named here rather than at the write site because
+    // LooksWeakened has to recognise the same numbers the writer stamps.
+    public const int WeakenedHp = 1;
+    public const int WeakenedAc = 20;
+    public const int WeakenedThac0 = 20;
+
+    /// <summary>
+    /// Does this record still stand in every part of the state Weaken left it in? The test for
+    /// whether there is anything left to do to it — deliberately stricter than
+    /// <see cref="LooksWeakened"/>, because a creature the game has since healed off its last hit
+    /// point needs weakening again even though it is still wearing the trainer's armour class.
+    /// </summary>
+    public bool IsWeakened =>
+        HpCurrent == WeakenedHp &&
+        ArmorClass == WeakenedAc && ArmorClassBase == WeakenedAc &&
+        Thac0 == WeakenedThac0 && Thac0Base == WeakenedThac0;
+
+    /// <summary>
+    /// Does this record carry the mark of the trainer's "Weaken"? Only the armour-class pair is
+    /// tested, because AC 20 is the single field Weaken puts outside what
+    /// <see cref="LooksLikeLiveCombatant"/> will otherwise admit, and it is the only one the game
+    /// has no reason to move: HP changes when anything heals the creature, and the engine
+    /// recomputes current THAC0 from the base minus a to-hit adjustment. Testing those too — the
+    /// obvious way to make the mark more specific — would hand the sweep back the drop-out this
+    /// exists to prevent, on any fight where a monster cleric heals its ally.
+    ///
+    /// <para>Both AC bytes reading exactly 40 (the stored form of 20) is discrimination enough:
+    /// the scratch buffers this guards against decode to AC 60, not 20.</para>
+    /// </summary>
+    public bool LooksWeakened =>
+        HpMax > 0 && ArmorClass == WeakenedAc && ArmorClassBase == WeakenedAc;
+
     /// <summary>
     /// Does this record hold a creature the game could actually be fighting with, as opposed to a
     /// scratch buffer that happens to match the record *shape*? The signature scan can straddle a
@@ -197,11 +230,17 @@ public sealed class CharacterRecord
     /// its own), and such overlaps decode to impossible combat numbers: AC/THAC0 are stored as
     /// <c>60 - value</c>, so the zero-filled bytes of a scratch buffer decode to AC 60 / THAC0 60.
     /// Real creatures sit comfortably inside AD&amp;D's ranges and never read above their max HP.
+    ///
+    /// <para>A creature the trainer has weakened is the one exception: AC 20 is outside the
+    /// plausible band on purpose (it is what makes the party's next blow unmissable), so without
+    /// <see cref="LooksWeakened"/> the arena sweep would stop recognising a monster the moment it
+    /// was weakened and report the battle over while it was still being fought.</para>
     /// </summary>
     public bool LooksLikeLiveCombatant =>
         HpMax > 0 && HpCurrent <= HpMax &&
-        ArmorClass >= MinPlausibleAc && ArmorClass <= MaxPlausibleAc &&
-        Thac0 >= MinPlausibleThac0 && Thac0 <= MaxPlausibleThac0;
+        ((ArmorClass >= MinPlausibleAc && ArmorClass <= MaxPlausibleAc &&
+          Thac0 >= MinPlausibleThac0 && Thac0 <= MaxPlausibleThac0)
+         || LooksWeakened);
 
     /// <summary>
     /// Do two records describe the same creature? Used by the poll loop to notice a heap slot the
