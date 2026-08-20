@@ -40,7 +40,8 @@ BardsTaleTrilogyTrainer/
 │   │   ├── MainViewModel.cs         ← attach/locate/poll orchestration
 │   │   ├── CharacterViewModel.cs    ← per-character VM + SpellLevelViewModel + learnt spells
 │   │   ├── MapsViewModel.cs         ← map picker, live marker, teleport
-│   │   └── MapRenderer.cs           ← draws a decoded grid; cell ⇄ pixel mapping
+│   │   └── MapRenderer.cs           ← draws a decoded grid (edge walls in dungeons, blocked-square
+│   │                                    outlines in cities/wilderness); cell ⇄ pixel mapping
 │   └── MainWindow.xaml(.cs)
 └── test/FormatCheck/
     └── Program.cs                   ← headless harness + synthetic IL2CPP world
@@ -76,6 +77,7 @@ BardsTaleTrilogyTrainer/
 - **Map terrain is read from the player's installation, never bundled.** `MapArchive` walks `resources.assets` (Unity serialised-file format 17) and reads just the one `map_*_asc` TextAsset it needs. `MapBook` holds only metadata — names, sizes, indices. Keep it that way: `.gitignore` excludes `.game/` for the same reason.
 - **`MapBook.cs` is generated.** It comes from parsing the three `GlobalMaps` objects in `level3`/`level4`/`level5` plus the map files' own headers. Do not hand-edit the map table; regenerate it. The parse is self-checking — Unity serialises fields in declaration order, so a correct reading consumes each object's byte range exactly, and all three do.
 - **Map coordinates**: X runs east, Z runs north, origin at the south-west corner — which is why `MapRenderer` flips Z into pixel rows so north is up.
+- **Dungeons record their barriers on the edge; cities and wilderness record them on the square.** A dungeon cell names a wall on each of its four sides, so `MapRenderer.DrawWalls` draws them straight. A city or wilderness cell names no walls at all — what stops the party is the whole square being `Blocked` (a building, a mountain, a stretch of water), which is why `DrawBarriers` traces an outline around those instead, drawing each edge from its open side only so a building block stays clean. The rim counts too, unless the map wraps around. `Blocked` — not the `extra`/`motion` numbers, which look like building ids and street tiles — is the real barrier: flood-filling Skara Brae's non-`Blocked` squares (done once while working this out, not in the harness) gives a single region of 868 out of 900, where `extra == 0` fragments into 36. What `FormatCheck` pins down is the weaker invariant that survives without a flood fill — a city grid records no edge walls, its blocked squares all touch open ground, and it does not wrap — which is enough to catch those maps silently going back to drawing as open ground.
 - **Item charges**: zero means "never consumed". `Character::UseItemCharge` returns before the decrement when the count is zero. (`ItemDescription.InfiniteCharges` is 255, but that is the catalogue's bound, not the runtime sentinel.)
 - **Spell knowledge has two independent routes, and the trainer uses both.** `Character::KnowsSpell` returns true if `m_learntSpells` contains the spell, *or* if `m_spellLevel[description.m_class] >= description.m_level` — and it skips the second test entirely when the level is 0. So:
   - **School levels**: `m_spellLevel[classId]` for the seven casting classes, capped at `Mathf.Min(7, (level + 1) / 2)` to match `PlayerState_ReviewBoard::UpgradeMage`.

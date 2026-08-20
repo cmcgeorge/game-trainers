@@ -1,3 +1,4 @@
+using System.Reflection;
 using BardsTale1Trainer.Game;
 
 // Headless verification of the Bard's Tale 1 record format and the extracted game
@@ -175,6 +176,98 @@ Check("Skara Brae is 30×30; every dungeon level is 22×22",
     && MapBook.Maps.Skip(1).All(m => m is { Width: 22, Height: 22 }));
 Check("map names are unique (calibration is keyed by name)",
     MapBook.Maps.Select(m => m.Name).Distinct().Count() == MapBook.Maps.Count);
+
+// ---- MapTerrainData / MapAscii: the wall grids the Maps tab draws ----
+Console.WriteLine("\n=== Map terrain (walls, doors and barriers) ===");
+Check("every area has a terrain grid of its declared size",
+    MapBook.Maps.All(m => m.Terrain.GetLength(0) == m.Width && m.Terrain.GetLength(1) == m.Height));
+
+// The grids are generated, and a regeneration that dropped a line or clipped a column would
+// still parse — it would just quietly lose walls. Check the raw shapes: a 22x22 dungeon is
+// 45 lines of 67 characters (one wall row per square row, plus the rims), and the city is one
+// line per row of two characters per square.
+var grids = typeof(MapTerrainData).GetFields(BindingFlags.Public | BindingFlags.Static)
+    .Where(f => f.FieldType == typeof(string[]))
+    .Select(f => (f.Name, Rows: (string[])f.GetValue(null)!)).ToList();
+Check($"all seventeen grids are present ({grids.Count})", grids.Count == 17);
+var misshapen = grids.Where(g => g.Name == "SkaraBraeTerrain"
+        ? g.Rows.Length != 30 || g.Rows.Any(r => r.Length != 60)
+        : g.Rows.Length != 45 || g.Rows.Any(r => r.Length != 67))
+    .Select(g => g.Name).ToList();
+Check("every grid is the right shape", misshapen.Count == 0,
+    misshapen.Count == 0 ? null : string.Join(", ", misshapen));
+
+// The one thing that would silently ruin a map is a grid that parsed to nothing: an off-by-one
+// in the ASCII would leave a level with no walls at all and it would still render, just empty.
+var wallless = MapBook.Maps.Skip(1)
+    .Where(m => !Any(m.Terrain, m.Width, m.Height, sq => sq.West != WallKind.None || sq.North != WallKind.None))
+    .Select(m => m.Name).ToList();
+Check("every dungeon level parsed with walls on it", wallless.Count == 0,
+    wallless.Count == 0 ? null : string.Join(", ", wallless));
+
+// BT1's dungeon levels wrap around: step off the north rim and you come back on the south one.
+// The two rims are therefore one physical edge drawn on both sides of the picture, so they must
+// carry the *same kind*, not merely both be drawn. Three seams the game records asymmetrically
+// (a door from one side, stone from the other) used to draw as a door on one rim and a wall on
+// the other; comparing kinds is what pins that down, and a dropped row or column shows up here
+// too since nothing else would catch it.
+var unpaired = new List<string>();
+foreach (var m in MapBook.Maps.Skip(1))
+{
+    bool paired = true;
+    for (int i = 0; i < m.Width; i++)
+        paired &= m.Terrain[i, 0].North == m.Terrain[i, m.Height - 1].South;
+    for (int i = 0; i < m.Height; i++)
+        paired &= m.Terrain[0, i].West == m.Terrain[m.Width - 1, i].East;
+    if (!paired) unpaired.Add(m.Name);
+}
+Check("every dungeon level's wrap-around rims are the same edge", unpaired.Count == 0,
+    unpaired.Count == 0 ? null : string.Join(", ", unpaired));
+
+// A one-way passage is the only thing in the data that distinguishes the two faces of an edge,
+// so losing them to a merge that picked a side would be invisible otherwise. The game records
+// 86 of them across the sixteen levels; the six rim glyphs are the three wrap seams, each drawn
+// on both rims.
+int interiorOneWay = 0, rimOneWay = 0;
+foreach (var m in MapBook.Maps.Skip(1))
+    for (int y = 0; y < m.Height; y++)
+        for (int x = 0; x < m.Width; x++)
+        {
+            if (m.Terrain[x, y].North.IsOneWay()) { if (y == 0) rimOneWay++; else interiorOneWay++; }
+            if (m.Terrain[x, y].West.IsOneWay()) { if (x == 0) rimOneWay++; else interiorOneWay++; }
+            if (y == m.Height - 1 && m.Terrain[x, y].South.IsOneWay()) rimOneWay++;
+            if (x == m.Width - 1 && m.Terrain[x, y].East.IsOneWay()) rimOneWay++;
+        }
+Check($"all 86 one-way passages survive ({interiorOneWay} interior + {rimOneWay / 2} across the wrap seam)",
+    interiorOneWay + rimOneWay / 2 == 86 && rimOneWay % 2 == 0);
+
+Check("doors, secret doors and one-way passages all survive the parse",
+    MapBook.Maps.Skip(1).Sum(m => Count(m.Terrain, m.Width, m.Height, sq => sq.West == WallKind.Door || sq.North == WallKind.Door)) > 0
+    && MapBook.Maps.Skip(1).Sum(m => Count(m.Terrain, m.Width, m.Height, sq => sq.West.IsSecret() || sq.North.IsSecret())) > 0
+    && MapBook.Maps.Skip(1).Sum(m => Count(m.Terrain, m.Width, m.Height, sq => sq.West.IsOneWay() || sq.North.IsOneWay())) > 0);
+
+Check("a one-way passage knows which way it opens",
+    WallKind.OneWayDoor.OneWaySign() == 1 && WallKind.OneWayDoorReversed.OneWaySign() == -1
+    && WallKind.OneWaySecretDoor.OneWaySign() == 1 && WallKind.OneWaySecretDoorReversed.OneWaySign() == -1
+    && WallKind.Door.OneWaySign() == 0 && WallKind.Wall.OneWaySign() == 0);
+
+// Skara Brae carries its barriers on the square, not on the edges — that is what the renderer
+// traces its building outline from.
+var brae = MapBook.Maps[0];
+int braeBlocked = Count(brae.Terrain, brae.Width, brae.Height, sq => sq.IsBlocked);
+Check($"Skara Brae's barriers are blocked squares ({braeBlocked} of {brae.Width * brae.Height})",
+    braeBlocked is > 0 and < 200);
+Check("Skara Brae records no edge walls",
+    !Any(brae.Terrain, brae.Width, brae.Height, sq => sq.West != WallKind.None || sq.North != WallKind.None
+        || sq.East != WallKind.None || sq.South != WallKind.None));
+Check("Skara Brae labels its services and gates",
+    Count(brae.Terrain, brae.Width, brae.Height, sq => sq.Feature == SquareFeature.Guild) == 1
+    && Count(brae.Terrain, brae.Width, brae.Height, sq => sq.Feature == SquareFeature.Garths) == 1
+    && Count(brae.Terrain, brae.Width, brae.Height, sq => sq.Feature == SquareFeature.Review) == 1
+    && Count(brae.Terrain, brae.Width, brae.Height, sq => sq.Feature == SquareFeature.Roscoes) == 1
+    && Count(brae.Terrain, brae.Width, brae.Height, sq => sq.Feature == SquareFeature.GateLocked) > 0);
+
+Check("the ASCII glyphs round-trip through the parser", RoundTripsGlyphs());
 
 // ---- MonsterBook: the bestiary extracted from the live data segment ----
 Console.WriteLine("\n=== MonsterBook (bestiary) ===");
@@ -380,6 +473,43 @@ static byte[] ReadAt(FileStream fs, long offset, int count)
         read += n;
     }
     return buf;
+}
+
+static bool Any(BoardSquare[,] board, int w, int h, Func<BoardSquare, bool> predicate)
+    => Count(board, w, h, predicate) > 0;
+
+static int Count(BoardSquare[,] board, int w, int h, Func<BoardSquare, bool> predicate)
+{
+    int n = 0;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            if (predicate(board[x, y])) n++;
+    return n;
+}
+
+/// <summary>
+/// Feeds every documented glyph through the parser on a hand-written 2x2 grid, so a mistyped
+/// case in MapAscii can't quietly turn a secret door into a plain wall across the whole game.
+/// </summary>
+static bool RoundTripsGlyphs()
+{
+    var board = MapAscii.Parse(new[]
+    {
+        "+##+~~+",
+        "#  >  <",
+        "+^^+VV+",
+        "~  )  (",
+        "++++AA+",
+    }, 2, 2);
+
+    return board[0, 0].North == WallKind.Wall && board[1, 0].North == WallKind.SecretDoor
+        && board[0, 0].West == WallKind.Wall && board[1, 0].West == WallKind.OneWayDoor
+        && board[1, 0].East == WallKind.OneWayDoorReversed
+        && board[0, 1].North == WallKind.OneWayDoorReversed && board[1, 1].North == WallKind.OneWaySecretDoor
+        && board[0, 1].West == WallKind.SecretDoor && board[1, 1].West == WallKind.OneWaySecretDoor
+        && board[1, 1].East == WallKind.OneWaySecretDoorReversed
+        && board[0, 1].South == WallKind.Door && board[1, 1].South == WallKind.OneWaySecretDoorReversed
+        && board[0, 0].East == WallKind.None && board[0, 0].South == WallKind.None;
 }
 
 static string FindRepoRoot()

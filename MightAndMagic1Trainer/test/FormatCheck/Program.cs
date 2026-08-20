@@ -1,8 +1,12 @@
 using MightAndMagic1Trainer.Game;
 using MightAndMagic1Trainer.Memory;
 
-string docs = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "docs");
-docs = Path.GetFullPath(docs);
+// The sample files live in the trainer's own docs folder, which is named ".docs" here and
+// "docs" in the sibling trainers; take whichever is present so the harness runs either way.
+string trainerRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", ".."));
+string docs = Directory.Exists(Path.Combine(trainerRoot, "docs"))
+    ? Path.Combine(trainerRoot, "docs")
+    : Path.Combine(trainerRoot, ".docs");
 
 int failures = 0;
 void Check(string what, bool ok) { Console.WriteLine($"  [{(ok ? "PASS" : "FAIL")}] {what}"); if (!ok) failures++; }
@@ -339,6 +343,120 @@ Check("anchors sharing a column can't calibrate",
 Check("coincident pixels can't calibrate",
     MapCalibration.FromAnchors(new MapAnchor(10, 10, 0, 0), new MapAnchor(10, 10, 5, 5)) == null);
 
+// ---- MazeData / BuiltInMazes: every area's walls, and the live-maze fingerprint ----
+Console.WriteLine("\nMazeData (the 55 mazes and their walls):");
+var mazes = MazeData.BuiltIn();
+Check($"all {MazeData.MapCount} areas are bundled", mazes.Maps.Count == MazeData.MapCount);
+Check("the bundled set knows it is not the exact bytes", !mazes.IsExact);
+Check("records keep the game's own order (Sorpigal, the caves, the overworld, the Astral Plane)",
+    mazes.Maps[0].RawName == "sorpigal" && mazes.Maps[5].RawName == "cave1"
+    && mazes.Maps[14].RawName == "areaa1" && mazes.Maps[54].RawName == "astral"
+    && mazes.Maps.Select(m => m.Index).SequenceEqual(Enumerable.Range(0, MazeData.MapCount)));
+Check("every grid is 33 lines of 33 characters",
+    BuiltInMazes.Records.Count == MazeData.MapCount
+    && BuiltInMazes.Records.All(r => r.Length == 33 && r.All(line => line.Length == 33)));
+
+// Every area is a closed space with a way through it: an all-open map would mean the grid was
+// read at the wrong offset, and an all-walled one that the glyphs were misread.
+var degenerate = new List<string>();
+foreach (var map in mazes.Maps)
+    if (Edges(map, EdgeKind.Wall) == 0 || Edges(map, EdgeKind.Open) == 0) degenerate.Add(map.RawName);
+Check($"every area has both walls and open ground{Detail(degenerate)}", degenerate.Count == 0);
+
+Check("the towns are door-fronted and the mazes carry secret edges",
+    Edges(mazes.Maps[0], EdgeKind.Door) > 0 && Edges(mazes.Maps[0], EdgeKind.Special) > 0
+    && mazes.Maps.Sum(m => Edges(m, EdgeKind.Special)) > 100);
+Check("illusory walls survive: drawn, but walkable", mazes.Maps.Sum(Illusory) > 1000);
+
+// The passability plane must repack exactly the way the game stores it, since that is what the
+// fingerprint compares against the live maze buffer.
+bool repacks = true;
+foreach (var map in mazes.Maps)
+    for (int y = 0; y < MazeMap.Size && repacks; y++)
+        for (int x = 0; x < MazeMap.Size; x++)
+        {
+            int packed = 0;
+            for (int dir = 0; dir < 4; dir++) packed |= (int)map.Edge(x, y, dir) << (dir * 2);
+            if (packed == map.Plane2[y * MazeMap.Size + x]) continue;
+            repacks = false;
+            break;
+        }
+Check("each map's passability plane repacks to the game's own byte layout", repacks);
+
+// The fingerprint has to pick the right map out of all 55 from its plane alone. Feeding each map
+// its own plane is the strictest form of that: it passes only if no other map comes within the
+// near-match tolerance, which is what stops a wrong area being auto-selected in game.
+var confused = mazes.Maps.Where(m => mazes.MatchAt(m.Plane2, 0) != m.Index).Select(m => m.RawName).ToList();
+int closest = int.MaxValue;
+for (int i = 0; i < mazes.Maps.Count; i++)
+    for (int j = i + 1; j < mazes.Maps.Count; j++)
+        closest = Math.Min(closest, PlaneDistance(mazes.Maps[i].Plane2, mazes.Maps[j].Plane2));
+Check($"every area fingerprints to itself and to nothing else (closest two mazes are {closest} " +
+      $"of 1024 edges apart){Detail(confused)}", confused.Count == 0);
+
+Check("a plane that is nobody's matches nothing",
+    mazes.MatchAt(new byte[256], 0) < 0
+    && mazes.MatchAt(Enumerable.Repeat((byte)0xA5, 256).ToArray(), 0) < 0);
+
+// A plane with a handful of edges recorded from the wrong side is exactly what the bundled data
+// does to one-sided doors, and it must still land on the right map.
+var scuffed = (byte[])mazes.Maps[19].Plane2.Clone();
+for (int k = 0; k < 8; k++) scuffed[k * 7] ^= 0x01;
+Check("a near-match still finds its map", mazes.MatchAt(scuffed, 0) == 19);
+
+// ...but only a near one. Corrupting a quarter of the plane must not be forgiven.
+var wrecked = (byte[])mazes.Maps[19].Plane2.Clone();
+for (int k = 0; k < 64; k++) wrecked[k] ^= 0x55;
+Check("a far-off plane is refused rather than guessed at", mazes.MatchAt(wrecked, 0) < 0);
+
+Check("the maze is found wherever it sits in the buffer", FindsInBuffer(mazes, scuff: 0));
+
+// The scan filters candidates on the window's non-blank-field count before measuring the
+// distance, and a one-sided door shifts that count. If the filter were tightened past the
+// tolerance it would reject exactly the real-world case it exists to speed up, and the
+// exact-plane test above would not notice.
+Check("a near-match is found by the scan too, not just by a direct compare",
+    FindsInBuffer(mazes, scuff: 8));
+
+// The exact path is the one that runs once the player loads their own Mazedata.dta: it matches
+// the wall-graphic plane byte for byte and cannot false-positive.
+var exact = MazeData.FromBytes(SyntheticMazedata());
+Check("a 28,160-byte Mazedata.dta parses into 55 exact maps",
+    exact is { IsExact: true } && exact.Maps.Count == MazeData.MapCount);
+Check("a short file is refused", MazeData.FromBytes(new byte[MazeData.FileSize - 1]) == null);
+// Over every record, not a sampled one: the graphic plane identifies its own map, and the
+// passability plane — which is what the bundled path matches on — is nobody's graphic plane.
+var exactMisses = Enumerable.Range(0, MazeData.MapCount)
+    .Where(i => exact!.MatchAt(exact.Maps[i].Plane1!, 0) != i || exact.MatchAt(exact.Maps[i].Plane2, 0) >= 0)
+    .ToList();
+Check($"exact data fingerprints on the wall-graphic plane, and on nothing else{Detail(exactMisses.Select(i => i.ToString()).ToList())}",
+    exactMisses.Count == 0);
+
+// If the real file is to hand, the bundled grids must agree with it. The one place they cannot
+// is a one-sided door, which the atlas they were transcribed from drew as a single edge.
+var mazePath = Path.Combine(docs, "Mazedata.dta");
+if (File.Exists(mazePath))
+{
+    var real = MazeData.FromBytes(File.ReadAllBytes(mazePath));
+    if (real == null) Check("the bundled Mazedata.dta parses", false);
+    else
+    {
+        int worst = 0;
+        string worstName = "";
+        for (int i = 0; i < MazeData.MapCount; i++)
+        {
+            int d = PlaneDistance(real.Maps[i].Plane2, mazes.Maps[i].Plane2);
+            if (d > worst) { worst = d; worstName = real.Maps[i].RawName; }
+        }
+        Check($"the bundled walls match the real file (worst area differs in {worst} of 1024 edges, {worstName})",
+            worst <= 48);
+    }
+}
+else
+{
+    Console.WriteLine("  (no Mazedata.dta in docs\\ \u2014 skipping the bundled-vs-real comparison)");
+}
+
 // ---- MonsterBook: the bestiary extracted from MM.EXE ----
 Console.WriteLine("\nMonsterBook (bestiary):");
 Check("bestiary has 195 monsters with sequential ids",
@@ -445,3 +563,80 @@ finally
 
 Console.WriteLine(failures == 0 ? "\nALL CHECKS PASSED" : $"\n{failures} CHECK(S) FAILED");
 return failures;
+
+
+// --- maze helpers (local functions live after the top-level statements) -------------
+static int Edges(MazeMap map, EdgeKind kind)
+{
+    int n = 0;
+    for (int y = 0; y < MazeMap.Size; y++)
+        for (int x = 0; x < MazeMap.Size; x++)
+            for (int dir = 0; dir < 4; dir++)
+                if (map.Edge(x, y, dir) == kind) n++;
+    return n;
+}
+
+static int Illusory(MazeMap map)
+{
+    int n = 0;
+    for (int y = 0; y < MazeMap.Size; y++)
+        for (int x = 0; x < MazeMap.Size; x++)
+            for (int dir = 0; dir < 4; dir++)
+                if (map.IsIllusory(x, y, dir)) n++;
+    return n;
+}
+
+/// <summary>Differing two-bit edge fields between two 256-byte planes.</summary>
+static int PlaneDistance(byte[] a, byte[] b)
+{
+    int n = 0;
+    for (int k = 0; k < 256; k++)
+    {
+        int diff = a[k] ^ b[k];
+        for (int dir = 0; dir < 4; dir++) if (((diff >> (dir * 2)) & 3) != 0) n++;
+    }
+    return n;
+}
+
+/// <summary>
+/// Plants a map's plane in the middle of a junk buffer and expects the scan to find it.
+/// <paramref name="scuff"/> flips that many edges first, standing in for the one-sided doors
+/// the bundled data records from a single side.
+/// </summary>
+static bool FindsInBuffer(MazeData mazes, int scuff)
+{
+    var buffer = new byte[4096];
+    new Random(1234).NextBytes(buffer);
+    const int at = 1500;
+    var plane = (byte[])mazes.Maps[31].Plane2.Clone();
+    for (int k = 0; k < scuff; k++) plane[k * 7] ^= 0x01;
+    Array.Copy(plane, 0, buffer, at, 256);
+    return mazes.FindInBuffer(buffer) == (31, at);
+}
+
+/// <summary>
+/// A stand-in Mazedata.dta: 55 records whose two planes are distinct per record, which is all
+/// the exact fingerprint path needs to be exercised without shipping the game's own file.
+///
+/// <para>The bytes have to be genuinely unrelated between records, not an affine ramp. An
+/// earlier version used <c>i*7 + k*3</c>, under which record i's plane 2 came out equal to
+/// record (i + 51)'s plane 1 — so the "plane 2 is nobody's graphic plane" assertion below
+/// passed only because the index it happened to pick had no such partner in range.</para>
+/// </summary>
+static byte[] SyntheticMazedata()
+{
+    var bytes = new byte[MazeData.FileSize];
+    for (int i = 0; i < MazeData.MapCount; i++)
+        for (int k = 0; k < MazeData.RecordSize; k++)
+        {
+            uint h = (uint)(i * 0x9E3779B1 + k * 0x85EBCA6B);   // a cheap avalanche, not a ramp
+            h ^= h >> 15;
+            h *= 0x2545F491;
+            h ^= h >> 13;
+            bytes[i * MazeData.RecordSize + k] = (byte)h;
+        }
+    return bytes;
+}
+
+/// <summary>" — a, b, c" for a list of offenders, or nothing when there are none.</summary>
+static string Detail(List<string> names) => names.Count == 0 ? "" : " \u2014 " + string.Join(", ", names);

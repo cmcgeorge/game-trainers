@@ -168,15 +168,25 @@ different address.
 ### Auto-drawn map & exact teleport (Map (drawn) tab)
 
 Unlike the image-based **Maps** tab, the **🧭 Map (drawn)** tab needs no scanned pictures
-and no calibration: it decodes the game's own `Mazedata.dta` and draws each of the 55
-mazes as crisp vector graphics — walls, doors, and secret/illusory passages. Click
-**Load Mazedata.dta** and point it at the file in your game folder (it also tries
-`C:\Temp\Games\MM1\Mazedata.dta` automatically and remembers your choice).
+and no calibration: it draws each of the game's 55 mazes as crisp vector graphics — walls,
+doors, and secret/illusory passages. That is *every* area: all five towns, the nine caves,
+the twenty overworld squares, the castles, the forest lairs, the Dragadune undercity, the
+Old Order temple levels, the Soul Maze and the Astral Plane.
+
+The layouts are bundled, so the tab is fully populated the moment you open it. Click
+**Load Mazedata.dta** and point it at the file in your game folder to swap in the exact
+bytes instead (it also tries `C:\Temp\Games\MM1\Mazedata.dta` automatically and remembers
+your choice) — worth doing, because only the exact data makes current-map detection a
+byte-for-byte match.
 
 - **Current map, detected automatically.** The running game keeps the active 16×16 maze in
   memory byte-for-byte, so the trainer fingerprints it against the 55 known records and
-  selects the matching map for you — the match is exact (all 55 fingerprints are unique).
-  Untick **Follow current map** to browse the set freely.
+  selects the matching map for you, every couple of seconds. With your own `Mazedata.dta`
+  loaded that match is exact — all 55 wall-graphic fingerprints are unique, so it cannot
+  false-positive. On the bundled layouts it falls back to a near-match on the passability
+  plane; the closest two mazes in the game are 323 of 1024 edges apart, against a tolerance of
+  48, so it cannot land on the wrong map either. Untick **Follow current map** to browse the
+  set freely.
 - **Live party cell.** Lock the party's X/Y once via the **📍 X / Y Search** tab; the trainer
   then learns the position's memory location and shows a gold marker that tracks you as you
   walk — no re-locking needed on later sessions.
@@ -379,7 +389,9 @@ src/MightAndMagic1Trainer/
                MapCalibration.cs    two-anchor map-image ⇄ game-coordinate transform
                MonsterBook.cs       the 195-entry bestiary extracted from MM.EXE
                Lfsr.cs              byte-exact port of the game's LFSR rand(n) (roll predictor)
-               MazeData.cs          decodes Mazedata.dta into the 55 vector mazes
+               MazeData.cs          decodes Mazedata.dta into the 55 vector mazes; also builds
+                                    them from the bundled grids and fingerprints the live maze
+               BuiltInMazes.cs      the 55 bundled wall grids (transcribed from .docs/maze-atlas.md)
   Memory/      RosterLocator.cs     signature scanner (game-specific)
                RollScanner.cs       locates the create-screen roll buffer for the roller (game-specific)
                DataSegment.cs       fixed DS-offset reader for the game's globals (offset-map.md)

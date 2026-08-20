@@ -1,21 +1,19 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Globalization;
 using System.IO;
 using System.Text.Json;
-using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using BardsTale1Trainer.Game;
 using BardsTale1Trainer.Memory;
 
 namespace BardsTale1Trainer.ViewModels;
 
 /// <summary>
-/// One map in the picker: its reference data plus the grid image to display. Bard's Tale 1
-/// has no bundled scans, so the image is a labelled W×H cell grid rendered once on first
-/// use — the user's calibration anchors give the grid its game meaning.
+/// One map in the picker: its reference data plus the map image to display. Bard's Tale 1 has
+/// no bundled scans, so the image is drawn from the area's own wall grid
+/// (<see cref="MapTerrainData"/>) by <see cref="MapRenderer"/>, once on first use — the user's
+/// calibration anchors give that picture its game meaning.
 /// </summary>
 public sealed class MapEntryViewModel
 {
@@ -27,59 +25,32 @@ public sealed class MapEntryViewModel
     public string Category => Map.Category;
     public string Description => $"{Map.Description} ({Map.Width}×{Map.Height} cells)";
 
-    public ImageSource Image => _image ??= RenderGrid(Map.Width, Map.Height);
+    public ImageSource Image => _image ??= MapRenderer.Render(Map.Terrain, Map.Width, Map.Height);
     private ImageSource? _image;
 
-    private const int Cell = 24;     // pixels per cell — big enough to click accurately
-    private const int Border = 26;   // margin around the grid for the ruler labels
-
     /// <summary>
-    /// Draws the empty cell grid: light lines per cell, a heavier line every 5, and ruler
-    /// indexes (counted from the image's top-left corner) along the top and left edges.
-    /// The rulers are only a counting aid — the calibration anchors define the real game
-    /// coordinates, including which way each axis runs.
+    /// What is on the given square and what walls it in, for the status line — empty when it is
+    /// plain ground in the open. A square only records its own west and north edges, so the east
+    /// and south ones are read off the neighbour that does (the map's own rim excepted).
     /// </summary>
-    private static ImageSource RenderGrid(int w, int h)
+    public string Describe(int x, int y)
     {
-        int wPx = Border * 2 + Cell * w, hPx = Border * 2 + Cell * h;
-        var visual = new DrawingVisual();
-        using (var dc = visual.RenderOpen())
+        if (x < 0 || y < 0 || x >= Map.Width || y >= Map.Height) return "";
+        var here = Map.Terrain[x, y];
+
+        var bits = new List<string>();
+        if (here.Description is { } what) bits.Add(what);
+        Add("N", here.North);
+        Add("E", x + 1 < Map.Width ? Map.Terrain[x + 1, y].West : here.East);
+        Add("S", y + 1 < Map.Height ? Map.Terrain[x, y + 1].North : here.South);
+        Add("W", here.West);
+        return string.Join(", ", bits);
+
+        void Add(string side, WallKind kind)
         {
-            var bg = new SolidColorBrush(Color.FromRgb(0x14, 0x15, 0x1A));
-            var panel = new SolidColorBrush(Color.FromRgb(0x1E, 0x1F, 0x26));
-            var thin = new Pen(new SolidColorBrush(Color.FromRgb(0x2E, 0x30, 0x38)), 1);
-            var thick = new Pen(new SolidColorBrush(Color.FromRgb(0x4A, 0x4D, 0x5A)), 1);
-            var labelBrush = new SolidColorBrush(Color.FromRgb(0x8A, 0x8D, 0x99));
-            var typeface = new Typeface("Consolas");
-
-            dc.DrawRectangle(bg, null, new Rect(0, 0, wPx, hPx));
-            dc.DrawRectangle(panel, null, new Rect(Border, Border, Cell * w, Cell * h));
-
-            for (int x = 0; x <= w; x++)
-            {
-                double px = Border + x * Cell + 0.5;
-                dc.DrawLine(x % 5 == 0 ? thick : thin, new Point(px, Border), new Point(px, Border + Cell * h));
-                if (x % 5 == 0 && x < w)
-                    dc.DrawText(Label(x, typeface, labelBrush), new Point(px + 2, Border - 16));
-            }
-            for (int y = 0; y <= h; y++)
-            {
-                double py = Border + y * Cell + 0.5;
-                dc.DrawLine(y % 5 == 0 ? thick : thin, new Point(Border, py), new Point(Border + Cell * w, py));
-                if (y % 5 == 0 && y < h)
-                    dc.DrawText(Label(y, typeface, labelBrush), new Point(4, py + 2));
-            }
+            if (kind.Describe() is { } name) bits.Add($"{side} {name}");
         }
-
-        var bmp = new RenderTargetBitmap(wPx, hPx, 96, 96, PixelFormats.Pbgra32);
-        bmp.Render(visual);
-        bmp.Freeze();
-        return bmp;
     }
-
-    private static FormattedText Label(int value, Typeface typeface, Brush brush) =>
-        new(value.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight, typeface, 11, brush, 1.0);
 }
 
 /// <summary>
@@ -255,7 +226,24 @@ public sealed class MapReferenceViewModel : ObservableObject
     {
         if (_selectedMap == null) return;
         if (_isMarkingAnchor) { AddAnchor(pixelX, pixelY); return; }
-        if (_teleportOnClick) Teleport(pixelX, pixelY);
+        if (_teleportOnClick) { Teleport(pixelX, pixelY); return; }
+        DescribeSquare(pixelX, pixelY);
+    }
+
+    /// <summary>
+    /// With nothing else armed, a click just reads out the square. This needs no calibration —
+    /// the drawn grid's own geometry says which square a pixel is in — so the numbers are the
+    /// picture's rows and columns, not the game's X/Y, which only calibration establishes.
+    /// </summary>
+    private void DescribeSquare(double pixelX, double pixelY)
+    {
+        int col = (int)Math.Floor((pixelX - MapRenderer.Border) / MapRenderer.Cell);
+        int row = (int)Math.Floor((pixelY - MapRenderer.Border) / MapRenderer.Cell);
+        if (col < 0 || row < 0 || col >= _selectedMap!.Map.Width || row >= _selectedMap.Map.Height) return;
+
+        string what = _selectedMap.Describe(col, row);
+        _setStatus($"Grid square {col}, {row} (counted from the top-left) on “{_selectedMap.Name}”"
+            + (what.Length == 0 ? "." : $" — {what}."));
     }
 
     private void AddAnchor(double pixelX, double pixelY)

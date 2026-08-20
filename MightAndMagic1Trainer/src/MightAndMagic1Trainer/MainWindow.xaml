@@ -890,7 +890,7 @@
                         <StackPanel DockPanel.Dock="Top">
                             <TextBlock Style="{StaticResource Section}" Text="Area maps"/>
                             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,6"
-                                       Text="Bundled reference maps for the towns, castles, overworld areas and dungeons of Might &amp; Magic 1. Pick a map to view it; drag the scrollbars to pan around larger maps."/>
+                                       Text="Bundled community map scans, annotated with the encounters, treasure and events the game files don't hold. They cover the towns, castles, overworld and the best-known dungeons; for every one of the 55 areas with its walls, use the 🧭 Map (drawn) tab."/>
                             <ComboBox ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}" Height="28"
                                       ScrollViewer.CanContentScroll="False">
                                 <ComboBox.GroupStyle>
@@ -989,7 +989,7 @@
                         <StackPanel DockPanel.Dock="Top">
                             <TextBlock Style="{StaticResource Section}" Text="Maps drawn from game data"/>
                             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,6"
-                                       Text="Rendered straight from the game's own Mazedata.dta — the walls, doors and secret passages of all 55 mazes. Pick your current area; the gold dot is the live party cell. With Teleport on click, clicking a cell jumps the party there (exact cells, no calibration needed)."/>
+                                       Text="Every one of the game's 55 mazes — the walls, doors and secret passages of all five towns, the nine caves, the twenty overworld areas, the castles, the lairs and the planes. These are bundled, so they are here straight away; loading your own Mazedata.dta swaps in the exact bytes and makes current-map detection a byte-for-byte match. Pick your current area; the gold dot is the live party cell. With Teleport on click, clicking a cell jumps the party there (exact cells, no calibration needed)."/>
                             <WrapPanel Margin="0,0,0,6">
                                 <Button Content="📂 Load Mazedata.dta" Click="OnLoadMazedataClicked"/>
                                 <TextBlock Text="{Binding MazeStatus}" Foreground="{StaticResource FgDim}"
@@ -1008,7 +1008,7 @@
                             <WrapPanel Margin="0,6,0,0">
                                 <CheckBox Content="🧭 Follow current map automatically" IsChecked="{Binding AutoFollowCurrentMap}"
                                           VerticalAlignment="Center"
-                                          ToolTip="Detects the current map by matching the game's live maze buffer to the decoded data, and selects it for you."/>
+                                          ToolTip="Detects the current map by matching the game's live maze buffer to the decoded data, and selects it for you. Exact and immediate with your own Mazedata.dta loaded; a slower near-match on the bundled layouts."/>
                                 <TextBlock Text="{Binding DetectedText}" Foreground="{StaticResource Accent}"
                                            VerticalAlignment="Center" Margin="12,0,0,0"/>
                             </WrapPanel>

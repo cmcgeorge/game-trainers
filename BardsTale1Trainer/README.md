@@ -85,15 +85,36 @@ the Memory tab. Runs separated by ≤4 equal bytes merge into one; results cap a
 runs, and bytes that were unreadable (zero-filled) when dumped are disclosed because
 changes falling there may be phantoms.
 
-### Maps tab — live marker & click-to-teleport
+### Maps tab — drawn maps, live marker & click-to-teleport
 
-A labelled grid for each area (the 30×30 city and all sixteen 22×22 dungeon levels;
-there are no bundled map scans). Once the **📍 X / Y Search** has narrowed the party
-position to a *single* address, the Maps tab tracks the party with a live marker. Each
-map is calibrated once by marking the party's spot from two different positions (the two
-anchors define the pixel↔cell transform, including axis direction; persisted to
-`%APPDATA%\BT1Trainer\map-calibration.json`). With **🚀 Teleport on click** armed,
-clicking a cell writes its X/Y to the position address — the party jumps there.
+A drawn map for each area — the 30×30 city and all sixteen 22×22 dungeon levels — with the
+walls, doors, secret doors and one-way passages the game records, rendered the way players
+drew them on graph paper:
+
+| Drawn as | Means |
+|---|---|
+| pale line | solid wall |
+| green gap | door |
+| amber dashed gap | secret door |
+| green arrow | one-way passage — walkable only the way the arrow points |
+| dark square, outlined | building (Skara Brae has no edge walls; its barriers are whole squares) |
+| `LCK` | city gate (Skara Brae's fourteen are all locked) |
+| `TMP` `TAV` `GLD` `GAR` `REV` `ROS` `BNK` `CAS` | temple, tavern, guild, Garth's, review board, Roscoe's, bank, casino |
+
+Clicking a square reads out what is on it. Once the **📍 X / Y Search** has narrowed the
+party position to a *single* address, the Maps tab also tracks the party with a live
+marker. Each map is calibrated once by marking the party's spot from two different
+positions (the two anchors define the pixel↔cell transform, including axis direction;
+persisted to `%APPDATA%\BT1Trainer\map-calibration.json`). With **🚀 Teleport on click**
+armed, clicking a cell writes its X/Y to the position address — the party jumps there.
+
+> **Where the walls come from.** The 1987 DOS release keeps its levels inside `BARD.EXE`'s
+> own data in a form this project has not decoded, so the grids in `MapTerrainData.cs` were
+> transcribed from *The Bard's Tale Trilogy* remaster, which ships each area as a plain-text
+> map asset and reproduces the original sixteen dungeon levels and the Skara Brae street
+> grid. It is a recreation rather than the 1987 binary, so a square here and there may
+> differ — and its Skara Brae lists a Bank and a Casino the DOS game does not have. Treat
+> the walls as the reliable part and the labelled services as a guide.
 
 ### Reference tabs
 
@@ -201,7 +222,10 @@ src/BardsTale1Trainer/
                ItemBook.cs          the game's 126-entry item id→name table
                Spellbook.cs         all 79 spells (art / level / code / name) + class→art map
                MonsterBook.cs       the 127-entry bestiary (verbatim names + markup decoder)
-               MapBook.cs           the 17 areas (city + dungeon levels) with grid sizes
+               MapBook.cs           the 17 areas (city + dungeon levels) with grid sizes + terrain
+               MapTerrain.cs        WallKind / SquareFeature / BoardSquare — one decoded square
+               MapAscii.cs          parses the ASCII grids (glyph legend lives here)
+               MapTerrainData.cs    the 17 areas' wall/barrier grids
                MapCalibration.cs    two-anchor pixel↔cell transform for the Maps tab
                ClassBook.cs         class & race reference text
   Memory/      PartyLocator.cs      signature scanner -> data-segment base address (game-specific)
@@ -212,7 +236,7 @@ src/BardsTale1Trainer/
   ViewModels/  MainViewModel (attach/scan/freeze timer, snapshots, slot tools, hotkeys),
                CharacterViewModel, StatViewModel, ItemSlotViewModel, SpellLevelViewModel,
                HexByteViewModel, MemorySearchViewModel, PairSearchViewModel,
-               MemoryDumpViewModel, DumpDiffViewModel, MapReferenceViewModel,
+               MemoryDumpViewModel, DumpDiffViewModel, MapReferenceViewModel, MapRenderer,
                MonsterReferenceViewModel, SpellReferenceViewModel, ItemReferenceViewModel,
                ReferenceViewModels
   App.xaml, MainWindow.xaml         dark, two-pane UI (party list + editor/reference tabs)

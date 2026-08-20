@@ -21,6 +21,9 @@
     <Compile Include="..\..\src\BardsTale1Trainer\Game\ClassBook.cs" />
     <Compile Include="..\..\src\BardsTale1Trainer\Game\MonsterBook.cs" />
     <Compile Include="..\..\src\BardsTale1Trainer\Game\MapBook.cs" />
+    <Compile Include="..\..\src\BardsTale1Trainer\Game\MapTerrain.cs" />
+    <Compile Include="..\..\src\BardsTale1Trainer\Game\MapAscii.cs" />
+    <Compile Include="..\..\src\BardsTale1Trainer\Game\MapTerrainData.cs" />
     <Compile Include="..\..\src\BardsTale1Trainer\Game\MapCalibration.cs" />
     <Compile Include="..\..\src\BardsTale1Trainer\Game\PartySnapshot.cs" />
   </ItemGroup>

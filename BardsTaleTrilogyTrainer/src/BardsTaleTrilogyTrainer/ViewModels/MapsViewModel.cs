@@ -329,6 +329,9 @@ public sealed class MapsViewModel : ObservableObject
         var bits = new List<string>();
         if (cell.Module != CityModule.None) bits.Add(cell.Module.ToString());
         if (cell.IsBlocked) bits.Add("blocked");
+        // Everything except Passable/Blocked, which the line above already covers in words.
+        var rest = cell.Flags & ~(CellFlags.Passable | CellFlags.Blocked);
+        if (rest != CellFlags.None) bits.Add(rest.ToString().Replace(", ", " + "));
         return string.Join(", ", bits);
     }
 

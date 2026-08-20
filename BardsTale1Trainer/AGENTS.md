@@ -12,7 +12,8 @@ class, race, level, experience, gold, equipment, spell mastery, etc. — with fr
 toggles, "max" buttons and global hotkeys (Ctrl+F1/F2/F3). It can also open `.TPW` saved
 characters for offline **editing** (Save .TPW writes back with a `.bak`), snapshot and
 restore the whole party, copy/swap party slots, diff two memory dumps by address, and
-track/teleport the party on per-area map grids.
+track/teleport the party on drawn per-area maps (walls, doors, secret doors, one-way
+passages and, in Skara Brae, buildings and city gates).
 
 Single-player cheat tool for the user's own save. It does not touch the network or any
 external service. It was ported from the sibling `MightAndMagic1Trainer` solution, which
@@ -49,7 +50,11 @@ src/BardsTale1Trainer/
                ItemBook.cs        the game's 126-entry item id→name table (1-based ids)
                Spellbook.cs       all 79 spells (art/level/4-letter code/name) + class→art map + bard songs
                MonsterBook.cs     127-entry bestiary: raw names verbatim from DS:0x2874 + markup decoder
-               MapBook.cs         the 17 areas (city 30×30 + sixteen 22×22 dungeon levels)
+               MapBook.cs         the 17 areas (city 30×30 + sixteen 22×22 dungeon levels) + their terrain
+               MapTerrain.cs      WallKind / SquareFeature / BoardSquare — one decoded map square
+               MapAscii.cs        parses the ASCII wall grids; the glyph legend lives in its doc comment
+               MapTerrainData.cs  the 17 wall/barrier grids, transcribed from the Bard's Tale Trilogy
+                                  remaster's map assets (see the caveat in its doc comment)
                MapCalibration.cs  two-anchor pixel↔cell transform (pure, tested; verbatim from MM1)
                ClassBook.cs       class & race reference text
   Memory/      PartyLocator.cs    signature scanner -> data-segment base (game-specific, local)
@@ -61,7 +66,8 @@ src/BardsTale1Trainer/
   ViewModels/  MainViewModel (attach/scan/freeze timer, .TPW save, snapshots, slot tools, hotkey entry points),
                CharacterViewModel, StatViewModel, ItemSlotViewModel, SpellLevelViewModel, HexByteViewModel,
                MemorySearchViewModel, PairSearchViewModel, MemoryDumpViewModel, DumpDiffViewModel (verbatim from MM1),
-               MapReferenceViewModel (BT1 twist: renders labelled grid images instead of bundled scans),
+               MapReferenceViewModel + MapRenderer (BT1 twist: draws the areas' own walls, doors,
+                                                   secret doors and one-way passages instead of bundled scans),
                MonsterReferenceViewModel, SpellReferenceViewModel, ItemReferenceViewModel, ReferenceViewModels
   App.xaml, MainWindow.xaml(.cs)  dark two-pane UI: party list + Character/Inventory/Raw, Memory/XY/Dump/Maps, reference tabs
   Assets/app.ico

@@ -650,7 +650,7 @@
                         <StackPanel DockPanel.Dock="Top">
                             <TextBlock Style="{StaticResource Section}" Text="Area maps"/>
                             <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,6"
-                                       Text="A labelled grid for each area of the game — the 30×30 city and every 22×22 dungeon level. There are no bundled map scans; the grid plus the live party marker lets you track and teleport the party once its position is found."/>
+                                       Text="A drawn map for each area of the game — the 30×30 city and every 22×22 dungeon level, with the walls, doors, secret doors and one-way passages the game records. Click a square to read out what is on it; the live party marker lets you track and teleport the party once its position is found."/>
                             <ComboBox ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}" Height="28"
                                       ScrollViewer.CanContentScroll="False">
                                 <ComboBox.GroupStyle>
@@ -674,6 +674,8 @@
                                 <TextBlock Text="{Binding Description}" TextWrapping="Wrap"
                                            Foreground="{StaticResource FgDim}" Margin="0,2,0,0"/>
                             </StackPanel>
+                            <TextBlock FontSize="11" Foreground="{StaticResource FgDim}" TextWrapping="Wrap" Margin="0,0,0,6"
+                                       Text="Legend:  pale line = wall   ·   green gap = door   ·   amber dashed gap = secret door   ·   green arrow = one-way (passable that way only)   ·   dark square = building   ·   LCK = city gate   ·   TMP TAV GLD GAR REV ROS BNK CAS = temple, tavern, guild, Garth's, review board, Roscoe's, bank, casino"/>
 
                             <!-- live party marker / teleport controls -->
                             <Border Background="{StaticResource Panel2}" CornerRadius="4" Padding="8" Margin="0,0,0,6">

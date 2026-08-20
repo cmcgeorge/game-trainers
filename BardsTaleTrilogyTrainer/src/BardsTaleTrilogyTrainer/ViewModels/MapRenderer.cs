@@ -11,6 +11,13 @@ namespace BardsTaleTrilogyTrainer.ViewModels;
 /// walls on cell edges, doors as gaps, and a glyph for anything that happens when the party
 /// steps on a square.
 ///
+/// <para>Dungeons carry their barriers on the cell edges (<see cref="MapCell.North"/> and
+/// friends). City and wilderness maps carry them on the square instead — a building, a
+/// mountain or a stretch of water is a <see cref="CellFlags.Blocked"/> square — so their
+/// barriers are drawn as an outline traced around every blocked region and around the map's
+/// own rim, which is what makes the street network and the passes through the wilds read at
+/// a glance.</para>
+///
 /// <para>Map coordinates run X east and Z north from a south-west origin, so Z is flipped
 /// when it becomes a pixel row — north ends up at the top, as on paper.</para>
 /// </summary>
@@ -25,7 +32,9 @@ public static class MapRenderer
     // Palette, matching the trainer's dark shell.
     private static readonly Brush Background = Frozen(Color.FromRgb(0x14, 0x15, 0x1A));
     private static readonly Brush Floor = Frozen(Color.FromRgb(0x24, 0x26, 0x2E));
-    private static readonly Brush Blocked = Frozen(Color.FromRgb(0x15, 0x16, 0x1C));
+    // Blocked squares are painted darker than the page itself, so the outline traced around
+    // them (DrawBarriers) reads as the edge of something solid rather than as a stray line.
+    private static readonly Brush Blocked = Frozen(Color.FromRgb(0x0C, 0x0D, 0x11));
     private static readonly Brush Ruler = Frozen(Color.FromRgb(0x8A, 0x8D, 0x99));
     private static readonly Brush ModuleFill = Frozen(Color.FromRgb(0x2C, 0x3A, 0x4A));
     private static readonly Brush StairsFill = Frozen(Color.FromRgb(0x2E, 0x46, 0x32));
@@ -80,6 +89,7 @@ public static class MapRenderer
                     dc.DrawRectangle(FillFor(grid, cell), GridPen, rect);
                     DrawGlyph(dc, rect, grid, cell);
                     if (grid.IsDungeon) DrawWalls(dc, rect, cell);
+                    else DrawBarriers(dc, rect, grid, x, z);
                 }
             }
         }
@@ -119,7 +129,7 @@ public static class MapRenderer
     /// <summary>A single character marking what is on the square, when there is something.</summary>
     private static void DrawGlyph(DrawingContext dc, Rect rect, MapGrid grid, MapCell cell)
     {
-        string? glyph = grid.IsDungeon ? DungeonGlyph(cell) : MapFileParser.ModuleLabel(cell.Module);
+        string? glyph = grid.IsDungeon ? DungeonGlyph(cell) : CityGlyph(cell);
         if (glyph == null) return;
 
         double size = glyph.Length > 1 ? 8.5 : 12;
@@ -127,6 +137,24 @@ public static class MapRenderer
             Mono, size, GlyphBrush, 1.0);
         dc.DrawText(text, new Point(rect.X + (rect.Width - text.Width) / 2,
                                     rect.Y + (rect.Height - text.Height) / 2));
+    }
+
+    /// <summary>
+    /// What is on a city or wilderness square: the service that trades there, or — failing
+    /// that — the gate or other obstacle standing on it. Gates matter as much as the blocked
+    /// squares do: a locked one is what stops the party leaving town.
+    /// </summary>
+    private static string? CityGlyph(MapCell cell)
+    {
+        string? module = MapFileParser.ModuleLabel(cell.Module);
+        if (module != null) return module;
+
+        if (cell.Flags.HasFlag(CellFlags.GateLocked)) return "LCK";
+        if (cell.Flags.HasFlag(CellFlags.GateOpen)) return "GTE";
+        if (cell.Flags.HasFlag(CellFlags.Kickable)) return "KCK";
+        if (cell.Flags.HasFlag(CellFlags.ThievesTemple)) return "THV";
+        if (cell.HasStairs) return "↓";
+        return null;
     }
 
     private static string? DungeonGlyph(MapCell cell)
@@ -157,8 +185,36 @@ public static class MapRenderer
     }
 
     /// <summary>
-    /// Draws the four sides of a dungeon square. Only the north and west sides of each cell
-    /// plus the outer south/east border are drawn, so a shared wall is not painted twice.
+    /// Traces the barriers of a city or wilderness square. These maps have no per-edge walls:
+    /// what stops the party is a whole square being <see cref="CellFlags.Blocked"/> — a
+    /// building, a mountain, a stretch of water — plus the rim of the map itself on the maps
+    /// that do not wrap around. Each edge is drawn from its <em>open</em> side only, so the
+    /// inside of a building block stays clean and a barrier is never painted twice.
+    /// </summary>
+    private static void DrawBarriers(DrawingContext dc, Rect r, MapGrid grid, int x, int z)
+    {
+        if (grid[x, z].IsBlocked) return;   // the open neighbours draw this square's outline
+
+        if (IsBarrier(grid, x, z + 1)) dc.DrawLine(WallPen, new Point(r.Left, r.Top), new Point(r.Right, r.Top));
+        if (IsBarrier(grid, x, z - 1)) dc.DrawLine(WallPen, new Point(r.Left, r.Bottom), new Point(r.Right, r.Bottom));
+        if (IsBarrier(grid, x - 1, z)) dc.DrawLine(WallPen, new Point(r.Left, r.Top), new Point(r.Left, r.Bottom));
+        if (IsBarrier(grid, x + 1, z)) dc.DrawLine(WallPen, new Point(r.Right, r.Top), new Point(r.Right, r.Bottom));
+    }
+
+    /// <summary>
+    /// True when the party cannot cross into (x, z): a blocked square, or off the map on a
+    /// grid that does not wrap around. On a wrapping grid walking off an edge comes back on
+    /// the far side, so its rim is not a barrier and no line is drawn there.
+    /// </summary>
+    private static bool IsBarrier(MapGrid grid, int x, int z) =>
+        grid.Contains(x, z) ? grid[x, z].IsBlocked : !grid.WrapsAround;
+
+    /// <summary>
+    /// Draws the four sides of a dungeon square. The game records a wall on each side of each
+    /// square independently, so all four are drawn from the square that owns them rather than
+    /// half of them from the neighbour; a shared edge is therefore painted twice, and the
+    /// second square wins. That matters only where the two sides disagree — the game's own
+    /// one-sided doors — and there the later square is the one the reader sees.
     /// </summary>
     private static void DrawWalls(DrawingContext dc, Rect r, MapCell cell)
     {

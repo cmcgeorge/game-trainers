@@ -1164,6 +1164,29 @@ public static class Program
             }
         Check("cell/pixel mapping round-trips across a whole map", roundTrips);
 
+        // City and wilderness maps carry no per-edge walls at all: what stops the party is a
+        // whole square being Blocked, which is what MapRenderer traces its barrier outline
+        // around. If that ever stopped being true those maps would silently draw as open ground.
+        var brae = archive.TryGetMap("map_bt1_city00_skarabrae_asc", out _)!;
+        int braeBlocked = 0, braeEdges = 0;
+        bool braeHasWalls = false;
+        for (int z = 0; z < brae.Height; z++)
+            for (int x = 0; x < brae.Width; x++)
+            {
+                var c = brae[x, z];
+                if (c.North != WallKind.None || c.East != WallKind.None ||
+                    c.South != WallKind.None || c.West != WallKind.None) braeHasWalls = true;
+                if (!c.IsBlocked) continue;
+                braeBlocked++;
+                // An outlined edge: a blocked square touching one the party can stand on.
+                if (!brae[x + 1, z].IsBlocked || !brae[x - 1, z].IsBlocked ||
+                    !brae[x, z + 1].IsBlocked || !brae[x, z - 1].IsBlocked) braeEdges++;
+            }
+        Check("a city grid records no edge walls", !braeHasWalls);
+        Check($"Skara Brae's barriers are blocked squares ({braeBlocked} of {brae.Width * brae.Height})",
+            braeBlocked > 0 && braeEdges == braeBlocked);
+        Check("a city grid does not wrap, so its rim is a barrier too", !brae.WrapsAround);
+
         // Actually draw a few real maps. Rendering is the one path the synthetic tests cannot
         // reach, and a bad brush or geometry would only show up here or in the window.
         var toDraw = new[]

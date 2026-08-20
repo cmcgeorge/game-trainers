@@ -11,11 +11,15 @@ using MightAndMagic1Trainer.Memory;
 namespace MightAndMagic1Trainer.ViewModels;
 
 /// <summary>
-/// Backs the "Map (drawn)" tab: renders any of the 55 mazes decoded from
-/// <c>Mazedata.dta</c> as crisp vector graphics (no scanned images, no calibration),
-/// detects the <em>current</em> map automatically by fingerprinting the game's live maze
-/// buffer against the known records, overlays the live party cell, and teleports the
-/// party to a clicked cell (exact cells, no calibration).
+/// Backs the "Map (drawn)" tab: renders all 55 of the game's mazes as crisp vector graphics
+/// (no scanned images, no calibration), detects the <em>current</em> map automatically by
+/// fingerprinting the game's live maze buffer against the known records, overlays the live
+/// party cell, and teleports the party to a clicked cell (exact cells, no calibration).
+///
+/// <para>The maps come from <see cref="BuiltInMazes"/> out of the box, so every area is there
+/// before the player has pointed at anything. Loading their own <c>Mazedata.dta</c> upgrades
+/// them to the exact bytes, which is what makes current-map detection a byte-for-byte match
+/// rather than the near-match the bundled layouts have to settle for.</para>
 ///
 /// Position source: once the data segment is located and the X/Y address has been locked
 /// once (📍 X/Y Search), the trainer learns the party-position DS offset and reads the
@@ -149,20 +153,43 @@ public sealed class DrawnMapViewModel : ObservableObject
             var data = MazeData.FromBytes(File.ReadAllBytes(path));
             if (data == null) { MazeStatus = "That file isn't a 28,160-byte Mazedata.dta."; return; }
 
-            _maze = data;
             _mazedataPath = path;
-            _mazeBufferOffset = null;   // re-fingerprint against the freshly loaded set
-            Maps.Clear();
-            foreach (var m in data.Maps) Maps.Add(m);
-            OnPropertyChanged(nameof(HasMaze));
-            MazeStatus = $"Loaded {Maps.Count} maps from {Path.GetFileName(path)}.";
-            SelectedMap = Maps.ElementAtOrDefault(_savedIndex) ?? Maps.FirstOrDefault();
+            Adopt(data);
+            MazeStatus = $"Loaded all {Maps.Count} maps from {Path.GetFileName(path)} — exact data, "
+                + "so the current map is detected byte for byte.";
             SaveSettings();
         }
         catch (Exception ex)
         {
             MazeStatus = "Failed to read Mazedata.dta: " + ex.Message;
         }
+    }
+
+    /// <summary>
+    /// Falls back to the bundled layouts, which cover every area of the game. They draw the
+    /// same walls, doors and secret edges; what they cannot do is fingerprint the live maze
+    /// byte for byte, so current-map detection settles for a near-match.
+    ///
+    /// <para>Whatever <c>Mazedata.dta</c> the user last chose is deliberately left remembered.
+    /// A path can be missing for a session — an unmounted drive, a game folder being moved —
+    /// and forgetting it here would persist that as "no file", silently downgrading them to
+    /// the bundled data for good.</para>
+    /// </summary>
+    private void UseBuiltIn()
+    {
+        Adopt(MazeData.BuiltIn());
+        MazeStatus = $"Showing the bundled layouts of all {Maps.Count} areas. Load your own "
+            + "Mazedata.dta for the exact data and byte-for-byte current-map detection.";
+    }
+
+    private void Adopt(MazeData data)
+    {
+        _maze = data;
+        _mazeBufferOffset = null;   // re-fingerprint against the freshly adopted set
+        Maps.Clear();
+        foreach (var m in data.Maps) Maps.Add(m);
+        OnPropertyChanged(nameof(HasMaze));
+        SelectedMap = Maps.ElementAtOrDefault(_savedIndex) ?? Maps.FirstOrDefault();
     }
 
     // --- per-tick poll (driven by the main timer) -------------------------------
@@ -264,8 +291,8 @@ public sealed class DrawnMapViewModel : ObservableObject
         // Fast path: re-check the cached buffer location first (256 bytes — cheap).
         if (_mazeBufferOffset is int mo)
         {
-            var win = mem.Read(ds.BaseAddress + (nuint)mo, 256);
-            int hit = win.Length == 256 ? _maze.MatchAt(win, 0) : -1;
+            var win = mem.Read(ds.BaseAddress + (nuint)mo, MazeData.FingerprintLength);
+            int hit = win.Length == MazeData.FingerprintLength ? _maze.MatchAt(win, 0) : -1;
             if (hit >= 0) { SetDetected(hit); return; }
             _mazeBufferOffset = null;   // moved / mid-load — fall through to a rescan
         }
@@ -279,14 +306,16 @@ public sealed class DrawnMapViewModel : ObservableObject
         Task.Run(() =>
         {
             var buf = mem.Read(baseAddr, 0x18000);
-            return buf.Length < 256 ? (-1, -1) : maze.FindInBuffer(buf);
+            return buf.Length < MazeData.FingerprintLength ? (-1, -1) : maze.FindInBuffer(buf);
         }).ContinueWith(t =>
         {
             _isScanning = false;
             if (!t.IsCompletedSuccessfully) return;
             var (map, off) = t.Result;
             if (map >= 0) { _mazeBufferOffset = off; SaveSettings(); SetDetected(map); }
-            else DetectedText = "current map not detected (move a step, or you're on a sub-screen)";
+            else DetectedText = maze.IsExact
+                ? "current map not detected (move a step, or you're on a sub-screen)"
+                : "current map not detected (move a step, or you're on a sub-screen) — loading Mazedata.dta detects it exactly";
         }, TaskScheduler.FromCurrentSynchronizationContext());
     }
 
@@ -475,9 +504,26 @@ public sealed class DrawnMapViewModel : ObservableObject
         }
         catch { /* fall through to default */ }
 
+        // Adopt() clears the buffer offset, since a freshly adopted set has to be re-fingerprinted;
+        // hold the remembered one across that so a returning session skips the first full scan.
+        // If it turns out to be stale — the game relaid its segment, or the offset was recorded
+        // against the other kind of plane — the fast-path re-check simply misses and rescans.
+        int? rememberedBufferOffset = _mazeBufferOffset;
+
         path ??= DefaultMazedataPath();
         if (path != null && File.Exists(path)) LoadFrom(path);
-        else MazeStatus = "Click “Load Mazedata.dta” and pick the file from your game folder.";
+
+        // A remembered path that has since been deleted, replaced or truncated leaves LoadFrom
+        // with nothing to show; keep whatever it complained about and fall back rather than
+        // opening on an empty picker.
+        if (_maze == null)
+        {
+            string complaint = MazeStatus;
+            UseBuiltIn();
+            if (complaint.Length > 0) MazeStatus = $"{complaint} {MazeStatus}";
+        }
+
+        _mazeBufferOffset = rememberedBufferOffset;
     }
 
     private static string? DefaultMazedataPath()

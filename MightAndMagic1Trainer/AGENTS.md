@@ -14,7 +14,8 @@ freeze toggles and "max" buttons. It can also open a `ROSTER.DTA` save file for
 It also carries a small **reverse-engineering toolkit** built from a Ghidra study of
 `Mm.exe`: a fixed-offset **data-segment reader** (`DataSegment`), a byte-exact port of
 the game's **LFSR RNG** driving a live **roll predictor**, a **maze decoder** that
-renders any of the 55 mazes as a vector auto-map with live current-map detection, and
+renders all 55 of the game's mazes as a vector auto-map (bundled, so no game file is needed)
+with live current-map detection, and
 an **auto-fight** loop. The methods behind these — the DS offset map, combat/HP/XP
 formulas, the `Mazedata.dta` and `.ovr` formats, and a remaster design — are written
 up under `docs/` (each claim tagged Confirmed / Inferred / Candidate).
@@ -85,6 +86,8 @@ src/MightAndMagic1Trainer/
                      usability for the Items tab; transcribed from the MM1 item FAQ and name-joined
                      to ItemBook (254/255 ids; OBSIDIAN BOW id 85 has no entry)
   Game/Lfsr.cs       byte-exact 32-bit LFSR rand(n) (taps 27/30, rejection sampling -> [1,n]); SelfTest vectors
+  Game/BuiltInMazes.cs the 55 bundled wall grids (33 lines x 33 chars, north-up) so the map tab
+                     works with no game file; generated from docs/maze-atlas.md
   Game/MazeData.cs   decodes Mazedata.dta (55×512: two co-registered 16×16 wall planes) -> MazeMap;
                      plane-1 fingerprinting identifies the live map
   App.xaml, MainWindow.xaml(.cs)  dark two-pane UI: party list + Characters/Spells/Memory tabs
@@ -93,7 +96,7 @@ src/MightAndMagic1Trainer/
   Assets/app.ico                  application + window icon (gold gem on a dark tile)
 test/FormatCheck/                 headless assertions against docs/Roster.dta & MM.CEM
 tools/IconGen/                    dev-only WPF tool that regenerates Assets/app.ico (not in the .sln)
-docs/                             sample Roster.dta + MM.CEM (Cheat Engine memory dump), plus the
+docs/  (named .docs/ on disk)     sample Roster.dta + MM.CEM (Cheat Engine memory dump), plus the
                                   reverse-engineering references: offset-map.md (+ offset-map-globals.txt),
                                   formulas.md, maze-atlas.md, ovr-format.md / ovr-events.md, remaster-design.md
 run.ps1                           build/test/launch helper
@@ -180,9 +183,19 @@ README.md                         user-facing docs + full format table
 - **Drawn auto-map.** `MazeData` decodes `Mazedata.dta` (55×512 = two co-registered 16×16
   planes, 2 bits/direction, W/N/E/S); `DrawnMapViewModel` renders it as **frozen** vector
   geometry (one build per map change), identifies the current map by fingerprinting the live
-  maze buffer against the 55 plane-1 records (the ~96 KB scan runs on a pool thread with a
-  UI-thread continuation, one scan at a time), overlays the party cell, and teleports (clamped
-  0–15). It self-derives the party-position DS offset from a one-time 📍 X/Y lock and persists
+  maze buffer against the 55 records (the ~96 KB scan runs on a pool thread with a UI-thread
+  continuation, one scan at a time), overlays the party cell, and teleports (clamped 0–15).
+  Without a file it falls back to `BuiltInMazes` — the same 55 layouts transcribed from
+  `docs/maze-atlas.md`, this project's own decode, so the tab is never empty. The bundled
+  set carries plane 2 (what each edge *does*) exactly and plane 1 only as drawn-or-not, so
+  `MazeData.MatchAt` switches from an exact plane-1 match to a near-match on plane 2, capped
+  at `MaxFieldMismatch` (48 of 1024 fields) and required to be unique; `FormatCheck` asserts
+  every area still fingerprints to itself and to nothing else. The near-match has no prefix
+  index to jump to one candidate, so it filters on the window's non-blank-field count first —
+  a differing field moves that count by at most one, so a count further than the tolerance
+  apart proves the distance is too, and a single comparison rejects nearly every offset.
+  That keeps a full 96 KB scan at ~20 ms (~100 ms against a buffer built to defeat the
+  filter) versus ~3 ms for the exact path, so both poll on the same ~2 s cadence. It self-derives the party-position DS offset from a one-time 📍 X/Y lock and persists
   it to `%APPDATA%\MM1Trainer\drawnmap.json`; an out-of-range read drops a stale offset and
   suppresses re-learning it until a valid coordinate reads again (so a bad lock can't spam the
   settings file).

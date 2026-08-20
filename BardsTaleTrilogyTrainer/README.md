@@ -10,9 +10,13 @@ A live-memory trainer for **The Bard's Tale Trilogy** (Krome Studios / inXile, 2
   chapter with their real grid size, floor number and stair links, taken from the game's own map
   tables. The list can be browsed without the game running.
 - **Real terrain, drawn from your own installation** — walls, doors, secret and locked doors,
-  stairs, spinners, darkness, anti-magic, traps and the rest, read out of the game's map files
-  at `resources.assets` rather than bundled with the trainer. City maps show taverns, temples,
-  Garth's, the guild, Roscoe's, the bank and the review board.
+  crumbling and invisible walls, railings, stairs, spinners, darkness, anti-magic, traps and the
+  rest, read out of the game's map files at `resources.assets` rather than bundled with the
+  trainer. City and wilderness maps carry their barriers on the square rather than the edge — a
+  building, a mountain, a stretch of water — so those are traced with an outline, along with the
+  rim of any map that does not wrap around; city gates are marked `GTE` open / `LCK` locked, and
+  the services show as taverns, temples, Garth's, the guild, Roscoe's, the bank and the review
+  board.
 - **Where the party is, live** — chapter, map, floor, square and heading, updated as you walk,
   with a marker on the map. Tick **Follow the party** and the picker moves with you.
 - **Teleport anywhere** — click a square, or type X/Z and a heading. The jump goes through the
