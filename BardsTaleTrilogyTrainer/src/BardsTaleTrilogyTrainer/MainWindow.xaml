@@ -3,10 +3,43 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:BardsTaleTrilogyTrainer.Game"
         Title="The Bard's Tale Trilogy Trainer"
-        Height="700" Width="900"
+        Height="820" Width="1180"
         WindowStartupLocation="CenterScreen"
         Background="#FF1E1E1E"
         FontFamily="Segoe UI" FontSize="13">
+    <Window.Resources>
+        <Style x:Key="Field" TargetType="TextBox">
+            <Setter Property="Background" Value="#FF333337"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#FF555555"/>
+            <Setter Property="Margin" Value="0,1,4,1"/>
+        </Style>
+        <Style x:Key="Label" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#FFCCCCCC"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,4,0"/>
+        </Style>
+        <Style x:Key="Chip" TargetType="Button">
+            <Setter Property="Background" Value="#FF3C3C3C"/>
+            <Setter Property="Foreground" Value="#FFCCCCCC"/>
+            <Setter Property="BorderBrush" Value="#FF555555"/>
+            <Setter Property="Padding" Value="10,3"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+        </Style>
+        <Style x:Key="Primary" TargetType="Button">
+            <Setter Property="Background" Value="#FF007ACC"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,3"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+        </Style>
+        <Style x:Key="Note" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#FF888888"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Resources>
+
     <DockPanel>
         <!-- Status bar -->
         <Border DockPanel.Dock="Top" Background="#FF2D2D30" Padding="8,4">
@@ -16,45 +49,167 @@
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Button Grid.Column="0" Content="Attach" Command="{Binding AttachCommand}" Margin="0,0,4,0" Padding="12,2" Background="#FF007ACC" Foreground="White" BorderThickness="0"/>
-                <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" VerticalAlignment="Center" Foreground="#FFCCCCCC" Margin="8,0" TextTrimming="CharacterEllipsis"/>
-                <Button Grid.Column="2" Content="Locate" Command="{Binding LocateCommand}" Margin="4,0" Padding="12,2" Background="#FF2D2D30" Foreground="#FFCCCCCC" BorderBrush="#FF555555"/>
-                <Button Grid.Column="3" Content="Detach" Command="{Binding DetachCommand}" Margin="4,0" Padding="12,2" Background="#FF2D2D30" Foreground="#FFCCCCCC" BorderBrush="#FF555555"/>
+                <Button Grid.Column="0" Content="Attach" Command="{Binding AttachCommand}" Style="{StaticResource Primary}"/>
+                <TextBlock Grid.Column="1" Text="{Binding StatusMessage}" VerticalAlignment="Center"
+                           Foreground="#FFCCCCCC" Margin="8,0" TextTrimming="CharacterEllipsis"/>
+                <Button Grid.Column="2" Content="Locate" Command="{Binding LocateCommand}" Style="{StaticResource Chip}"/>
+                <Button Grid.Column="3" Content="Detach" Command="{Binding DetachCommand}" Style="{StaticResource Chip}"/>
             </Grid>
         </Border>
 
-        <!-- Party gold bar -->
-        <Border DockPanel.Dock="Top" Background="#FF252526" Padding="8,4">
+        <!-- Where the party is standing -->
+        <Border DockPanel.Dock="Top" Background="#FF202B33" Padding="8,4">
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="Party Gold:" VerticalAlignment="Center" Foreground="#FFCCCCCC" Margin="0,0,4,0"/>
-                <TextBox Text="{Binding Gold}" Width="100" VerticalAlignment="Center" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                <Button Content="Write Gold" Command="{Binding WriteGoldCommand}" Margin="8,0,0,0" Padding="8,2" Background="#FF007ACC" Foreground="White" BorderThickness="0"/>
+                <TextBlock Text="📍" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBlock Text="{Binding Maps.LocationText}" Foreground="#FF9CDCFE" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis"/>
             </StackPanel>
         </Border>
 
-        <!-- Party-wide actions -->
+        <!-- Party bar -->
         <Border DockPanel.Dock="Top" Background="#FF252526" Padding="8,4">
             <StackPanel Orientation="Horizontal">
-                <Button Content="Learn All Spells (Party)" Command="{Binding LearnAllSpellsAllCommand}" Margin="0,0,8,0" Padding="8,2" Background="#FF3C3C3C" Foreground="#FFCCCCCC" BorderBrush="#FF555555"/>
-                <Button Content="Set Infinite Items (Party)" Command="{Binding SetInfiniteItemsAllCommand}" Margin="0,0,8,0" Padding="8,2" Background="#FF3C3C3C" Foreground="#FFCCCCCC" BorderBrush="#FF555555"/>
-                <Button Content="Garth's Shop: All Items" Command="{Binding SetGarthShopAllCommand}" Padding="8,2" Background="#FF3C3C3C" Foreground="#FFCCCCCC" BorderBrush="#FF555555"/>
+                <TextBlock Text="Party gold:" Style="{StaticResource Label}"/>
+                <TextBox Text="{Binding Gold}" Width="120" VerticalAlignment="Center" Style="{StaticResource Field}"/>
+                <Button Content="Write gold" Command="{Binding WriteGoldCommand}" Style="{StaticResource Primary}" Margin="4,0,16,0"/>
+                <Button Content="Learn all spells (party)" Command="{Binding LearnAllSpellsAllCommand}" Style="{StaticResource Chip}"/>
+                <Button Content="Infinite item charges (party)" Command="{Binding SetInfiniteItemsAllCommand}" Style="{StaticResource Chip}"/>
             </StackPanel>
         </Border>
 
         <!-- Main content area -->
         <TabControl Background="#FF1E1E1E" Foreground="#FFCCCCCC" BorderBrush="#FF555555" Padding="4">
 
-            <!-- Character Editor Tab -->
-            <TabItem Header="Characters" Foreground="#FFCCCCCC">
-                <Grid Margin="8">
+            <!-- ============================= Maps ============================= -->
+            <TabItem Header="Maps" Foreground="#FFCCCCCC">
+                <Grid Margin="8" DataContext="{Binding Maps}">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="260"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <!-- Character list -->
+                    <!-- Map picker -->
+                    <DockPanel Grid.Column="0">
+                        <TextBlock DockPanel.Dock="Top" Text="Every area of the trilogy" Foreground="White"
+                                   FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBlock DockPanel.Dock="Bottom" Text="{Binding ArchiveStatus}" Style="{StaticResource Note}"
+                                   Margin="0,6,0,0"/>
+                        <ListBox ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}"
+                                 Background="#FF2D2D30" Foreground="White" BorderBrush="#FF555555"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.GroupStyle>
+                                <GroupStyle>
+                                    <GroupStyle.HeaderTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding Name}" Foreground="#FF4EC9B0" FontWeight="Bold"
+                                                       Margin="0,6,0,2"/>
+                                        </DataTemplate>
+                                    </GroupStyle.HeaderTemplate>
+                                </GroupStyle>
+                            </ListBox.GroupStyle>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,1">
+                                        <TextBlock Text="{Binding Display}"/>
+                                        <TextBlock Text="{Binding Description}" Style="{StaticResource Note}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+
+                    <!-- Map view and teleport controls -->
+                    <DockPanel Grid.Column="1" Margin="8,0,0,0">
+                        <!-- Teleport controls -->
+                        <Border DockPanel.Dock="Top" Background="#FF252526" Padding="8,6" Margin="0,0,0,6">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="X:" Style="{StaticResource Label}"/>
+                                    <TextBox Text="{Binding TargetX}" Width="46" Style="{StaticResource Field}"/>
+                                    <TextBlock Text="Z:" Style="{StaticResource Label}"/>
+                                    <TextBox Text="{Binding TargetZ}" Width="46" Style="{StaticResource Field}"/>
+                                    <TextBlock Text="Facing:" Style="{StaticResource Label}" Margin="8,0,4,0"/>
+                                    <ComboBox ItemsSource="{Binding FacingChoices}" SelectedItem="{Binding TargetFacing}"
+                                              Width="80" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
+                                    <TextBlock Text="Style:" Style="{StaticResource Label}" Margin="8,0,4,0"/>
+                                    <ComboBox ItemsSource="{Binding TeleportStyles}" SelectedItem="{Binding TeleportStyle}"
+                                              Width="110" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"
+                                              Margin="0,0,8,0"/>
+                                    <Button Content="Teleport" Command="{Binding TeleportCommand}" Style="{StaticResource Primary}"/>
+                                    <Button Content="Entry point" Command="{Binding GoToEntryCommand}" Style="{StaticResource Chip}"/>
+                                    <Button Content="Show party" Command="{Binding GoToPartyCommand}" Style="{StaticResource Chip}"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                    <CheckBox Content="Teleport on click" IsChecked="{Binding TeleportOnClick}"
+                                              Foreground="#FFCCCCCC" Margin="0,0,12,0"/>
+                                    <CheckBox Content="Follow the party" IsChecked="{Binding FollowParty}"
+                                              Foreground="#FFCCCCCC" Margin="0,0,12,0"/>
+                                    <CheckBox Content="Record in journal" IsChecked="{Binding JournalTeleport}"
+                                              Foreground="#FFCCCCCC"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding HintText}" Style="{StaticResource Note}" Margin="0,6,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- BT2 dream-spell destinations -->
+                        <Expander DockPanel.Dock="Bottom" Header="ZZGO dream-spell destinations (BT2)"
+                                  Foreground="#FFCCCCCC" Margin="0,6,0,0">
+                            <ItemsControl ItemsSource="{Binding DreamTargets}" Margin="0,4,0,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding Name}"
+                                                Command="{Binding DataContext.TeleportToDreamTargetCommand,
+                                                                  RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                                                CommandParameter="{Binding}"
+                                                Style="{StaticResource Chip}" Margin="0,0,6,6"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </Expander>
+
+                        <!-- The map itself -->
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
+                                      Background="#FF14151A" BorderBrush="#FF555555" BorderThickness="1">
+                            <Grid HorizontalAlignment="Left" VerticalAlignment="Top">
+                                <Image x:Name="MapImage" Source="{Binding SelectedMap.Image}" Stretch="None"
+                                       MouseLeftButtonUp="MapImage_MouseLeftButtonUp"
+                                       HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                                <Canvas IsHitTestVisible="False">
+                                    <Ellipse Canvas.Left="{Binding MarkerLeft}" Canvas.Top="{Binding MarkerTop}"
+                                             Width="{Binding MarkerSize}" Height="{Binding MarkerSize}"
+                                             Stroke="#FFFFD24A" StrokeThickness="2.5" Fill="#66FFD24A">
+                                        <Ellipse.Style>
+                                            <Style TargetType="Ellipse">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding MarkerVisible}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Ellipse.Style>
+                                    </Ellipse>
+                                </Canvas>
+                            </Grid>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- ========================== Characters ========================== -->
+            <TabItem Header="Characters" Foreground="#FFCCCCCC">
+                <Grid Margin="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="230"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
                     <ListBox Grid.Column="0" ItemsSource="{Binding Characters}"
                              SelectedIndex="{Binding SelectedCharacterIndex}"
                              Background="#FF2D2D30" Foreground="White" BorderBrush="#FF555555">
@@ -65,54 +220,48 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <!-- Character editor -->
                     <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Margin="8,0,0,0">
                         <StackPanel DataContext="{Binding SelectedCharacter}">
                             <TextBlock Text="{Binding Header}" FontSize="16" FontWeight="Bold" Foreground="White" Margin="0,0,0,8"/>
 
-                            <!-- Core stats -->
-                            <GroupBox Header="Core Stats" Foreground="#FFCCCCCC" Margin="0,0,0,8" Padding="8">
+                            <GroupBox Header="Core" Foreground="#FFCCCCCC" Margin="0,0,0,8" Padding="8">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="90"/>
                                         <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="90"/>
                                         <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="60"/>
+                                        <ColumnDefinition Width="120"/>
                                     </Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions>
-                                        <RowDefinition/>
-                                        <RowDefinition/>
-                                        <RowDefinition/>
-                                        <RowDefinition/>
-                                        <RowDefinition/>
-                                        <RowDefinition/>
-                                        <RowDefinition/>
-                                        <RowDefinition/>
+                                        <RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/>
                                     </Grid.RowDefinitions>
 
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Level:" Foreground="#FFCCCCCC" VerticalAlignment="Center"/>
-                                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Level}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="AC:" Foreground="#FFCCCCCC" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                    <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding ArmorClass}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <TextBlock Grid.Row="0" Grid.Column="4" Text="XP:" Foreground="#FFCCCCCC" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                    <TextBox Grid.Row="0" Grid.Column="5" Text="{Binding Experience}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Level:" Style="{StaticResource Label}"/>
+                                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Level}" Style="{StaticResource Field}"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="XP:" Style="{StaticResource Label}"/>
+                                    <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding Experience}" Style="{StaticResource Field}"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="4" Text="Gold carried:" Style="{StaticResource Label}"/>
+                                    <TextBox Grid.Row="0" Grid.Column="5" Text="{Binding Gold}" Style="{StaticResource Field}"/>
 
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="HP Cur:" Foreground="#FFCCCCCC" VerticalAlignment="Center"/>
-                                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding HpCur}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="HP Max:" Foreground="#FFCCCCCC" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                    <TextBox Grid.Row="1" Grid.Column="3" Text="{Binding HpMax}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <CheckBox Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2" Content="Freeze HP" IsChecked="{Binding FreezeHp}" Foreground="#FFCCCCCC" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="HP:" Style="{StaticResource Label}"/>
+                                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding HpCur}" Style="{StaticResource Field}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="2" Text="HP max:" Style="{StaticResource Label}"/>
+                                    <TextBox Grid.Row="1" Grid.Column="3" Text="{Binding HpMax}" Style="{StaticResource Field}"/>
+                                    <CheckBox Grid.Row="1" Grid.Column="4" Grid.ColumnSpan="2" Content="Freeze HP"
+                                              IsChecked="{Binding FreezeHp}" Foreground="#FFCCCCCC" VerticalAlignment="Center"/>
 
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="SP Cur:" Foreground="#FFCCCCCC" VerticalAlignment="Center"/>
-                                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SpCur}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <TextBlock Grid.Row="2" Grid.Column="2" Text="SP Max:" Foreground="#FFCCCCCC" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                    <TextBox Grid.Row="2" Grid.Column="3" Text="{Binding SpMax}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <CheckBox Grid.Row="2" Grid.Column="4" Grid.ColumnSpan="2" Content="Freeze SP" IsChecked="{Binding FreezeSp}" Foreground="#FFCCCCCC" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="SP:" Style="{StaticResource Label}"/>
+                                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding SpCur}" Style="{StaticResource Field}"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="2" Text="SP max:" Style="{StaticResource Label}"/>
+                                    <TextBox Grid.Row="2" Grid.Column="3" Text="{Binding SpMax}" Style="{StaticResource Field}"/>
+                                    <CheckBox Grid.Row="2" Grid.Column="4" Grid.ColumnSpan="2" Content="Freeze SP"
+                                              IsChecked="{Binding FreezeSp}" Foreground="#FFCCCCCC" VerticalAlignment="Center"/>
 
-                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Race:" Foreground="#FFCCCCCC" VerticalAlignment="Center"/>
-                                    <ComboBox Grid.Row="3" Grid.Column="1" SelectedIndex="{Binding Race}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555">
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Race:" Style="{StaticResource Label}"/>
+                                    <ComboBox Grid.Row="3" Grid.Column="1" SelectedIndex="{Binding Race}"
+                                              Background="#FF333337" Foreground="White" BorderBrush="#FF555555">
                                         <ComboBoxItem Content="Human"/>
                                         <ComboBoxItem Content="Elf"/>
                                         <ComboBoxItem Content="Dwarf"/>
@@ -121,166 +270,239 @@
                                         <ComboBoxItem Content="Half-Orc"/>
                                         <ComboBoxItem Content="Gnome"/>
                                     </ComboBox>
-                                    <TextBlock Grid.Row="3" Grid.Column="2" Text="Class:" Foreground="#FFCCCCCC" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                    <ComboBox Grid.Row="3" Grid.Column="3" SelectedIndex="{Binding Class}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555">
-                                        <ComboBoxItem Content="Warrior"/>
-                                        <ComboBoxItem Content="Paladin"/>
-                                        <ComboBoxItem Content="Rogue"/>
-                                        <ComboBoxItem Content="Bard"/>
-                                        <ComboBoxItem Content="Hunter"/>
-                                        <ComboBoxItem Content="Monk"/>
-                                        <ComboBoxItem Content="Conjurer"/>
-                                        <ComboBoxItem Content="Magician"/>
-                                        <ComboBoxItem Content="Sorcerer"/>
-                                        <ComboBoxItem Content="Wizard"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="2" Text="Class:" Style="{StaticResource Label}"/>
+                                    <ComboBox Grid.Row="3" Grid.Column="3"
+                                              ItemsSource="{Binding ClassChoices}" DisplayMemberPath="Name"
+                                              SelectedValuePath="Id" SelectedValue="{Binding Class}"
+                                              Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="4" Text="Condition:" Style="{StaticResource Label}"/>
+                                    <ComboBox Grid.Row="3" Grid.Column="5" SelectedIndex="{Binding Condition}"
+                                              Background="#FF333337" Foreground="White" BorderBrush="#FF555555">
+                                        <ComboBoxItem Content="Okay"/>
+                                        <ComboBoxItem Content="Poisoned"/>
+                                        <ComboBoxItem Content="Old"/>
+                                        <ComboBoxItem Content="Dead"/>
+                                        <ComboBoxItem Content="Stoned"/>
+                                        <ComboBoxItem Content="Paralyzed"/>
+                                        <ComboBoxItem Content="Possessed"/>
+                                        <ComboBoxItem Content="Insane"/>
+                                        <ComboBoxItem Content="Drained"/>
                                     </ComboBox>
                                 </Grid>
                             </GroupBox>
 
-                            <!-- Attributes -->
                             <GroupBox Header="Attributes" Foreground="#FFCCCCCC" Margin="0,0,0,8" Padding="8">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="50"/>
-                                        <ColumnDefinition Width="50"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="50"/>
-                                        <ColumnDefinition Width="50"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition/>
-                                        <RowDefinition/>
-                                        <RowDefinition/>
-                                    </Grid.RowDefinitions>
-
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Str:" Foreground="#FFCCCCCC" VerticalAlignment="Center"/>
-                                    <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding StrCur}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <TextBox Grid.Row="0" Grid.Column="2" Text="{Binding StrMax}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <TextBlock Grid.Row="0" Grid.Column="3" Text="IQ:" Foreground="#FFCCCCCC" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                    <TextBox Grid.Row="0" Grid.Column="4" Text="{Binding IqCur}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <TextBox Grid.Row="0" Grid.Column="5" Text="{Binding IqMax}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Dx:" Foreground="#FFCCCCCC" VerticalAlignment="Center"/>
-                                    <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding DxCur}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <TextBox Grid.Row="1" Grid.Column="2" Text="{Binding DxMax}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <TextBlock Grid.Row="1" Grid.Column="3" Text="Cn:" Foreground="#FFCCCCCC" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                    <TextBox Grid.Row="1" Grid.Column="4" Text="{Binding CnCur}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <TextBox Grid.Row="1" Grid.Column="5" Text="{Binding CnMax}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-
-                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Lk:" Foreground="#FFCCCCCC" VerticalAlignment="Center"/>
-                                    <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding LkCur}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    <TextBox Grid.Row="2" Grid.Column="2" Text="{Binding LkMax}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-
-                                    <TextBlock Grid.Row="2" Grid.Column="3" Text="(Cur/Max)" Foreground="#FF888888" FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"/>
-                                </Grid>
-                            </GroupBox>
-
-                            <!-- Spell levels -->
-                            <GroupBox Header="Spell Class Levels" Foreground="#FFCCCCCC" Margin="0,0,0,8" Padding="8">
                                 <StackPanel>
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="40"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="40"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="Conjurer:" Foreground="#FFCCCCCC" VerticalAlignment="Center"/>
-                                        <TextBox Grid.Column="1" Text="{Binding ConjurerLevel}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                        <TextBlock Grid.Column="2" Text="Magician:" Foreground="#FFCCCCCC" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                        <TextBox Grid.Column="3" Text="{Binding MagicianLevel}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    </Grid>
-                                    <Grid Margin="0,4,0,0">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="40"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="40"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="Sorcerer:" Foreground="#FFCCCCCC" VerticalAlignment="Center"/>
-                                        <TextBox Grid.Column="1" Text="{Binding SorcererLevel}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                        <TextBlock Grid.Column="2" Text="Wizard:" Foreground="#FFCCCCCC" VerticalAlignment="Center" Margin="8,0,0,0"/>
-                                        <TextBox Grid.Column="3" Text="{Binding WizardLevel}" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                                    </Grid>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="St:" Style="{StaticResource Label}"/>
+                                        <TextBox Text="{Binding Strength}" Width="52" Style="{StaticResource Field}"/>
+                                        <TextBlock Text="IQ:" Style="{StaticResource Label}"/>
+                                        <TextBox Text="{Binding Intelligence}" Width="52" Style="{StaticResource Field}"/>
+                                        <TextBlock Text="Dx:" Style="{StaticResource Label}"/>
+                                        <TextBox Text="{Binding Dexterity}" Width="52" Style="{StaticResource Field}"/>
+                                        <TextBlock Text="Cn:" Style="{StaticResource Label}"/>
+                                        <TextBox Text="{Binding Constitution}" Width="52" Style="{StaticResource Field}"/>
+                                        <TextBlock Text="Lk:" Style="{StaticResource Label}"/>
+                                        <TextBox Text="{Binding Luck}" Width="52" Style="{StaticResource Field}"/>
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource Note}" Margin="0,4,0,0"
+                                               Text="The remaster keeps one value per attribute — there is no separate maximum, and armour class is computed from equipment rather than stored."/>
                                 </StackPanel>
                             </GroupBox>
 
-                            <!-- Actions -->
+                            <GroupBox Header="Spell levels" Foreground="#FFCCCCCC" Margin="0,0,0,8" Padding="8">
+                                <StackPanel>
+                                    <ItemsControl ItemsSource="{Binding SpellLevels}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,14,4">
+                                                    <TextBlock Text="{Binding Name}" Style="{StaticResource Label}" Width="94"/>
+                                                    <TextBox Text="{Binding Level}" Width="40" Style="{StaticResource Field}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Style="{StaticResource Note}"
+                                               Text="Held in m_spellLevel, an int[16] indexed by class id — so each school's level is edited on its own. 0–7; a level grants every spell of that school up to it."/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Class" Foreground="#FFCCCCCC" Margin="0,0,0,8" Padding="8">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding ClassSummary}" Foreground="#FF999999" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Change to:" Style="{StaticResource Label}"/>
+                                        <ComboBox ItemsSource="{Binding ClassChoices}" DisplayMemberPath="Display"
+                                                  SelectedValuePath="Id" SelectedValue="{Binding TargetClass}"
+                                                  Width="180" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"
+                                                  Margin="0,0,8,0"/>
+                                        <Button Content="Change class" Click="ChangeClass_Click" Style="{StaticResource Primary}"/>
+                                        <CheckBox Content="Ignore requirements" IsChecked="{Binding IgnoreClassRequirements}"
+                                                  Foreground="#FFCCCCCC" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding ClassChangeStatus}" Foreground="#FF4EC9B0" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Class scores" Foreground="#FFCCCCCC" Margin="0,0,0,8" Padding="8">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Critical hit:" Style="{StaticResource Label}"/>
+                                        <TextBox Text="{Binding CriticalHit}" Width="52" Style="{StaticResource Field}"/>
+                                        <TextBlock Text="Disarm:" Style="{StaticResource Label}"/>
+                                        <TextBox Text="{Binding DisarmTrapBonus}" Width="52" Style="{StaticResource Field}"/>
+                                        <TextBlock Text="Hide:" Style="{StaticResource Label}"/>
+                                        <TextBox Text="{Binding HideInShadowsBonus}" Width="52" Style="{StaticResource Field}"/>
+                                        <TextBlock Text="Identify:" Style="{StaticResource Label}"/>
+                                        <TextBox Text="{Binding IdentifyBonus}" Width="52" Style="{StaticResource Field}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                        <TextBlock Text="Attacks:" Style="{StaticResource Label}"/>
+                                        <TextBox Text="{Binding Attacks}" Width="52" Style="{StaticResource Field}"/>
+                                        <TextBlock Text="Tunes left:" Style="{StaticResource Label}"/>
+                                        <TextBox Text="{Binding SongsRemaining}" Width="52" Style="{StaticResource Field}"/>
+                                        <TextBlock Text="Songs known:" Style="{StaticResource Label}"/>
+                                        <TextBox Text="{Binding SongsKnown}" Width="52" Style="{StaticResource Field}"/>
+                                    </StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                                        <Button Content="Write scores" Click="WriteClassScores_Click" Style="{StaticResource Primary}"/>
+                                        <Button Content="Max class scores" Click="MaxClassScores_Click" Style="{StaticResource Chip}"/>
+                                    </StackPanel>
+                                    <TextBlock Style="{StaticResource Note}" Margin="0,4,0,0"
+                                               Text="Real fields on the character. Critical hit, disarm, hide and identify are what the game rolls against, 0–255 where 255 is a certainty — the remaster then subtracts a per-map penalty, so even 255 misses deep in a dungeon. Attacks per round and songs known are counts, so Max class scores leaves them alone and only refills tunes to the character&apos;s level."/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Class abilities" Foreground="#FFCCCCCC" Margin="0,0,0,8" Padding="8">
+                                <ItemsControl ItemsSource="{Binding ClassAbilities}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel Margin="0,0,0,6">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding Name}" Foreground="#FFCCCCCC" FontWeight="Bold" Width="250"/>
+                                                    <TextBlock Text="{Binding Value}" Foreground="#FF4EC9B0"/>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Detail}" Style="{StaticResource Note}" Margin="0,1,0,0"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </GroupBox>
+
                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <Button Content="Write All" Click="WriteAll_Click" Padding="12,4" Background="#FF007ACC" Foreground="White" BorderThickness="0" Margin="0,0,8,0"/>
-                                <Button Content="Learn All Spells" Click="LearnAllSpells_Click" Padding="12,4" Background="#FF3C3C3C" Foreground="#FFCCCCCC" BorderBrush="#FF555555" Margin="0,0,8,0"/>
-                                <Button Content="Set Infinite Items" Click="SetInfiniteItems_Click" Padding="12,4" Background="#FF3C3C3C" Foreground="#FFCCCCCC" BorderBrush="#FF555555" Margin="0,0,8,0"/>
-                                <Button Content="Full Heal" Click="FullHeal_Click" Padding="12,4" Background="#FF3C3C3C" Foreground="#FFCCCCCC" BorderBrush="#FF555555" Margin="0,0,8,0"/>
-                                <Button Content="Max Attributes" Click="MaxAttributes_Click" Padding="12,4" Background="#FF3C3C3C" Foreground="#FFCCCCCC" BorderBrush="#FF555555"/>
+                                <Button Content="Write all" Click="WriteAll_Click" Style="{StaticResource Primary}"/>
+                                <Button Content="Learn all spells" Click="LearnAllSpells_Click" Style="{StaticResource Chip}"/>
+                                <Button Content="Infinite item charges" Click="SetInfiniteItems_Click" Style="{StaticResource Chip}"/>
+                                <Button Content="Full heal" Click="FullHeal_Click" Style="{StaticResource Chip}"/>
+                                <Button Content="Max attributes" Click="MaxAttributes_Click" Style="{StaticResource Chip}"/>
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
                 </Grid>
             </TabItem>
 
-            <!-- Spells Tab -->
+            <!-- ============================ Spells ============================ -->
             <TabItem Header="Spells" Foreground="#FFCCCCCC">
-                <Grid Margin="8">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
-                    <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,8">
-                        <TextBlock Text="Spell Code:" Foreground="#FFCCCCCC" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                        <TextBox Text="{Binding SpellCode}" Width="80" Background="#FF333337" Foreground="White" BorderBrush="#FF555555"/>
-                        <Button Content="Assign to Selected Character" Command="{Binding AssignSpellCommand}" Margin="8,0,0,0" Padding="12,2" Background="#FF007ACC" Foreground="White" BorderThickness="0"/>
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="Spell code:" Style="{StaticResource Label}"/>
+                        <TextBox Text="{Binding SpellCode}" Width="90" Style="{StaticResource Field}"/>
+                        <Button Content="Grant to selected character" Command="{Binding AssignSpellCommand}"
+                                Style="{StaticResource Primary}" Margin="8,0,0,0"/>
+                        <Button Content="Grant ZZGO, NUKE, GILL and DIVA" Command="{Binding GrantSpecialSpellsCommand}"
+                                Style="{StaticResource Chip}" Margin="8,0,0,0"/>
+                        <Button Content="…to whole party" Command="{Binding GrantSpecialSpellsAllCommand}"
+                                Style="{StaticResource Chip}" Margin="4,0,0,0"/>
                     </StackPanel>
-                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+
+                    <TextBlock DockPanel.Dock="Top" Style="{StaticResource Note}" Margin="0,0,0,4"
+                               Text="A spell with a school level is granted by raising that school. A spell without one — ZZGO, NUKE and the quest spells — is written straight into the character's learnt-spell list, which is the only place the game keeps it."/>
+
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                        <CheckBox Content="Let the game allocate when a learnt-spell list is full"
+                                  IsChecked="{Binding AllowGameAllocation}" Foreground="#FFCCCCCC"/>
+                        <TextBlock Text="{Binding RuntimeStatus}" Style="{StaticResource Note}" Margin="18,2,0,0"/>
+                    </StackPanel>
+
+                    <!-- Spells that no school level can grant -->
+                    <GroupBox DockPanel.Dock="Top" Header="Granted outright" Foreground="#FFCCCCCC"
+                              Margin="0,0,0,8" Padding="8">
                         <StackPanel>
-                            <TextBlock Text="Special Spells (Any Magic User):" Foreground="#FF4EC9B0" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="ZZGO — Dream Spell (BT2)" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="NUKE — Gotterdammerung (BT3)" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="GILL — Gilles Gills (BT3)" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="DIVA — Divine Intervention (BT2)" Foreground="#FFCCCCCC" Margin="8,0,0,8"/>
-
-                            <TextBlock Text="Conjurer Spells (Levels 1–7):" Foreground="#FF4EC9B0" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="L1: MAFL ARFI SOSH TRZP" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L2: FRFO MACO BASK WOHL" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L3: MAST LERE LEVI WAST" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L4: INWO FLRE POST" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L5: GRRE WROV SHSP" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L6: INOG MALE" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L7: FLAN APAR" Foreground="#FFCCCCCC" Margin="8,0,0,8"/>
-
-                            <TextBlock Text="Magician Spells (Levels 1–7):" Foreground="#FF4EC9B0" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="L1: MIJA PHBL LOTR HYIM" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L2: DISB TADU MIFI FEAR" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L3: WIWO VANI SESI CURS" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L4: CAEY WIWA INVI" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L5: WIOG DIIL MIBL" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L6: WIDR MIWP" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L7: WIGI SOSI" Foreground="#FFCCCCCC" Margin="8,0,0,8"/>
-
-                            <TextBlock Text="Sorcerer Spells (Levels 1–7):" Foreground="#FF4EC9B0" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="L1: VOPL AIAR STLI SCSI" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L2: HOWA WIST MAGA AREN" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L3: MYSH OGST MIMI STFL" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L4: SPTO DRBR STSI" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L5: ANMA ANSW STTO" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L6: PHDO YMCA" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L7: REST DEST" Foreground="#FFCCCCCC" Margin="8,0,0,8"/>
-
-                            <TextBlock Text="Wizard Spells (Levels 1–7):" Foreground="#FF4EC9B0" FontWeight="Bold" Margin="0,0,0,4"/>
-                            <TextBlock Text="L1: SUDE REDE" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L2: LESU DEBA" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L3: SUPH DISP" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L4: PRSU ANDE" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L5: SPBI DMST" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L6: SPSP BEDE" Foreground="#FFCCCCCC" Margin="8,0,0,2"/>
-                            <TextBlock Text="L7: GRSU" Foreground="#FFCCCCCC" Margin="8,0,0,8"/>
+                            <ItemsControl ItemsSource="{Binding SpecialSpellRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,0,0,3">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="210"/>
+                                                <ColumnDefinition Width="60"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+                                            <Button Grid.Column="0" Content="Grant" Style="{StaticResource Chip}"
+                                                    Command="{Binding DataContext.GrantSpellCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"/>
+                                            <TextBlock Grid.Column="1" Text="{Binding Label}" Foreground="#FFCCCCCC"
+                                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                            <TextBlock Grid.Column="2" Text="{Binding CostText}" Foreground="#FF888888"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding Note}" Foreground="#FF888888"
+                                                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
-                    </ScrollViewer>
-                </Grid>
+                    </GroupBox>
+
+                    <!-- What the selected character has been granted -->
+                    <GroupBox DockPanel.Dock="Top" Header="Selected character's learnt-spell list"
+                              Foreground="#FFCCCCCC" Margin="0,0,0,8" Padding="8"
+                              DataContext="{Binding SelectedCharacter}">
+                        <StackPanel>
+                            <TextBlock Text="{Binding LearntSpellsSummary}" Style="{StaticResource Note}"/>
+                            <ItemsControl ItemsSource="{Binding LearntSpells}" Margin="0,4,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                            <Button Content="Remove" Style="{StaticResource Chip}"
+                                                    Command="{Binding DataContext.RevokeSpellCommand,
+                                                              RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}"/>
+                                            <TextBlock Text="{Binding Display}" Foreground="#FFCCCCCC"
+                                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding SpellTableStatus}"
+                               Style="{StaticResource Note}" Margin="0,0,0,4"/>
+
+                    <DataGrid ItemsSource="{Binding SpellTable}" AutoGenerateColumns="False"
+                              IsReadOnly="True" Background="#FF1E1E1E" Foreground="#FFCCCCCC"
+                              RowBackground="#FF252526" AlternatingRowBackground="#FF2D2D30"
+                              GridLinesVisibility="None" BorderBrush="#FF555555" HeadersVisibility="Column">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Code" Binding="{Binding Code}" Width="70"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="220"/>
+                            <DataGridTextColumn Header="Known from" Binding="{Binding Source}" Width="190"/>
+                            <DataGridTextColumn Header="SP" Binding="{Binding Cost}" Width="50"/>
+                            <DataGridTextColumn Header="Games" Binding="{Binding Games}" Width="110"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
             </TabItem>
 
-            <!-- References Tab -->
-            <TabItem Header="References" Foreground="#FFCCCCCC">
+            <!-- ========================== References ========================== -->
+            <TabItem Header="Items" Foreground="#FFCCCCCC">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8">
                     <StackPanel>
                         <TextBlock Text="Items (1–127)" Foreground="#FF4EC9B0" FontWeight="Bold" FontSize="14" Margin="0,0,0,4"/>

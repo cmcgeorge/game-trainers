@@ -1,6 +1,8 @@
 # Bard's Tale Trilogy Trainer — Agent Guidelines
 
-This is a **live-memory trainer** for *The Bard's Tale Trilogy* (Krome Studios / inXile, 2018 Steam remaster of the classic Interplay trilogy). It is a C# WPF application targeting `net8.0-windows` (x64) that attaches to the running `TheBardsTaleTrilogy.exe` process and reads/writes game state live — with freeze toggles, "max" buttons, spell assignment (including ZZGO and NUKE), and item charge editing.
+This is a **live-memory trainer** for *The Bard's Tale Trilogy* (Krome Studios / inXile, 2018 Steam remaster of the classic Interplay trilogy). It is a C# WPF application targeting `net8.0-windows` (x64) that attaches to the running `TheBardsTaleTrilogy.exe` process and reads/writes game state live — character editing with freeze toggles, class changing, spell levels, item charges, and a Maps tab that shows where the party is standing and teleports it anywhere in the trilogy.
+
+**The offsets here are not guesses.** The remaster ships its full IL2CPP metadata, so the class layouts were read out of `global-metadata.dat` plus the field-offset table in `GameAssembly.dll` and cross-checked against the compiled code. If you are about to add a constant, read it out of the metadata rather than inferring it — `docs/ReverseEngineering.md` §3.1 and §11.1 describe how.
 
 ## Project Structure
 
@@ -9,68 +11,80 @@ BardsTaleTrilogyTrainer/
 ├── AGENTS.md                        ← you are here
 ├── README.md                        ← user-facing readme
 ├── Run.ps1                          ← build + launch script
-├── BardsTaleTrilogyTrainer.sln     ← solution (trainer + tests + Common)
+├── BardsTaleTrilogyTrainer.sln      ← solution (trainer + tests + Common)
 ├── docs/
-│   └── ReverseEngineering.md        ← RE notes, memory layout, methodology
+│   ├── ReverseEngineering.md        ← memory layout, map format, methodology
+│   └── SpellSystem.md               ← how spell knowledge is really stored
 ├── src/BardsTaleTrilogyTrainer/
-│   ├── BardsTaleTrilogyTrainer.csproj
-│   ├── App.xaml / App.xaml.cs
-│   ├── MainWindow.xaml / MainWindow.xaml.cs
-│   ├── app.manifest
 │   ├── Game/
-│   │   ├── GameFacts.cs             ← process names, module RVAs, constants
-│   │   ├── CharacterFormat.cs        ← IL2CPP object layout, validation
-│   │   ├── CharacterRecord.cs        ← typed mutable view over live bytes
-│   │   ├── GameLocator.cs            ← pointer-chain + structural scan locator
-│   │   ├── Spellbook.cs              ← all BT1-3 spells including ZZGO/NUKE
-│   │   └── ItemBook.cs               ← 127-item catalogue + Garth's shop
+│   │   ├── GameFacts.cs             ← process/module names, class slot RVAs, constants
+│   │   ├── Il2Cpp.cs                ← IL2CPP object/array/string/class layout + typed reads
+│   │   ├── Il2CppClassLocator.cs    ← resolves Il2CppClass* by slot, validated by name
+│   │   ├── CharacterFormat.cs       ← Character/Party/Item layout, validation
+│   │   ├── CharacterRecord.cs       ← typed live view over one Character
+│   │   ├── GameLocator.cs           ← process/module/party discovery
+│   │   ├── ClassBook.cs             ← 13 classes, change rules, class-specific abilities
+│   │   ├── Spellbook.cs             ← school ⇄ class-id mapping, bard songs
+│   │   ├── SpellId.cs               ← the game's own Spell enum + the cross-game spells
+│   │   ├── SpellCatalog.cs          ← the live spell table, read from GlobalSpells.Instance
+│   │   ├── ItemBook.cs              ← 127-item catalogue + Garth's shop
+│   │   ├── MapFormat.cs             ← Player/GameMap/MapDescription/TeleportTarget offsets
+│   │   ├── MapBook.cs               ← all 121 maps (generated from the game's own data)
+│   │   ├── MapGrid.cs               ← decoded map model + the map-file parser
+│   │   ├── MapArchive.cs            ← reads map files out of the installed resources.assets
+│   │   └── MapNavigator.cs          ← reads the party position, performs teleports
 │   ├── Memory/
-│   │   └── IMemorySource.cs          ← ProcessMemorySource + FakeMemorySource
-│   └── ViewModels/
-│       ├── MainViewModel.cs          ← attach/locate/poll/freeze orchestration
-│       └── CharacterViewModel.cs     ← per-character editing VM
+│   │   ├── IMemorySource.cs         ← ProcessMemorySource + FakeMemorySource (+ Allocate)
+│   │   └── Il2CppRuntime.cs         ← exported-only remote calls; grows a full List<Spell>
+│   ├── ViewModels/
+│   │   ├── MainViewModel.cs         ← attach/locate/poll orchestration
+│   │   ├── CharacterViewModel.cs    ← per-character VM + SpellLevelViewModel + learnt spells
+│   │   ├── MapsViewModel.cs         ← map picker, live marker, teleport
+│   │   └── MapRenderer.cs           ← draws a decoded grid; cell ⇄ pixel mapping
+│   └── MainWindow.xaml(.cs)
 └── test/FormatCheck/
-    ├── FormatCheck.csproj
-    └── Program.cs                    ← headless verification harness
+    └── Program.cs                   ← headless harness + synthetic IL2CPP world
 ```
 
 ## Architecture
 
-The trainer follows the repo's **three-tier locator** pattern:
+### Locating the game state
 
-1. **Pointer chain** (primary): `GameAssembly.dll + 0xE40338` → global game state → `+0xB8` → party/economy object → character array → per-character fields. This is the one-click auto-locate path.
-2. **Structural scan** (fallback): if the pointer chain fails (different build, ASLR drift), sweep committed memory for a window of six contiguous IL2CPP character objects matching `CharacterFormat.LooksLikeCharacter`.
-3. **Value scanner** (last resort): `GameTrainers.Common.Memory.MemorySearcher` for Cheat-Engine-style scan/narrow/pin — the user manually finds gold/HP/XP.
+1. **Validated class slots** (primary). IL2CPP caches an `Il2CppClass*` per type in a slot in `GameAssembly.dll`'s data section; the generated code reaches every static through it. `Il2CppClassLocator` reads the slots named in `GameFacts` and **checks each one by reading the class's own `name`/`namespaze`** before trusting it, so a stale RVA from another build is rejected rather than followed into garbage. From there: `Party.Instance` → `m_members` (`PartyMember[]`) → `m_character`; `Player.Instance` → position; `GlobalMaps.Instance` → the chapter's map arrays.
+2. **Module sweep** (fallback). If a slot does not validate, the loaded module is swept for any pointer that resolves to a class with the right name. Slower, but survives a game update.
+3. **Character-shape scan** (last resort). Committed memory is swept for objects matching `CharacterFormat.LooksLikeCharacter`, so the character editor works even when the classes cannot be resolved.
 
-### IL2CPP Object Model
+### IL2CPP object model
 
-The game is a **Unity IL2CPP** build (64-bit native, `GameAssembly.dll`), not a managed .NET assembly. IL2CPP objects have:
-
-- An 8-byte class pointer (vtable-equivalent) at offset `0x00`
-- Instance fields starting at offset `0x10` (after the object header)
-- `String` objects with a length field at `+0x10` and UTF-16 characters at `+0x14`
-
-All offsets in `CharacterFormat` are relative to the **character object base** (the start of the IL2CPP object, including its header). See `docs/ReverseEngineering.md` for the full layout and confidence markers.
-
-### Confidence Markers
-
-Because the game was not installed on the development machine, every offset carries a **[Confirmed]** (cross-checked against CE scripts or live gameplay reports) or **[Inferred]** (plausible from CE scripts but not independently verified) marker. These are surfaced in the UI via `KnownValues` so the user understands what is and isn't verified.
+64-bit IL2CPP: objects start with `Il2CppClass*` + monitor, so the first field is at `+0x10`; arrays put `max_length` at `+0x18` and element 0 at `+0x20`; strings put the length at `+0x10` and UTF-16 characters at `+0x14`; `Il2CppClass` has `name` at `+0x10`, `namespaze` at `+0x18` and `static_fields` at `+0xB8`. All of this lives in `Il2Cpp.cs` as constants plus extension methods on `IMemorySource` — use those rather than open-coding a read.
 
 ## Game-Knowledge Layer
 
-- `GameFacts`: process name (`TheBardsTaleTrilogy.exe`), module name (`GameAssembly.dll`), RVAs, default paths
-- `CharacterFormat`: IL2CPP character object layout — HP (+0x84), SP (+0x8C), XP (+0x50), gold (+0x68 at party level), attributes, level, name, spell bitfield, item slots
-- `Spellbook`: 140+ spells across BT1/BT2/BT3 including **ZZGO** (Dream Spell) and **NUKE** (Götterdämmerung), Archmage/Chronomancer/Geomancer expansions
-- `ItemBook`: 127 items from the original Bard's Tale catalogue with IDs, names, and categories; Garth's 22 basic shop items
+- `GameFacts` — process/module names, the class-slot RVAs, party and inventory sizes.
+- `CharacterFormat` — `Character` (instance size `0x108`), `Party`, `PartyMember`, `Inventory`, `Item`. Note: experience and gold are **`long`**; there is **one** set of attributes; there is **no armour-class field**; spell levels are an `int[16]` reached through `+0xD0` and indexed by class id.
+- `MapFormat` — `Player`, `GameMap`, `MapDescription`, `GlobalMaps`, `TeleportTarget`, `DreamSpellTarget`, plus the `Facing`, `TeleportType` and `GameChapter` enums.
+- `MapBook` — all 121 areas with grid size, floor, entry point and stair links; BT2's dream-spell destinations; each chapter's new-game start. Generated from the game's data — see below.
+- `ClassBook` — the thirteen playable classes, the Review Board's rules, and every class-specific statistic, read from the game's own fields (`ClassScores`).
+- `Spellbook`, `ItemBook` — the spell and item catalogues.
 
 ## Key Design Decisions
 
-- **No hardcoded addresses**: the locator derives everything from the module base + RVA, which works regardless of ASLR. The structural scan fallback handles build differences.
-- **Write safety**: the locator validates the character object shape at locate time via `LooksLikeCharacter` (plausible XP, HP, SP, race, class, level, attributes, HP ≤ HPMax, SP ≤ SPMax, Max attributes in range). Writes go to the stored address without re-validation — a limitation acknowledged here, to be addressed when live verification is available.
-- **Freeze via poll timer**: a 500ms `System.Threading.Timer` re-writes frozen values each tick, marshalled through the WPF `Dispatcher` to avoid cross-thread collection access.
-- **Spell assignment**: sets the four spell-class level bytes (Conjurer/Magician/Sorcerer/Wizard) to the spell's level, which grants access to all spells of that class up to that level. `LearnAllClassSpells` sets all four classes to level 7. For "Any Magic User" spells (ZZGO, NUKE, GILL, DIVA), the trainer sets all class levels to 7 and informs the user that the special spell may require an additional flag we haven't located — the spell-knowledge bitfield offset is [Inferred] and its exact bit layout is unknown.
-- **Item charges**: setting the charge byte to `0` makes the game treat the item as having infinite uses (a Unity engine quirk). `SetAllItemsInfinite` does this for all carried items. Array element access uses the correct IL2CPP array header size of `0x20` (klass + monitor + bounds + length), not the object header size of `0x10`.
-- **Garth's shop**: the shop inventory offset has **not been confirmed** against a live game. The UI informs the user to use the value scanner or Il2CppDumper for this feature.
+- **Nothing is hard-coded that can be derived.** Class slot RVAs are build-specific, so they are always name-validated and always have a sweep behind them.
+- **Teleport goes through the game's own queue.** `Player::OnStateTick` polls `m_queueTeleport` and, when it holds a valid `TeleportTarget`, fades, calls `LoadMap` and then `TeleportTo`. Filling that field is therefore a real teleport — it loads a different map, runs its startup scripts and updates the automap. Writing `m_gridX`/`m_gridZ` directly is kept only as a same-map fallback (`TrySetGridPosition`).
+- **A teleport is refused unless it belongs to the loaded chapter.** `TeleportTarget.m_map` is a bare index into the loaded chapter's own `m_cityMaps`/`m_dungeonMaps`, and `Player.LoadMap` indexes it without a bounds test — so a destination picked from another game of the trilogy is not "the wrong map", it is an index out of range inside the game's state machine. The picker lists all 121 maps at all times, so `MapNavigator.AcceptsDestination` is what stands between a click and that: chapter first, then the live array length from `GlobalMaps` (the length, not the descriptors that read back, because the length is what `LoadMap` indexes). An unreadable chapter is refused rather than assumed.
+- **The teleport target is the trainer's own block.** `QueueTeleportTo` allocates a fresh object each time, so the field is usually null. Rather than depend on finding one, `MapNavigator` commits 64 bytes with `VirtualAllocEx`, stamps the real `TeleportTarget` class pointer into the header and reuses that block. Boehm ignores pointers outside its own heap and never moves objects, so this is inert to the collector. If allocation is refused it borrows a live `TeleportTarget` instead.
+- **Map terrain is read from the player's installation, never bundled.** `MapArchive` walks `resources.assets` (Unity serialised-file format 17) and reads just the one `map_*_asc` TextAsset it needs. `MapBook` holds only metadata — names, sizes, indices. Keep it that way: `.gitignore` excludes `.game/` for the same reason.
+- **`MapBook.cs` is generated.** It comes from parsing the three `GlobalMaps` objects in `level3`/`level4`/`level5` plus the map files' own headers. Do not hand-edit the map table; regenerate it. The parse is self-checking — Unity serialises fields in declaration order, so a correct reading consumes each object's byte range exactly, and all three do.
+- **Map coordinates**: X runs east, Z runs north, origin at the south-west corner — which is why `MapRenderer` flips Z into pixel rows so north is up.
+- **Item charges**: zero means "never consumed". `Character::UseItemCharge` returns before the decrement when the count is zero. (`ItemDescription.InfiniteCharges` is 255, but that is the catalogue's bound, not the runtime sentinel.)
+- **Spell knowledge has two independent routes, and the trainer uses both.** `Character::KnowsSpell` returns true if `m_learntSpells` contains the spell, *or* if `m_spellLevel[description.m_class] >= description.m_level` — and it skips the second test entirely when the level is 0. So:
+  - **School levels**: `m_spellLevel[classId]` for the seven casting classes, capped at `Mathf.Min(7, (level + 1) / 2)` to match `PlayerState_ReviewBoard::UpgradeMage`.
+  - **Outright grants**: spells with level 0 (ZZGO 78, NUKE 154, GILL 152, DIVA 153, and the chapter quest spells) exist only in `m_learntSpells`. `CharacterRecord.GrantSpell` appends to that list.
+- **The spell table is never hard-coded.** A spell's code, school and level live in serialized `SpellDescription` assets, not in the executable, so `SpellCatalog` reads `GlobalSpells.Instance.m_spellsByEnum` from the running game. The community table that used to live in `Spellbook.cs` was wrong for the remaster and has been deleted rather than corrected; `SpellId` (generated from `global-metadata.dat`) carries the ids, which is all that has to be static.
+- **Growing a learnt-spell list is the one place the trainer runs code in the game.** `new List<Spell>()` shares a zero-length backing array, so a fresh character has no slot to append into, and a GC array cannot be made with `WriteProcessMemory`. `Il2CppRuntime` therefore runs a short stub on a new thread. It calls **only exported** functions (`il2cpp_domain_get`, `il2cpp_thread_attach`, `il2cpp_gc_disable`/`_enable`, `il2cpp_array_new_specific`, `il2cpp_thread_detach`) resolved from the module's export table — deliberately *not* `Character::LearnSpell`, whose RVA would be build-specific and would send the thread into arbitrary code on a patched build. The new array's type comes from the class pointer of the array being replaced. Collection stays disabled between the allocation and the moment the array is reachable, and the write order (fill the array, publish `_items`, then raise `_size`) means the game never sees an inconsistent list.
+- **Class changing**: `CharacterRecord.ChangeClass` writes the class and grants the new school the level the character's experience level entitles it to. `ClassBook.CanChangeTo` applies the Review Board's rules; the UI refuses unless **Ignore requirements** is ticked. The game's own path (`PlayerState_ReviewBoard::UpgradeMage`) resets `m_level` to 0 and levels back up so HP and SP grow with the new class; a trainer cannot call `LevelUp` without injecting code, so the level is kept where it is and the vitals do not move.
+- **Class scores**: the seven `ClassScores` fields are editable. `ClassBook.MaxAbilityScores` is the rule for "max" and lives in the game-knowledge layer so the harness can assert it: only the four scores the game rolls against go to 255, and `m_songsRemaining` refills to the character's level. `m_nmbrOfAttacks` and `m_songsKnown` are counts, not chances, and are left alone.
+- **Freeze and position polling** share one 400 ms `System.Threading.Timer`, marshalled through the WPF `Dispatcher`.
 
 ## Build & Test
 
@@ -84,15 +98,22 @@ Because the game was not installed on the development machine, every offset carr
 
 ## Testing
 
-`test/FormatCheck` is a headless console harness (no GUI, no game required) that asserts:
+`test/FormatCheck` is a headless console harness — no GUI, no running game. It asserts:
 
-- `GameFacts` constants (process name, module name, RVAs)
-- `CharacterFormat` offsets and `LooksLikeCharacter` validation
-- `Spellbook` completeness (ZZGO, NUKE, counts, code-to-spell mapping)
-- `ItemBook` completeness (127 items, Garth's shop, categories)
-- `FakeMemorySource` round-trip (synthetic memory read/write)
-- `CharacterRecord` round-trip over synthetic IL2CPP objects
-- `GameLocator` structural scan (finds valid character, rejects empty memory)
+- `GameFacts`, `CharacterFormat` and `MapFormat` constants against each other (field ordering, object bounds, distinct and aligned slot RVAs)
+- `LooksLikeCharacter` accepts a plausible character and rejects each way of being implausible
+- `MapBook` integrity: 121 maps, per-chapter counts, unique and contiguous indices, asset-name pattern, entry points, dream targets against the city maps they actually name
+- `MapFileParser` over miniature dungeon and city maps in the game's own text format
+- `ClassBook` roster, the spell-level formula and its inverse, and the class-change rules
+- `Il2Cpp` helpers — managed strings, arrays, native strings, class matching, statics
+- `CharacterRecord` round-trip: 64-bit fields, spell levels through the array, class change, inventory charges, class scores
+- `SpellId` values pinned against the game's enum (ZZGO 78, NUKE 154, GILL 152, DIVA 153; 249 distinct members), so a bad edit grants the wrong spell loudly rather than silently
+- `SpellCatalog` over a synthetic `GlobalSpells` — codes read from managed strings, level 0 recognised as "no school grants this", per-school listing
+- Learnt spells end to end: append into spare capacity, the version bump, a duplicate grant as a no-op, a **full list refused cleanly** without the runtime helper, removal shifting the tail down, and the full `KnowsSpell` rule
+- **A synthetic IL2CPP world** (`SyntheticWorld`) — module slots, classes, static blocks, a `Player`, a `GameMap`, a `GlobalMaps` and a one-member `Party` — driven through the real `Il2CppClassLocator`, `GameLocator` and `MapNavigator`, including a full teleport and a check that the trainer reuses its own target block
+- **The real installation**, when present: opens `resources.assets`, decodes all 121 maps and holds each against the catalogue, round-trips the cell⇄pixel mapping across a whole map, and actually renders four real grids (on an STA thread, since `RenderTargetBitmap` needs one). Skipped, not failed, when the game is not installed.
+
+Keep it green: `.\Run.ps1 -Test -NoRun`.
 
 ## Dependencies
 
@@ -102,6 +123,6 @@ Because the game was not installed on the development machine, every offset carr
 ## Important Notes
 
 - The trainer targets the **Steam remaster** (2018), not the original DOS games. The original Bard's Tale I trainer lives in `../BardsTale1Trainer/`.
-- All offsets are **[Confirmed]** or **[Inferred]** — see `docs/ReverseEngineering.md` for the full confidence table and methodology.
-- The game must be running and a party loaded before attaching.
-- Edits are live only — there is no save editor (the save format is IL2CPP-serialized binary, not documented).
+- **Nothing has been verified against a running game.** Every offset was read out of the game's own data and the harness drives each memory path against a synthetic heap, but no address has been watched changing in a live process and no teleport has been performed in-game. Say so plainly when documenting; do not upgrade `[Verified]` to "tested".
+- The game must be running with a party in a map before Locate will find anything.
+- Edits are live only — there is no save editor.

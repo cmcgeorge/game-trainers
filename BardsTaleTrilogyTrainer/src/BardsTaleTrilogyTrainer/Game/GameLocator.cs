@@ -1,19 +1,18 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.IO;
 using BardsTaleTrilogyTrainer.Memory;
 
 namespace BardsTaleTrilogyTrainer.Game;
 
 /// <summary>
-/// The result of a successful locate: the base address of the game-state object
-/// and the addresses of the individual character objects in the party array.
+/// The result of a successful locate: the resolved IL2CPP classes, the party object and the
+/// addresses of the individual character objects in <c>Party.m_members</c>.
 /// </summary>
 public sealed class GameLocation
 {
-    public nuint GameStateObject { get; init; }
+    public GameClasses Classes { get; init; } = new();
     public nuint PartyObject { get; init; }
     public List<nuint> CharacterAddresses { get; init; } = new();
-    public int ValidatorCount { get; init; }
     public bool UsedFallback { get; init; }
     public string Summary { get; init; } = "";
 
@@ -21,24 +20,34 @@ public sealed class GameLocation
 }
 
 /// <summary>
-/// Finds the party and character data in The Bard's Tale Trilogy remaster.
+/// Finds the game's data in the running process.
 ///
-/// Primary chain: reads the global pointer at <c>GameAssembly.dll + 0xE40338</c>,
-/// follows it to the party/economy object, then walks the character array.
+/// <para>Primary route: resolve each type's <c>Il2CppClass</c> (see
+/// <see cref="Il2CppClassLocator"/>), then follow <c>Party</c>'s static <c>Instance</c> to
+/// <c>m_members</c>. That is the same path the game's own code takes, so it needs no
+/// heuristics and cannot land on a look-alike.</para>
 ///
-/// Fallback: sweeps all committed memory for objects whose fields match the
-/// shape of an IL2CPP character (plausible XP, HP, SP, race, class, level, stats).
+/// <para>Fallback: if the classes cannot be resolved at all — an unexpected build, or the
+/// runtime has not initialised those types yet — sweep committed memory for objects shaped
+/// like a <c>Character</c>.</para>
 /// </summary>
 public static class GameLocator
 {
     private const int ChunkSize = 1 << 20;
-    private const int CharacterObjectSize = 0x100; // upper bound for the fields we check
 
     /// <summary>Find the game process by name.</summary>
-    public static Process? FindGameProcess() =>
-        Process.GetProcessesByName(GameFacts.ProcessName).FirstOrDefault();
+    /// <summary>
+    /// The running game, or null. The caller owns the returned <see cref="Process"/>; the
+    /// others the enumeration produced are disposed here rather than left to a finaliser.
+    /// </summary>
+    public static Process? FindGameProcess()
+    {
+        var all = Process.GetProcessesByName(GameFacts.ProcessName);
+        for (int i = 1; i < all.Length; i++) all[i].Dispose();
+        return all.Length > 0 ? all[0] : null;
+    }
 
-    /// <summary>Find the base address of GameAssembly.dll in the target process.</summary>
+    /// <summary>Find the base address of a module in the target process.</summary>
     public static nuint FindModuleBase(Process process, string moduleName)
     {
         foreach (ProcessModule module in process.Modules)
@@ -49,127 +58,122 @@ public static class GameLocator
         return 0;
     }
 
+    /// <summary>Size of a module's image in the target process, for bounded sweeps.</summary>
+    public static nuint FindModuleSize(Process process, string moduleName)
+    {
+        foreach (ProcessModule module in process.Modules)
+        {
+            if (string.Equals(module.ModuleName, moduleName, StringComparison.OrdinalIgnoreCase))
+                return (nuint)module.ModuleMemorySize;
+        }
+        return 0;
+    }
+
     /// <summary>
-    /// Attempts to locate the party data. Tries the pointer chain first, then
-    /// falls back to a structural scan of all committed memory.
+    /// The folder the game is installed in, taken from the running process where possible so
+    /// that a non-default Steam library still works, else the usual install locations.
+    /// </summary>
+    public static string? FindGameDirectory(Process? process)
+    {
+        try
+        {
+            string? exe = process?.MainModule?.FileName;
+            if (!string.IsNullOrEmpty(exe))
+            {
+                string? dir = Path.GetDirectoryName(exe);
+                if (dir != null && Directory.Exists(Path.Combine(dir, "TheBardsTaleTrilogy_Data")))
+                    return dir;
+            }
+        }
+        catch (Exception)
+        {
+            // MainModule throws for a process we cannot fully open; fall through to the guesses.
+        }
+
+        foreach (var candidate in GameFacts.LikelyGameDirectories)
+        {
+            if (Directory.Exists(Path.Combine(candidate, "TheBardsTaleTrilogy_Data")))
+                return candidate;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Locates the party. Resolves the IL2CPP classes first — those are what the map and
+    /// teleport features need — then walks <c>Party.Instance.m_members</c>.
     /// </summary>
     public static GameLocation? Locate(
         IMemorySource mem,
         nuint moduleBase,
+        nuint moduleSize,
         IProgress<double>? progress = null,
         CancellationToken ct = default)
     {
-        // --- Primary: pointer chain ---
-        if (moduleBase != 0)
+        var classes = Il2CppClassLocator.Resolve(mem, moduleBase, moduleSize, ct);
+
+        if (classes.Party != 0)
         {
-            var chainResult = TryPointerChain(mem, moduleBase);
-            if (chainResult != null)
-                return chainResult;
+            nuint party = mem.ReadStaticRef(classes.Party, CharacterFormat.PartyInstanceStatic);
+            if (party != 0)
+            {
+                var members = ReadMembers(mem, party);
+                return new GameLocation
+                {
+                    Classes = classes,
+                    PartyObject = party,
+                    CharacterAddresses = members,
+                    UsedFallback = false,
+                    Summary = members.Count > 0
+                        ? $"Party.Instance found via {classes.Method}: {members.Count} member(s)"
+                        : $"Party.Instance found via {classes.Method}, but no members are loaded yet",
+                };
+            }
         }
 
-        // --- Fallback: structural scan ---
-        var scanResult = StructuralScan(mem, progress, ct);
-        return scanResult;
-    }
-
-    private static GameLocation? TryPointerChain(IMemorySource mem, nuint moduleBase)
-    {
-        // Read the global game-state pointer
-        nuint globalPtr = ReadPtr(mem, moduleBase + (nuint)GameFacts.GlobalPointerRva);
-        if (globalPtr == 0) return null;
-
-        // Validate: the game-state object should have a non-null vtable pointer
-        nuint vtable = ReadPtr(mem, globalPtr);
-        if (vtable == 0) return null;
-
-        // Follow to the party/economy sub-object
-        nuint partyObj = ReadPtr(mem, globalPtr + (nuint)GameFacts.GameStatePartyOffset);
-        if (partyObj == 0) return null;
-
-        // Read gold to validate the party object
-        int gold = ReadI32(mem, partyObj + (nuint)GameFacts.PartyGoldOffset);
-        if (gold < 0 || gold > 100_000_000) return null;
-
-        // Try to find the character array from the party object.
-        // The party object likely has a pointer to an array of character pointers.
-        // We scan the party object's fields for a pointer to a readable array.
-        var characters = FindCharacterArray(mem, partyObj);
-        if (characters.Count == 0)
-        {
-            // Try scanning from the game-state object directly
-            characters = FindCharacterArray(mem, globalPtr);
-        }
-
-        if (characters.Count == 0) return null;
+        // No class pointers (or no Party singleton): fall back to a shape scan so the character
+        // editor still has something to work with.
+        var hits = StructuralScan(mem, progress, ct);
+        if (hits.Count == 0 && !classes.HasMapClasses) return null;
 
         return new GameLocation
         {
-            GameStateObject = globalPtr,
-            PartyObject = partyObj,
-            CharacterAddresses = characters,
-            ValidatorCount = characters.Count,
-            UsedFallback = false,
-            Summary = $"Pointer chain: {characters.Count} characters found"
+            Classes = classes,
+            PartyObject = 0,
+            CharacterAddresses = hits,
+            UsedFallback = true,
+            Summary = hits.Count > 0
+                ? $"Structural scan: {hits.Count} character object(s) found"
+                : "No party found, but the map classes resolved — location and teleport are available",
         };
     }
 
-    private static List<nuint> FindCharacterArray(IMemorySource mem, nuint objBase)
+    /// <summary>
+    /// Reads <c>Party.m_members</c>, keeping only slots that hold a real character. Each array
+    /// element is a <c>PartyMember</c> — the slot's UI wrapper — so the character is one more
+    /// hop away, and an empty slot is a wrapper whose character reference is null.
+    /// </summary>
+    private static List<nuint> ReadMembers(IMemorySource mem, nuint party)
     {
         var result = new List<nuint>();
+        nuint members = mem.ReadPtr(party + (nuint)CharacterFormat.PartyMembers);
+        int count = mem.ReadArrayLength(members);
+        if (count <= 0 || count > GameFacts.PartySlots) return result;
 
-        // Scan the first 0x200 bytes of the object for a pointer to an array
-        for (int off = 0x10; off < 0x200; off += 8)
+        var buf = new byte[CharacterFormat.ProbeSize];
+        for (int i = 0; i < count; i++)
         {
-            nuint ptr = ReadPtr(mem, objBase + (nuint)off);
-            if (ptr == 0) continue;
-
-            // Check if this looks like an IL2CPP array of character pointers
-            // IL2CPP array header: class ptr (8) + monitor (8) + bounds (8) + length (4)
-            // Array elements start at +0x20 on x64
-            var lenBuf = new byte[4];
-            if (mem.Read(ptr + 0x18, lenBuf, 4) != 4) continue;
-            int len = lenBuf[0] | (lenBuf[1] << 8) | (lenBuf[2] << 16) | (lenBuf[3] << 24);
-            if (len < 1 || len > GameFacts.PartySlots) continue;
-
-            // Read the first few elements and validate as character objects
-            int validCount = 0;
-            var candidates = new List<nuint>();
-            for (int i = 0; i < len; i++)
-            {
-                nuint elemPtr = ReadPtr(mem, ptr + (nuint)(0x20 + i * 8));
-                if (elemPtr == 0) { candidates.Add(0); continue; }
-
-                // Validate as a character object
-                var buf = new byte[CharacterObjectSize];
-                if (mem.Read(elemPtr, buf, CharacterObjectSize) != CharacterObjectSize) { candidates.Add(0); continue; }
-                if (CharacterFormat.LooksLikeCharacter(buf))
-                {
-                    validCount++;
-                    candidates.Add(elemPtr);
-                }
-                else
-                {
-                    candidates.Add(0);
-                }
-            }
-
-            // Require at least one of slots 1–6 to be valid (slot 0 is special/summon, often empty)
-            bool hasMember = false;
-            for (int i = 1; i < candidates.Count && i <= GameFacts.PartySlots - 1; i++)
-            {
-                if (candidates[i] != 0) { hasMember = true; break; }
-            }
-            if (validCount >= 1 && hasMember)
-            {
-                result.AddRange(candidates.Where(a => a != 0));
-                if (result.Count > 0) break;
-            }
+            nuint slot = mem.ReadArrayRef(members, i);
+            if (slot == 0) continue;
+            nuint character = mem.ReadPtr(slot + (nuint)CharacterFormat.PartyMemberCharacter);
+            if (character == 0) continue;
+            if (mem.Read(character, buf, buf.Length) != buf.Length) continue;
+            if (CharacterFormat.LooksLikeCharacter(buf)) result.Add(character);
         }
-
         return result;
     }
 
-    private static GameLocation? StructuralScan(
+    /// <summary>Sweeps committed memory for objects shaped like a <c>Character</c>.</summary>
+    private static List<nuint> StructuralScan(
         IMemorySource mem,
         IProgress<double>? progress,
         CancellationToken ct)
@@ -178,10 +182,10 @@ public static class GameLocator
         var regions = mem.EnumerateRegions().ToList();
 
         nuint totalBytes = 0;
-        foreach (var (base_, size) in regions) totalBytes += size;
+        foreach (var (_, size) in regions) totalBytes += size;
         nuint scanned = 0;
 
-        byte[] buf = new byte[ChunkSize];
+        var buf = new byte[ChunkSize];
 
         foreach (var (regionBase, regionSize) in regions)
         {
@@ -191,73 +195,36 @@ public static class GameLocator
             {
                 int want = (int)Math.Min((nuint)ChunkSize, regionSize - offset);
                 int read = mem.Read(regionBase + offset, buf, want);
-                if (read < CharacterObjectSize)
+                if (read < CharacterFormat.ProbeSize)
                 {
                     scanned += (nuint)want;
                     break;
                 }
 
-                // Scan for character objects at 8-byte alignment (IL2CPP objects are 8-byte aligned)
-                for (int i = 0; i + CharacterObjectSize <= read; i += 8)
+                // IL2CPP objects are 8-byte aligned, so only those offsets can start one.
+                for (int i = 0; i + CharacterFormat.ProbeSize <= read; i += 8)
                 {
-                    // Quick pre-filter: check XP at +0x50 is a plausible value
-                    int xp = CharacterFormat.ReadI32(buf.AsSpan(i), CharacterFormat.OffExperience);
-                    if (xp < 0 || xp > 100_000_000) continue;
-
-                    // Check HP at +0x84
+                    // Cheap gate first: hit points must be sane and no greater than the maximum.
+                    int hpMax = CharacterFormat.ReadI32(buf.AsSpan(i), CharacterFormat.OffHpMax);
+                    if (hpMax <= 0 || hpMax > 100_000) continue;
                     int hp = CharacterFormat.ReadI32(buf.AsSpan(i), CharacterFormat.OffHpCur);
-                    if (hp < 0 || hp > 9999) continue;
+                    if (hp < 0 || hp > hpMax) continue;
 
-                    // Check SP at +0x8C
-                    int sp = CharacterFormat.ReadI32(buf.AsSpan(i), CharacterFormat.OffSpCur);
-                    if (sp < 0 || sp > 9999) continue;
-
-                    // Full validation
                     if (CharacterFormat.LooksLikeCharacter(buf.AsSpan(i)))
                     {
                         nuint addr = regionBase + offset + (nuint)i;
-                        if (!hits.Contains(addr))
-                            hits.Add(addr);
+                        if (!hits.Contains(addr)) hits.Add(addr);
+                        if (hits.Count >= GameFacts.PartySlots) return hits;
                     }
                 }
 
-                nuint advance = (nuint)Math.Max(1, read - CharacterObjectSize);
+                nuint advance = (nuint)Math.Max(1, read - CharacterFormat.ProbeSize);
                 offset += advance;
                 scanned += advance;
                 progress?.Report(totalBytes == 0 ? 0 : Math.Min(1.0, (double)scanned / totalBytes));
             }
         }
 
-        if (hits.Count == 0) return null;
-
-        // Limit to party-sized group
-        var characters = hits.Take(GameFacts.PartySlots).ToList();
-
-        return new GameLocation
-        {
-            GameStateObject = 0,
-            PartyObject = 0,
-            CharacterAddresses = characters,
-            ValidatorCount = characters.Count,
-            UsedFallback = true,
-            Summary = $"Structural scan: {characters.Count} character objects found"
-        };
-    }
-
-    // --- memory helpers ---------------------------------------------------------
-    private static nuint ReadPtr(IMemorySource mem, nuint addr)
-    {
-        var buf = new byte[8];
-        if (mem.Read(addr, buf, 8) != 8) return 0;
-        return (nuint)(
-            (long)buf[0] | ((long)buf[1] << 8) | ((long)buf[2] << 16) | ((long)buf[3] << 24) |
-            ((long)buf[4] << 32) | ((long)buf[5] << 40) | ((long)buf[6] << 48) | ((long)buf[7] << 56));
-    }
-
-    private static int ReadI32(IMemorySource mem, nuint addr)
-    {
-        var buf = new byte[4];
-        if (mem.Read(addr, buf, 4) != 4) return 0;
-        return buf[0] | (buf[1] << 8) | (buf[2] << 16) | (buf[3] << 24);
+        return hits;
     }
 }
