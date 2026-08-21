@@ -38,3 +38,6 @@ Desktop.ini
 __pycache__/
 
 .*/
+
+# Local prompt-authoring helper, not part of any trainer
+tools/New-TrainerPrompt.ps1

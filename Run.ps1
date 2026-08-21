@@ -156,6 +156,16 @@
     saves into the directory it was started from -- normally the game folder itself.
 
 .EXAMPLE
+    .\Run.ps1 -Trainer Darksypre
+    Builds and launches the DarkSpyre trainer. Start DARKSYPR.EXE in DOSBox
+    and get into the game, then Attach. DarkSpyre is a real-time dungeon
+    crawler with no static anchor available (no binary was on hand for Ghidra
+    analysis), so the trainer uses Common's MemorySearcher as a value scanner
+    with 11 guided scans (HP, SP, six attributes, Encumbrance, Level, Score).
+    Press P in-game to pause for safe value reading. 'Darksypre' is enough
+    to be unique.
+
+.EXAMPLE
     .\Run.ps1 -Trainer BardsTaleTrilogy
     Builds and launches The Bard's Tale Trilogy trainer. A native Win32 target,
     so no DOSBox: start TheBardsTaleTrilogy.exe (the Steam remaster), load or

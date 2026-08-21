@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>DarksypreTrainer</AssemblyName>
+    <RootNamespace>DarksypreTrainer</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\GameTrainers.Common\GameTrainers.Common.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="FormatCheck" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="GameTrainers.Common.Memory" />
+    <Using Include="GameTrainers.Common.Mvvm" />
+    <Using Include="System.Collections.ObjectModel" />
+    <Using Include="DarksypreTrainer.ViewModels" />
+    <Using Include="DarksypreTrainer.Game" />
+  </ItemGroup>
+
+</Project>
