@@ -9,320 +9,323 @@
 | **Publisher** | Electronic Arts |
 | **Platform** | IBM PC (DOS) |
 | **Release** | 1990 |
-| **Genre** | Real-time dungeon-crawler RPG (roguelike) |
+| **Genre** | Real-time dungeon-crawler RPG |
 | **Perspective** | Top-down 2D |
-| **Dungeons** | Randomly generated |
 | **Levels** | 50 total, 39 required |
 
 DarkSpyre is a real-time dungeon crawler in which a single character descends through
-50 levels of a randomly generated tower. The game runs continuously — there is no
-turn-based pause — which makes live memory editing challenging because values change
-in real time. The player can press **P** to pause the game, providing a window for
-safe value reading.
+the levels of a tower. The game never pauses on its own, which is what makes live
+memory editing awkward: the number you read off the screen has often already moved by
+the time you type it. **P** pauses, which is the window for reading values by eye — the
+trainer's automatic locator does not need that window at all.
 
-## 2. Engine Analysis
+## 2. Confidence Markers
 
-### 2.1 Executable
+Every fact below carries its provenance:
 
-`DARKSPR.EXE` is a DOS executable. No copy of the game binary or memory dumps were
-available during development, so the analysis below was assembled from the game manual
-(Lemon Amiga supplement), the Cheatbook walkthrough, Wikipedia, and MobyGames. Every
-data point carries a confidence marker:
+- **[File]** — read out of a file the game ships (`CR.DAT`, `OBJ.DAT`, `HISCORE`,
+  `darkspyre.txt`). Reproducible offline with `.docs/decode_game_data.py`.
+- **[Live]** — observed in a running DOSBox session: read from guest RAM, or written
+  into guest RAM and confirmed on the game's own screen.
+- **[Manual]** — stated in `darkspyre.txt` (the manual that ships with the game) or the
+  Cheatbook walkthrough, and not independently verified here.
+- **[Open]** — noticed but not settled. Called out as such rather than guessed at.
 
-- **[Confirmed]** — stated explicitly in the manual or walkthrough and cross-checked
-  against at least one other source.
-- **[Inferred]** — plausible from the available sources but not explicitly confirmed.
+## 3. What Ships With the Game
 
-### 2.2 Why No GameLocator
+`C:\GAMES\DARKSYPR` holds 78 files. The ones that matter: [File]
 
-The repo's locator-based trainers (MightAndMagic1, DragonWars, Pirates, RailroadTycoon,
-etc.) anchor on a static byte signature — a string literal, a constant table, or a
-structural shape — that the game loads verbatim into guest RAM at a fixed `DGROUP`
-offset. That approach requires either:
-
-1. A copy of the executable to disassemble and identify anchor strings, **or**
-2. A live memory dump to scan for stable byte patterns.
-
-Neither was available for DarkSpyre. Without the binary, no Ghidra analysis was
-possible, and without memory dumps, no anchor pattern could be confirmed. The trainer
-therefore follows the **value-scanner model** used by `QuestForGlory1Trainer`,
-`MoriaTrainer`, `BattleTech1Trainer`, and `ThePerfectGeneral2Trainer`: Common's
-`MemorySearcher` provides a Cheat-Engine-style scan (attach → first scan → narrow by
-comparison → pin → freeze), and guided-scan recipes pre-configure the width and give
-step-by-step narrowing instructions for each stat.
-
-### 2.3 What Would Be Needed for a Locator
-
-If a future developer obtains the game binary or a live memory dump, the path to a
-locator would be:
-
-1. Disassemble `DARKSPR.EXE` in Ghidra to identify the data segment and any string
-   literals loaded into guest RAM.
-2. Search the binary for the attribute names, spell names, monster names, or rune
-   names — any of these may be stored as ASCII and loaded verbatim.
-3. Check whether the character record lives in a fixed `DGROUP` offset (making it a
-   locator target like RailroadTycoon) or is heap-allocated with a far pointer in the
-   data segment (making it a pointer-chain target like LegendOfFaerghail).
-4. If a stable anchor is found, write a `GameLocator` following the pattern in
-   `PiratesTrainer` or `RailroadTycoonTrainer` and add it to this trainer.
-
-## 3. Character System
-
-### 3.1 Attributes [Confirmed]
-
-Six attributes, each a single byte, range 1–20:
-
-| ID | Attribute | Abbrev | Description |
-|---|---|---|---|
-| 0 | Strength | STR | Determines HP and melee damage |
-| 1 | Agility | AGI | Affects dodge and movement speed |
-| 2 | Endurance | END | Determines HP and encumbrance capacity |
-| 3 | Accuracy | ACC | Affects hit probability |
-| 4 | Talent | TAL | Determines SP and magic proficiency |
-| 5 | Power | PWR | Determines SP and spell effectiveness |
-
-**HP formula** [Confirmed]: `HP = Strength + Endurance + Random`
-**SP formula** [Confirmed]: `SP = Talent + Power + Random` (max 100)
-
-Attributes do not change during normal play — they are set at character creation and
-can only be modified by the power runes exchanged on Level 36. This makes them easy to
-scan: a single Exact scan for the known value should narrow to very few candidates.
-
-### 3.2 Spell Points [Confirmed]
-
-- SP is a byte value, range 0–100.
-- SP is consumed by casting spells; each spell has a cost split 50/50 between
-  preparation and casting.
-- SP regenerates slowly over time.
-
-### 3.3 Encumbrance [Confirmed]
-
-- Encumbrance (ENC) is a byte value tracking carried weight.
-- Changes when items are picked up or dropped.
-- Used for the guided-scan recipe since it changes predictably.
-
-### 3.4 Level and Score [Confirmed]
-
-- **Level** is an Int16, range 1–50. Displayed by pressing F8.
-- **Score** is an Int32, range 0–999999. Displayed by pressing F8.
-- Score increases from killing monsters and picking up items.
-
-## 4. Combat System
-
-### 4.1 Weapons [Confirmed from manual]
-
-Seven weapon proficiency types. Using a weapon of a given type increases proficiency
-for all weapons in that class. Proficiency levels (10): None, Beginner, Neophyte,
-Novice, Average, Skilled, Stalwart, Adept, Savant, Expert.
-
-| ID | Type | Speed | Damage | Hands | Examples |
-|---|---|---|---|---|---|
-| 0 | Clubbing | Average | Average | 1H | War Axe, Mace |
-| 1 | Hurled | Fast | Low | 1H | Throwing Knife, Throwing Axe |
-| 2 | Large | Slowest | Highest | 2H | Claymore, Great Scythe |
-| 3 | Long Edge | Average | Average | 1H | Longsword, Scimitar |
-| 4 | Projectile | Fast | Average | 2H | Light Crossbow |
-| 5 | Short Edge | Fastest | Least | 1H | Short Sword, Dagger |
-| 6 | Thrusting | Slow | High | 2H | Spear, Trident |
-
-Key detail: weapons break randomly, so training in multiple types is essential.
-Attacking with a shield increases clubbing proficiency. Hand-to-hand with hurled items
-also increases hurling proficiency. Throwing a thrust weapon increases hurling
-proficiency (not thrusting).
-
-### 4.2 Armor [Confirmed from manual]
-
-- **Protection levels**: 15 (armor value, reduces incoming damage)
-- **Condition levels**: 7 (wear state; armor degrades with use)
-- Armor covers specific body locations; the manual describes a full armor system.
-
-### 4.3 Monsters [Confirmed from walkthrough]
-
-14 monster types in 5 combat categories:
-
-| Category | Monsters | Key Traits |
+| File | Size | What it is |
 |---|---|---|
-| Ground Melee | Wraith, Crustacean, Samurai, Gargoyle, Crystal Ninja | Walk, hand-to-hand attack. Use ranged weapons and fireballs. |
-| Ground Projectile | Jester | Walk + fireballs/gas. Only monster that does both. Very dangerous. |
-| Slither Poison | Slime, Creeper | Slither, poison on contact. Immune to projectiles. Do not trigger weight plates. |
-| Flying Melee | Vulture, Manta Ray | Fly, hand-to-hand. Do not trigger weight plates. |
-| Flying Projectile | Beholder, Electric Storm, Banshee, Djinn | Fly, ranged attacks. Get into melee range to suppress projectiles. |
+| `DARKSPYR.COM` | 2 KB | Loader; runs the `RUNTIME` stages |
+| `RUNTIME.1` / `RUNTIME.2` | 65 KB / 59 KB | MZ executables — the engine |
+| `CR.DAT` | 157 KB | Creature table: 86-byte headers, each followed by its sprite blob |
+| `OBJ.DAT` | 11 KB | Object table: 162 records plus a name table |
+| `WEAPON.DAT` | 5.7 KB | Per-weapon data, keyed by an offset table |
+| `WALLS.DAT`, `DOORS.DAT`, `GRAPHIC.DAT`, `FACES.DAT` | — | Tile and sprite art |
+| `MAP00.DAT`, `MAP0B…MAP4H.DAT`, `MAPR0…MAPR8.DAT` | 2–4 KB each | 42 tile grids |
+| `C`, `E`, `F`, `T`, `V`, `W`, `X` | 3–5 KB each | Overlay code modules (video drivers) |
+| `HISCORE` | 237 B | Hall of Champions table |
+| `darkspyre.txt` | 30 KB | The manual, including the Amiga control supplement |
 
-Monsters become exponentially harder on higher levels and work in larger groups. When
-near death, monsters run away.
+### 3.1 The executables are packed [File]
 
-## 5. Magic System [Confirmed from manual]
+`RUNTIME.1` is an MZ image with a 32-byte header, no relocations, and an entry stub that
+decompresses the real image at startup; the stub carries the marker `*FAB*` at file
+offset `0xFBF3`. Only fragments of text survive in the file (`cr.dat`, Borland C runtime
+strings) and they are interleaved with back-reference tokens, which is the signature of
+an LZ-packed executable.
 
-### 5.1 Magic Classes
+The practical consequence: **static disassembly of the shipped files gets you very
+little.** The unpacked image only exists in guest RAM. That is why the work below was
+done against a live session rather than in Ghidra.
 
-Six magic classes, each with 7 proficiency levels: None, Novice, Average, Skilled,
-Sage, Maren, Master.
+## 4. Method
 
-| Class | Spells | Description |
-|---|---|---|
-| Healing | 1 | Liquify (potion creation) |
-| Sorcery | 3 | Knock, Zap Away, Hold |
-| Wizardry | 2 | Fireball, Magic Gas |
-| Conjury | 3 | Abstraka, Disguise, Magic Wall |
-| Diviny | 3 | Compass, Magic Map, Sight |
-| Enchantry | 2 | Dispel, Freeze |
+1. Copy the game to a scratch directory so the user's own save and high-score files are
+   never touched.
+2. Run it under DOSBox 0.74-3 with `memsize=16`, `scaler=normal3x`.
+3. Start a character with a deliberately unusual name (`ZQXWVU`) so it is easy to find.
+4. Dump the emulator's committed regions and search for known values.
+5. Confirm each candidate field by **poking it and watching the game's own screen**
+   change.
 
-### 5.2 Spell Details
+Two details made step 5 practical:
 
-| Spell | Class | SP Cost | Effect |
-|---|---|---|---|
-| Liquify | Healing | 10 | Creates potions from gemstones |
-| Knock | Sorcery | 16 | Opens some gates |
-| Zap Away | Sorcery | 10 | Teleports blocks and balls |
-| Hold | Sorcery | 30 | Freezes a targeted monster |
-| Fireball | Wizardry | 20 | High damage projectile, bounces off walls |
-| Magic Gas | Wizardry | 20 | Gas cloud — confusion (below skilled) or poison (skilled+) |
-| Abstraka | Conjury | 20 | Invisibility (toggle) |
-| Disguise | Conjury | 30 | Look like a monster (cancelled by attacking) |
-| Magic Wall | Conjury | 30 | Temporary moveable wall |
-| Compass | Diviny | 30 | Shows direction to exit |
-| Magic Map | Diviny | 30 | Reveals level map |
-| Sight | Diviny | 10 | Enlarges ground items |
-| Dispel | Enchantry | 36 | Defensive dispel (unreliable) |
-| Freeze | Enchantry | 40 | Stops all monsters temporarily |
+- **Guest RAM is the largest private 16 MB region** of the DOSBox process. Offsets in
+  this document are relative to the start of that region. Guest-physical addresses are
+  `0x20` lower in this build — the BIOS data area lands at region offset `0x420`, not
+  `0x400` — so subtract `0x20` if you are comparing against a DOS memory map. [Live]
+- **The rendered screen can be read straight out of the process.** With
+  `output=surface` and a 3× scaler, DOSBox keeps a 960×600 32-bit BGRA surface in a
+  private region of exactly 2,304,000 bytes. Reading that region and saving it as an
+  image gives a screenshot without needing the desktop at all, which is what let the
+  poke-and-observe loop run unattended. [Live]
 
-Spells are found on scrolls throughout the dungeon. Each scroll can be cast once, or
-permanently added to the spell book (found on Level 1). SP cost is split 50/50 between
-preparation and casting.
+## 5. Character State In Memory
 
-## 6. Rune System [Confirmed from manual and walkthrough]
+DarkSpyre does not keep one character record. It spreads live state across **three**
+structures, and knowing which one to write is the whole game:
 
-25 runes total, 5 of which are **power runes**. The power runes must be collected
-throughout the game and exchanged on Level 36 for gifts from the gods before entering
-the final 3 levels (Levels 38–50).
+### 5.1 Status block — 12 bytes, six 16-bit values [Live]
 
-### 6.1 Power Runes
-
-| Norse | English | Attribute |
-|---|---|---|
-| Uraz | Strength | STR |
-| Ehwaz | Agility | AGI |
-| Eihwaz | Accuracy | ACC |
-| Teiwaz | Endurance | END |
-| Inguz | Talent | TAL |
-
-### 6.2 Utility Runes
-
-| Norse | English | Effect |
-|---|---|---|
-| Raido | Quest | Saves the game (one use per rune) — essential |
-| Thurisaz | Gateway | Takes you to the next level |
-| Jera | Sustenance | Restores HP |
-| Algit | Protection | Cures poison |
-| Sowelu | Unity | Cures poison and confusion |
-| Keno | Opening | Knock spell effect |
-| Fehu | Wealth | Becomes a knock scroll |
-| Gebo | Alliance | Magic Map effect |
-| Dagaz | Discovery | Destroys a monster |
-| Isa | Stagnant | Poisons you (harmful) |
-
-The remaining 10 runes (Ansuz, Berkana, Hagalaz, Laquz, Mannaz, Nauthiz, Odin,
-Othilia, Perth, Wunjo) have unknown effects [Inferred — not documented in available
-sources].
-
-## 7. Level Structure [Confirmed from walkthrough]
-
-- **50 levels** total, **39 required** to complete the game.
-- Dungeons are **randomly generated** — no fixed maps exist.
-- The spell book is found on **Level 1**.
-- Power runes are scattered throughout the middle levels.
-- **Level 36**: the exchange point where power runes are traded for divine gifts.
-- **Levels 38–50**: the final sequence, accessible only after the Level 36 exchange.
-- Press **F8** to display the current level and score.
-- Press **P** to pause the game for safe value reading.
-
-## 8. Save System [Confirmed from manual]
-
-- Saving is done via the **Raido** rune (Quest rune).
-- Each Raido rune allows one save.
-- Raido runes are found throughout the dungeon.
-- There is no autosave — saving is a limited resource.
-
-## 9. Trainer Architecture
-
-### 9.1 Value-Scanner Model
-
-The trainer uses `GameTrainers.Common.Memory.MemorySearcher` for all memory access:
-
-1. **Attach** to the DOSBox/DOSBox-X process via `ProcessMemory.Open`.
-2. **First Scan** — snapshot all memory locations matching a known value (or
-   unknown-value baseline).
-3. **Narrow** — perform an in-game action that changes the value, then scan by
-   Exact / Increased / Decreased / Changed / Unchanged.
-4. **Pin** — move a survivor address to the freeze table.
-5. **Freeze** — re-write the value every ~200 ms so the game cannot move it back.
-
-### 9.2 Guided-Scan Recipes
-
-`ScanGuide` provides 11 pre-built recipes:
-
-| Stat | Width | Range | Narrowing Strategy |
-|---|---|---|---|
-| Hit Points | Int16 | 1–999 | Take a hit, scan Exact for new HP |
-| Spell Points | Byte | 0–100 | Cast a spell, scan Exact for new SP |
-| Strength | Byte | 1–20 | One Exact scan (does not change) |
-| Agility | Byte | 1–20 | One Exact scan (does not change) |
-| Endurance | Byte | 1–20 | One Exact scan (does not change) |
-| Accuracy | Byte | 1–20 | One Exact scan (does not change) |
-| Talent | Byte | 1–20 | One Exact scan (does not change) |
-| Power | Byte | 1–20 | One Exact scan (does not change) |
-| Encumbrance | Byte | 0–255 | Pick up/drop an item, scan Exact |
-| Level | Int16 | 1–50 | Step through a gateway, scan Exact |
-| Score | Int32 | 0–999999 | Kill a monster, scan Exact |
-
-### 9.3 Scan Width Rationale
-
-- **HP (Int16)**: HP = STR + END + random, and STR/END max at 20 each, so HP can
-  exceed 255. Int16 covers the full range.
-- **SP (Byte)**: SP maxes at 100, well within a byte.
-- **Attributes (Byte)**: Range 1–20, a single byte.
-- **Encumbrance (Byte)**: A weight counter, 0–255 is sufficient.
-- **Level (Int16)**: 1–50, but Int16 is used for safety since the exact encoding is
-  unconfirmed.
-- **Score (Int32)**: Up to 999,999, which exceeds Int16 range.
-
-### 9.4 Confidence Markers
-
-All constants in `GameFacts` are marked **[Confirmed]** in the source code comments,
-meaning they were stated in the manual or walkthrough and cross-checked. No value was
-guessed. The trainer UI does not surface a confidence distinction (unlike some
-trainers in the repo) because every value is confirmed from published sources.
-
-## 10. Data Sources
-
-| Source | What It Provided |
+| Offset | Field |
 |---|---|
-| **Lemon Amiga** (manual supplement) | Attributes, HP/SP formulas, weapon types, magic classes, armor system, save mechanics, rune descriptions |
-| **Cheatbook** (walkthrough) | Controls, monster types and categories, spell details, level structure, rune effects, combat tactics |
-| **Wikipedia** | Basic game info, developer, release year, genre classification |
-| **MobyGames** | Platform, publisher, release date confirmation |
+| +0 | Current hit points |
+| +2 | Current spell points |
+| +4 | Current encumbrance |
+| +6 | Maximum hit points |
+| +8 | Maximum spell points |
+| +10 | Maximum encumbrance |
 
-## 11. What Was Not Reverse-Engineered
+This is exactly what the on-screen bars print (`HIT POINTS 039/039`, `SPELL POINTS
+039/039`, `ENCUMBRANCE 000/075`). The game rebuilds it from the other two structures
+every frame: a value written here is gone on the next tick, so the trainer reads it and
+never writes it.
 
-The following were not attempted because no binary or memory dump was available:
+### 5.2 Character record — 12 bytes [Live]
 
-- **Memory layout**: No character record offsets are known. The trainer relies on
-  value scanning rather than direct address computation.
-- **Map/position data**: No teleport feature is offered because map position was not
+| Offset | Field |
+|---|---|
+| +0…+5 | Strength, Agility, Endurance, Accuracy, Talent, Power (one byte each) |
+| +6 | Maximum hit points (16-bit) |
+| +8 | Maximum spell points (16-bit) |
+| +10 | Maximum encumbrance (16-bit) |
+
+Writing `+6` and `+8` was confirmed on screen: poking `0x2A` at +6 turned the bar into
+`HIT POINTS 040/042`, and poking `0x50` at +8 turned it into `SPELL POINTS 046/080`.
+The character then regenerated toward the new ceiling, so the engine genuinely adopts
+the value — the manual's "spell points can never exceed 100" is a design statement, not
+a clamp. A maximum of 400 was accepted without complaint.
+
+The six attribute bytes matched the character sheet exactly (STR 15, AGI 13, END 11,
+ACC 10, TAL 14, PWR 12 for the test character). Writing them takes effect in memory
+immediately, but the character sheet is a cached bitmap: it only shows the new numbers
+once the game repaints that panel. Maximum encumbrance was **not** observed to be
+recomputed from Strength on the spot. [Open]
+
+### 5.3 Player actor — creature-table entry 0 [Live]
+
+The per-level creature table is loaded from `CR.DAT`; entry 0 is the player. Its layout
+is the creature header (§6):
+
+| Offset | Field |
+|---|---|
+| +0x10 | Current hit points (16-bit) |
+| +0x12 | Current spell points (16-bit) |
+| +0x1D | ASCIIZ name — always `player` for entry 0 |
+
+This is the copy the engine plays out of. Poking `0xC8` at +0x10 raised the on-screen
+hit points to 200 and regeneration continued from there; a write to the *status block*
+instead was overwritten within one frame. So: **current HP and SP are written here,
+maxima and attributes are written to the character record.**
+
+### 5.4 Session addresses [Live]
+
+For the record, in the session these notes were taken from (region base `0x7630000`):
+
+| Structure | Region offset |
+|---|---|
+| Status block | `0x1E4B9` |
+| Character record | `0x21DE0` |
+| Player actor | `0x21F0A` |
+| `OBJ.DAT` buffer | `0x2370C` |
+
+These are **not** hard-coded anywhere in the trainer. DOS load addresses move with the
+environment, and the creature table is rebuilt per level, so the trainer searches by
+content instead (§8).
+
+## 6. Creature Table (`CR.DAT`) [File]
+
+Records are variable length: an 86-byte (`0x56`) header followed by that creature's
+sprite data. Header fields confirmed by comparing the file against the copy in guest
+RAM — everything from +0x1D on is byte-identical, while +0x00…+0x1C is runtime state:
+
+| Offset | Field |
+|---|---|
+| +0x10 | Current hit points (runtime) |
+| +0x12 | Current spell points (runtime) |
+| +0x1D | ASCIIZ name |
+| +0x3D…+0x3F | Sprite width, height, frame count |
+| +0x40…+0x45 | Strength, Agility, Endurance, Accuracy, Talent, Power |
+| +0x48 | `0x0A` on creatures that attack at range |
+| +0x49 | Projectile kind (only meaningful when +0x48 is `0x0A`) |
+| +0x4D | Rises with the depth a creature first appears at |
+
+The file ships **35 creatures plus the player**: slime, giant bee, giant bat, wraith,
+mummy, gorilla, shadow warrior, hatchling, scorpius, lizard, centipede, troll, gargoyle,
+samurai, hellhound, cyclops, gelatinous cube, saw blade, harpy, crystal knight,
+minotaur, stone golem, warrior maiden, evolved slime, manta ray, jester, muskateer,
+crustacean, pheonix, djinn, gryphon, creeper, electric ball, beholder, spartan warrior.
+
+Two independent checks say the attribute and ranged-flag decode is right:
+
+- The seven creatures flagged at +0x48 (harpy, jester, pheonix, djinn, gryphon, electric
+  ball, beholder) are exactly the ones the walkthrough files under "ranged" — it
+  describes beholders, djinn, electric storms and the jester as the monsters that shoot.
+- Attribute values read as characters should: the spartan warrior, the end-game melee
+  creature, has 25/25/25 in STR/AGI/END and 6/7/0 in ACC/TAL/PWR; the djinn, a caster,
+  is 8/8/10 with 16 Talent. Monsters are not held to the player's cap of 20.
+
+Scanning for lowercase ASCIIZ words also turns up short strings inside sprite blobs
+(`wp`, `wwp`, `gwv`). They are rejected by requiring plausible sprite dimensions and
+attributes, which is what `.docs/decode_game_data.py` does.
+
+## 7. Other File Formats
+
+### 7.1 Object table (`OBJ.DAT`) [File]
+
+`[3-byte header][162 × 57-byte record][name table]`. The name table starts at `0x2415`
+and holds 162 ASCIIZ names in record order: `random object`, `bolt`, `spellbook`,
+`knock scroll`, … through the 25 runes and `scroll of sight`.
+
+The name table alone settles several things the secondary sources get wrong:
+
+- The game spells three runes differently from the manual: **kano** (manual: KENO),
+  **othila** (OTHILIA), **laguz** (the trainer previously carried "Laquz", which is in
+  neither).
+- There are exactly 25 `… rune` entries and exactly 14 spell sources (a scroll per
+  spell, plus the spellbook), which corroborates the manual's rune and spell counts.
+
+The 57-byte records hold small integers — the first three 16-bit fields of `bolt` are
+14/30/30 and of `spellbook` 19/100/100 — but the field semantics are not settled, so the
+trainer exposes names and table order only. [Open]
+
+### 7.2 High-score table (`HISCORE`) [File]
+
+`[1 byte][current character name, 20 bytes]` then nine entries of
+`[name, 20 bytes][rank, 1][level, 1][score, 2 little-endian]`. The shipped table decodes
+to Borel 35000, Sprig 25000, Adam 15000, WarMonger 10000, Jessica 5000, Wanda 2500, Morg
+2000, Deidra 1000, Kung 500 — descending, which is what confirms the field order.
+
+Useful consequence: the game stores **score as 16 bits and level as one byte**, which is
+what the trainer's scan recipes for those two now assume.
+
+### 7.3 Map files (`MAP*.DAT`) [Open]
+
+42 files, each `[0x29][0x31 or 0x32][0x00]` followed by a tile grid — plausibly 41 wide
+by 49 or 50 tall, though the files are larger than that product. Tile alphabet: `0xFF`
+void, `0x01`–`0x06` walls and wall variants, `0x1E`–`0x23` floor variants.
+
+The live level buffer uses the same alphabet, and a handful of 24-byte windows from it
+appear verbatim in `MAP00.DAT` — but the overall match is only about 57% even when
+floor-tile variants are ignored, and no other file matches better. So these are
+**not** simply "level *n* is `MAPnn.DAT`". They are most likely room or section
+templates the generator stitches together, or layouts for particular special levels.
+Stated here as unfinished rather than resolved: the previous version of this document
+asserted "no fixed maps exist", which the files themselves contradict, but the
+relationship is still open.
+
+## 8. How the Trainer Uses This
+
+`Memory/CharacterLocator.cs` finds all three structures with no hard-coded address and
+no assumed distance between them — only the internal layout of each, which is a property
+of the build. Three stages, each confirming the next:
+
+1. **Player actor** — search for `player\0`, treat each hit as a name field at +0x1D,
+   validate the record around it, and read current HP and SP.
+2. **Status block** — search the same region for six 16-bit values whose first two equal
+   the actor's HP and SP and whose maxima bracket the current values.
+3. **Character record** — search for six in-range attribute bytes followed by exactly
+   the three maxima the status block just reported.
+
+Cross-checking is what makes it unique. Run against the 16 MB guest-RAM dump from the
+session in §5.4, each stage resolves to exactly one address — `0x21F0A`, `0x1E4B9`,
+`0x21DE0` — in well under a second. `test/FormatCheck` re-runs the same search over a
+synthetic RAM image with decoys (a second creature record, a status block belonging to a
+different character, structures straddling page boundaries), and will run it over a real
+dump if you pass one: `FormatCheck path\to\dump.bin`.
+
+When the game is sitting in its menus there is no creature table, so the locator returns
+nothing and the trainer says so rather than guessing. When you change level the creature
+table is rebuilt somewhere else; the poll loop notices the record stops validating and
+searches again by itself.
+
+## 9. Character System [Manual]
+
+Six attributes, 1–20, set at character creation by the choices you make in the "Tale of
+Champions" story and afterwards only raised by the power runes exchanged on Level 36:
+
+| ID | Attribute | Effect |
+|---|---|---|
+| 0 | Strength | Hit points and melee damage |
+| 1 | Agility | Dodging and movement |
+| 2 | Endurance | Hit points and carrying capacity |
+| 3 | Accuracy | Chance to hit |
+| 4 | Talent | Spell points and magic proficiency |
+| 5 | Power | Spell points and spell effect |
+
+`HP = Strength + Endurance + random`, `SP = Talent + Power + random`. The test character
+rolled STR 15 / END 11 with 39 hit points and TAL 14 / PWR 12 with 39 spell points, and
+started with a maximum encumbrance of 75 — five times Strength. [Live, one sample]
+
+## 10. Combat and Magic [Manual]
+
+Seven weapon proficiency classes (Clubbing, Hurled, Large, Long Edge, Projectile, Short
+Edge, Thrusting), ten proficiency levels from None to Expert. Weapons break, so training
+several classes matters. Six magic classes (Healing, Sorcery, Wizardry, Conjury, Diviny,
+Enchantry), seven proficiency levels from None to Master, 14 spells; each spell's cost is
+split half on preparation and half on casting. Armour has 15 protection levels and 7
+condition levels.
+
+## 11. Controls [Manual — `darkspyre.txt`]
+
+| Key | Action |
+|---|---|
+| Keypad 1–9 | Move |
+| 1–6 | Trigger the numbered menu action |
+| F1–F7 | Cast a prepared spell |
+| F8 | Information: score, level, sound status |
+| A / W / S | Show attributes / weapon proficiencies / magic proficiencies |
+| T | Take the item you are standing on |
+| Enter | Toggle a switch you are standing on |
+| − / + | Scroll the character sheet up / down |
+| P | Pause |
+| Esc | Abort the save or restore screen |
+
+The mouse does the rest: click a menu bar to act, click your character to pick up, drag
+the grey bar to slide the character sheet.
+
+## 12. Not Reverse-Engineered
+
+- **Inventory** — where carried items live, and in what encoding. This is the biggest
+  remaining gap; it would make an item editor possible.
+- **Map position** — no teleport feature, because the player's tile coordinates were not
   identified.
-- **Save file format**: No save editor is offered because the on-disk format was not
-  decoded.
-- **Inventory encoding**: No inventory editor is offered because the item storage
-  format was not reverse-engineered.
-- **Monster AI state**: Not analyzed.
+- **Score and level in memory** — the on-disk sizes are known (§7.2) but the live
+  addresses were not pinned down, so both are still value-scan targets.
+- **Save files** — `save.dir` is referenced at runtime; the format was not decoded.
+  Saving needs a Raido rune, which the test session never found.
+- **Weapon data (`WEAPON.DAT`)** — the offset table is obvious, the payload is not.
+- **Proficiency arrays** — a run of small values near the character name looks like the
+  weapon and magic proficiency tables, but nothing was confirmed.
 
-## 12. Future Work
+## 13. Sources
 
-If the game binary and/or memory dumps become available:
-
-1. Disassemble `DARKSPR.EXE` in Ghidra to recover the data segment layout.
-2. Identify string anchors (spell names, monster names, rune names) for a `GameLocator`.
-3. Map the character record structure for direct read/write without scanning.
-4. Decode the save file format for an offline save editor.
-5. Investigate map position for a teleport feature.
-6. Analyze the inventory encoding for an item editor.
+| Source | What it gave |
+|---|---|
+| The game's own files | Creature table, object table, high-score format, controls, all counts |
+| A live DOSBox session | The three character structures and which one to write |
+| `darkspyre.txt` (shipped manual) | Attributes, formulas, proficiency systems, rune meanings, key bindings |
+| Cheatbook walkthrough | Monster tactics, level structure, rune effects |
+| Wikipedia, MobyGames | Publisher, release date, genre |

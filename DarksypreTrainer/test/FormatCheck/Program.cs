@@ -1,4 +1,6 @@
+using System.IO;
 using DarksypreTrainer.Game;
+using DarksypreTrainer.Memory;
 using DarksypreTrainer.ViewModels;
 using GameTrainers.Common.Memory;
 
@@ -18,7 +20,7 @@ static string Fmt(object? v) => v switch
     _ => v.ToString() ?? "null",
 };
 
-Console.WriteLine("GameFacts constants (Confirmed from manual/walkthrough):");
+Console.WriteLine("GameFacts constants:");
 Check("game title", GameFacts.GameTitle, "DarkSpyre");
 Check("developer", GameFacts.Developer, "Event Horizon Software");
 Check("release year", GameFacts.ReleaseYear, 1990);
@@ -35,28 +37,226 @@ Check("armor protection levels is 15", GameFacts.ArmorProtectionLevels, 15);
 Check("armor condition levels is 7", GameFacts.ArmorConditionLevels, 7);
 Check("power rune count is 5", GameFacts.PowerRuneCount, 5);
 Check("total runes is 25", GameFacts.TotalRunes, 25);
+Check("creature count is 35", GameFacts.CreatureCount, 35);
+Check("object count is 162", GameFacts.ObjectCount, 162);
+Check("object record size is 57", GameFacts.ObjectRecordSize, 57);
 Console.WriteLine();
 
-Console.WriteLine("ScanGuide recipes:");
-Check("recipe count is 11", ScanGuide.Recipes.Count, 11);
-var hp = ScanGuide.Recipes.First(r => r.Field == "hp");
-Check("hp is Int16", hp.Width, ScanWidth.Int16);
-Check("hp suggested default is 20", hp.SuggestedDefault, 20L);
-var sp = ScanGuide.Recipes.First(r => r.Field == "sp");
-Check("sp is Byte", sp.Width, ScanWidth.Byte);
-Check("sp max is 100", sp.TypicalMax, (long)GameFacts.MaxSpellPoints);
-var str = ScanGuide.Recipes.First(r => r.Field == "str");
-Check("str is Byte", str.Width, ScanWidth.Byte);
-Check("str range is '1..20'", str.Range, "1..20");
-var score = ScanGuide.Recipes.First(r => r.Field == "score");
-Check("score is Int32", score.Width, ScanWidth.Int32);
-Check("score range is '0..999999'", score.Range, "0..999999");
+Console.WriteLine("CharacterFormat layout (confirmed against a live DOSBox session):");
+Check("status block is 12 bytes", CharacterFormat.StatusSize, 12);
+Check("status current HP at +0", CharacterFormat.StatusCurrentHp, 0);
+Check("status current SP at +2", CharacterFormat.StatusCurrentSp, 2);
+Check("status current ENC at +4", CharacterFormat.StatusCurrentEnc, 4);
+Check("status max HP at +6", CharacterFormat.StatusMaxHp, 6);
+Check("status max SP at +8", CharacterFormat.StatusMaxSp, 8);
+Check("status max ENC at +10", CharacterFormat.StatusMaxEnc, 10);
+Check("record is 12 bytes", CharacterFormat.RecordSize, 12);
+Check("record attributes at +0", CharacterFormat.RecordAttributes, 0);
+Check("record max HP at +6", CharacterFormat.RecordMaxHp, 6);
+Check("attribute count is 6", CharacterFormat.AttributeCount, 6);
+Check("attribute names count is 6", CharacterFormat.AttributeNames.Length, 6);
+Check("first attribute is Strength", CharacterFormat.AttributeNames[0], "Strength");
+Check("last attribute is Power", CharacterFormat.AttributeNames[^1], "Power");
+Check("actor record is 0x56 bytes", CharacterFormat.ActorSize, 0x56);
+Check("actor current HP at +0x10", CharacterFormat.ActorCurrentHp, 0x10);
+Check("actor current SP at +0x12", CharacterFormat.ActorCurrentSp, 0x12);
+Check("actor name at +0x1D", CharacterFormat.ActorName, 0x1D);
+Check("actor name is 'player'", CharacterFormat.PlayerActorName, "player");
+
+var word = new byte[2];
+CharacterFormat.WriteU16(word, 0, 400);
+Check("WriteU16 is little-endian (low)", word[0], (byte)0x90);
+Check("WriteU16 is little-endian (high)", word[1], (byte)0x01);
+Check("ReadU16 round-trips", CharacterFormat.ReadU16(word, 0), 400);
+Console.WriteLine();
+
+Console.WriteLine("CharacterFormat validation:");
+// The values below are the ones observed in the live session documented in
+// docs/ReverseEngineering.md: STR 15 AGI 13 END 11 ACC 10 TAL 14 PWR 12, HP/SP 39, ENC 0/75.
+var status = new byte[CharacterFormat.StatusSize];
+CharacterFormat.WriteU16(status, CharacterFormat.StatusCurrentHp, 39);
+CharacterFormat.WriteU16(status, CharacterFormat.StatusCurrentSp, 39);
+CharacterFormat.WriteU16(status, CharacterFormat.StatusCurrentEnc, 0);
+CharacterFormat.WriteU16(status, CharacterFormat.StatusMaxHp, 39);
+CharacterFormat.WriteU16(status, CharacterFormat.StatusMaxSp, 39);
+CharacterFormat.WriteU16(status, CharacterFormat.StatusMaxEnc, 75);
+Check("status block accepted", CharacterFormat.IsStatusBlock(status, 0, 39, 39), true);
+Check("status block rejected for other HP", CharacterFormat.IsStatusBlock(status, 0, 40, 39), false);
+
+var overfull = (byte[])status.Clone();
+CharacterFormat.WriteU16(overfull, CharacterFormat.StatusMaxHp, 30);
+Check("current above maximum is rejected", CharacterFormat.IsStatusBlock(overfull, 0, 39, 39), false);
+
+var zeroMax = (byte[])status.Clone();
+CharacterFormat.WriteU16(zeroMax, CharacterFormat.StatusMaxEnc, 0);
+Check("zero max encumbrance is rejected", CharacterFormat.IsStatusBlock(zeroMax, 0, 39, 39), false);
+
+var record = new byte[CharacterFormat.RecordSize];
+byte[] attrs = { 15, 13, 11, 10, 14, 12 };
+Array.Copy(attrs, 0, record, CharacterFormat.RecordAttributes, attrs.Length);
+CharacterFormat.WriteU16(record, CharacterFormat.RecordMaxHp, 39);
+CharacterFormat.WriteU16(record, CharacterFormat.RecordMaxSp, 39);
+CharacterFormat.WriteU16(record, CharacterFormat.RecordMaxEnc, 75);
+Check("character record accepted", CharacterFormat.IsCharacterRecord(record, 0, 39, 39, 75), true);
+Check("record rejected against other maxima", CharacterFormat.IsCharacterRecord(record, 0, 40, 39, 75), false);
+
+var zeroAttr = (byte[])record.Clone();
+zeroAttr[0] = 0;
+Check("zero attribute is rejected", CharacterFormat.IsCharacterRecord(zeroAttr, 0, 39, 39, 75), false);
+
+var hugeAttr = (byte[])record.Clone();
+hugeAttr[0] = 200;
+Check("out-of-range attribute is rejected", CharacterFormat.IsCharacterRecord(hugeAttr, 0, 39, 39, 75), false);
+
+var actor = BuildActor(39, 39);
+Check("player actor accepted", CharacterFormat.IsPlayerActor(actor, 0), true);
+var notPlayer = (byte[])actor.Clone();
+notPlayer[CharacterFormat.ActorName] = (byte)'s';
+Check("other creature rejected", CharacterFormat.IsPlayerActor(notPlayer, 0), false);
+var deadActor = (byte[])actor.Clone();
+CharacterFormat.WriteU16(deadActor, CharacterFormat.ActorCurrentHp, 0);
+Check("zero-HP actor rejected", CharacterFormat.IsPlayerActor(deadActor, 0), false);
+Console.WriteLine();
+
+Console.WriteLine("CharacterLocator over a synthetic guest RAM:");
+const int RamSize = 0x40000;
+nuint ramBase = 0x10000000;
+var ram = new byte[RamSize];
+
+// Decoys first, so a locator that simply takes the first plausible-looking hit fails:
+// a second creature record ("slime"), and a 12-byte window that looks like a status block
+// for a different character.
+var slime = BuildActor(42, 7);
+Array.Copy(System.Text.Encoding.ASCII.GetBytes("slime\0"), 0, slime, CharacterFormat.ActorName, 6);
+Array.Copy(slime, 0, ram, 0x800, slime.Length);
+var decoyStatus = new byte[CharacterFormat.StatusSize];
+CharacterFormat.WriteU16(decoyStatus, CharacterFormat.StatusCurrentHp, 12);
+CharacterFormat.WriteU16(decoyStatus, CharacterFormat.StatusCurrentSp, 3);
+CharacterFormat.WriteU16(decoyStatus, CharacterFormat.StatusMaxHp, 12);
+CharacterFormat.WriteU16(decoyStatus, CharacterFormat.StatusMaxSp, 3);
+CharacterFormat.WriteU16(decoyStatus, CharacterFormat.StatusMaxEnc, 40);
+Array.Copy(decoyStatus, 0, ram, 0x900, decoyStatus.Length);
+
+const int StatusOffset = 0x2410;
+const int RecordOffset = 0x11D0;
+const int ActorOffset = 0x1300;
+Array.Copy(status, 0, ram, StatusOffset, status.Length);
+Array.Copy(record, 0, ram, RecordOffset, record.Length);
+Array.Copy(actor, 0, ram, ActorOffset, actor.Length);
+
+var fake = new FakeMemory(ramBase, ram);
+var located = CharacterLocator.Find(fake);
+Check("locator found a character", located != null, true);
+Check("actor address", located?.ActorAddress, ramBase + ActorOffset);
+Check("status address", located?.StatusAddress, ramBase + StatusOffset);
+Check("record address", located?.RecordAddress, ramBase + RecordOffset);
+Check("located attributes", located == null ? "" : string.Join(",", located.Record.Take(6)), "15,13,11,10,14,12");
+Check("located max HP", located == null ? -1 : CharacterFormat.ReadU16(located.Status, CharacterFormat.StatusMaxHp), 39);
+
+// A structure that straddles the page-sized read boundary must still be found.
+var ram2 = new byte[RamSize];
+Array.Copy(actor, 0, ram2, 0x1000 - 4, actor.Length);
+Array.Copy(status, 0, ram2, 0x2000 - 6, status.Length);
+Array.Copy(record, 0, ram2, 0x3000 - 5, record.Length);
+var straddled = CharacterLocator.Find(new FakeMemory(ramBase, ram2));
+Check("structures spanning a page boundary are found", straddled != null, true);
+Check("straddled actor address", straddled?.ActorAddress, ramBase + 0x1000 - 4);
+
+// No character in play (the game's menus) must report nothing rather than guess.
+Check("empty RAM yields no character", CharacterLocator.Find(new FakeMemory(ramBase, new byte[RamSize])), null);
+
+// An actor with no matching status block is not enough on its own.
+var actorOnly = new byte[RamSize];
+Array.Copy(actor, 0, actorOnly, 0x1300, actor.Length);
+Check("actor without status block yields nothing", CharacterLocator.Find(new FakeMemory(ramBase, actorOnly)), null);
+Console.WriteLine();
+
+// Optional: point the harness at a raw guest-RAM dump (`FormatCheck <dump.bin>`) to re-run the
+// locator against real memory. Dumps are not committed, so this is skipped when no path is given.
+if (args.Length > 0 && File.Exists(args[0]))
+{
+    Console.WriteLine($"CharacterLocator over the dump {Path.GetFileName(args[0])}:");
+    var dump = File.ReadAllBytes(args[0]);
+    var hit = CharacterLocator.Find(new FakeMemory(0, dump));
+    Check("dump yields a character", hit != null, true);
+    if (hit != null)
+    {
+        Console.WriteLine($"         actor  0x{(ulong)hit.ActorAddress:X}");
+        Console.WriteLine($"         status 0x{(ulong)hit.StatusAddress:X}");
+        Console.WriteLine($"         record 0x{(ulong)hit.RecordAddress:X}");
+        Console.WriteLine($"         attributes {string.Join(",", hit.Record.Take(6))}");
+        Check("dump attributes are in range", hit.Record.Take(6).All(b => b >= 1 && b <= 20), true);
+        Check("dump maxima agree across structures",
+            CharacterFormat.ReadU16(hit.Status, CharacterFormat.StatusMaxHp)
+                == CharacterFormat.ReadU16(hit.Record, CharacterFormat.RecordMaxHp), true);
+    }
+    Console.WriteLine();
+}
+
+Console.WriteLine("CharacterViewModel writes to the right structure:");
+var host = new FakeCharacterHost();
+var vm = new CharacterViewModel(host, located!);
+Check("current HP read from the actor snapshot", vm.CurrentHp, 39);
+Check("current SP read from the actor snapshot", vm.CurrentSp, 39);
+Check("actor vitals captured by the locator", located!.ActorVitals.Length, 4);
+Check("max HP read from record", vm.MaxHp, 39);
+Check("max ENC read from record", vm.MaxEncumbrance, 75);
+Check("attribute rows", vm.Attributes.Count, 6);
+Check("first attribute row is Strength 15", $"{vm.Attributes[0].Name} {vm.Attributes[0].Value}", "Strength 15");
+
+vm.CurrentHp = 250;
+Check("current HP writes to the actor", host.Last.address, located!.ActorAddress + CharacterFormat.ActorCurrentHp);
+Check("current HP writes two bytes", host.Last.length, 2);
+Check("current HP value", host.LastWord, 250);
+
+vm.MaxHp = 400;
+Check("max HP writes to the record", host.Last.address, located.RecordAddress + CharacterFormat.RecordMaxHp);
+Check("max HP value", host.LastWord, 400);
+
+vm.Attributes[2].Value = 19;
+Check("attribute writes one byte to the record",
+    host.Last.address, located.RecordAddress + (nuint)(CharacterFormat.RecordAttributes + 2));
+Check("attribute write length", host.Last.length, 1);
+Check("attribute value", host.Last.bytes[0], (byte)19);
+
+vm.Attributes[2].Value = 99;
+Check("attribute edits clamp to the game's cap of 20", host.Last.bytes[0], (byte)GameFacts.MaxAttribute);
+
+vm.MaxAttributes();
+Check("MaxAttributes raises every attribute", vm.Attributes.All(a => a.Value == GameFacts.MaxAttribute), true);
+
+vm.Refill();
+Check("Refill sets current HP to the maximum", vm.CurrentHp, vm.MaxHp);
+Check("Refill sets current SP to the maximum", vm.CurrentSp, vm.MaxSp);
+
+int writesBefore = host.Writes.Count;
+vm.ApplyFreezes();
+Check("no freeze means no writes", host.Writes.Count, writesBefore);
+vm.FreezeHp = true;
+vm.ApplyFreezes();
+Check("freezing HP re-writes the actor", host.Writes.Count, writesBefore + 1);
+Check("freeze targets the actor HP field", host.Last.address, located.ActorAddress + CharacterFormat.ActorCurrentHp);
+Check("freeze re-writes the value held when it was ticked", host.LastWord, vm.MaxHp);
+
+var stale = new byte[CharacterFormat.RecordSize];
+Check("refresh rejects a record that no longer validates",
+    vm.Refresh(status, stale, new byte[4]), false);
+Console.WriteLine();
+
+Console.WriteLine("ScanGuide recipes (only what the locator does not cover):");
+Check("recipe count is 4", ScanGuide.Recipes.Count, 4);
 var level = ScanGuide.Recipes.First(r => r.Field == "level");
-Check("level is Int16", level.Width, ScanWidth.Int16);
+Check("level is Byte", level.Width, ScanWidth.Byte);
 Check("level max is 50", level.TypicalMax, (long)GameFacts.TotalLevels);
+var score = ScanGuide.Recipes.First(r => r.Field == "score");
+Check("score is Int16", score.Width, ScanWidth.Int16);
+Check("score range is '0..65535'", score.Range, "0..65535");
+Check("every recipe has instructions", ScanGuide.Recipes.All(r => r.Instructions.Length > 40), true);
+Check("every recipe default fits its width",
+    ScanGuide.Recipes.All(r => ScanValue.FitsWidth(r.SuggestedDefault, r.Width)), true);
 Console.WriteLine();
 
-Console.WriteLine("SpellBook (Confirmed from manual/walkthrough):");
+Console.WriteLine("SpellBook (manual and walkthrough):");
 Check("spell count is 14", SpellBook.Spells.Count, 14);
 Check("class name count is 6", SpellBook.ClassNames.Length, 6);
 Check("proficiency name count is 7", SpellBook.ProficiencyNames.Length, 7);
@@ -68,13 +268,13 @@ Check("Fireball is Wizardry", SpellBook.Spells.First(s => s.Name == "Fireball").
 Check("Fireball costs 20 SP", SpellBook.Spells.First(s => s.Name == "Fireball").SpCost, 20);
 Check("Freeze is Enchantry", SpellBook.Spells.First(s => s.Name == "Freeze").Class, "Enchantry");
 Check("Freeze costs 40 SP", SpellBook.Spells.First(s => s.Name == "Freeze").SpCost, 40);
-var healingSpells = SpellBook.ByClass("Healing");
-Check("Healing has 1 spell", healingSpells.Count, 1);
-var sorcerySpells = SpellBook.ByClass("Sorcery");
-Check("Sorcery has 3 spells", sorcerySpells.Count, 3);
+Check("Healing has 1 spell", SpellBook.ByClass("Healing").Count, 1);
+Check("Sorcery has 3 spells", SpellBook.ByClass("Sorcery").Count, 3);
+Check("every spell belongs to a known class",
+    SpellBook.Spells.All(s => SpellBook.ClassNames.Contains(s.Class)), true);
 Console.WriteLine();
 
-Console.WriteLine("WeaponBook (Confirmed from manual):");
+Console.WriteLine("WeaponBook (manual):");
 Check("weapon type count is 7", WeaponBook.Types.Count, 7);
 Check("proficiency name count is 10", WeaponBook.ProficiencyNames.Length, 10);
 Check("first type is Clubbing", WeaponBook.Types[0].Name, "Clubbing");
@@ -87,27 +287,59 @@ Check("ById(-1) is null", WeaponBook.ById(-1), null);
 Check("ById(7) is null", WeaponBook.ById(7), null);
 Console.WriteLine();
 
-Console.WriteLine("MonsterBook (Confirmed from walkthrough):");
-Check("monster count is 14", MonsterBook.Monsters.Count, 14);
-Check("category count is 5", MonsterBook.Categories.Count, 5);
-Check("first monster is Wraith", MonsterBook.Monsters[0].Name, "Wraith");
-Check("last monster is Djinn", MonsterBook.Monsters[^1].Name, "Djinn");
-Check("Jester is Ground Projectile", MonsterBook.Monsters.First(m => m.Name == "Jester").Category, "Ground Projectile");
-Check("Slime is Slither Poison", MonsterBook.Monsters.First(m => m.Name == "Slime").Category, "Slither Poison");
-Check("Beholder is Flying Projectile", MonsterBook.Monsters.First(m => m.Name == "Beholder").Category, "Flying Projectile");
+Console.WriteLine("MonsterBook (decoded from CR.DAT):");
+Check("monster count matches CR.DAT", MonsterBook.Monsters.Count, GameFacts.CreatureCount);
+Check("first creature is Slime", MonsterBook.Monsters[0].Name, "Slime");
+Check("the player is not listed", MonsterBook.Monsters.Any(m => m.Name == "Player"), false);
+Check("Wraith is melee", MonsterBook.Monsters.First(m => m.Name == "Wraith").Ranged, false);
+Check("Beholder attacks at range", MonsterBook.Monsters.First(m => m.Name == "Beholder").Ranged, true);
+Check("Djinn attacks at range", MonsterBook.Monsters.First(m => m.Name == "Djinn").Ranged, true);
+Check("Jester attacks at range", MonsterBook.Monsters.First(m => m.Name == "Jester").Ranged, true);
+Check("Spartan Warrior has 25 Strength",
+    MonsterBook.Monsters.First(m => m.Name == "Spartan Warrior").Strength, 25);
+Check("ranged creatures", MonsterBook.Ranged.Count, 7);
+Check("every creature has a name", MonsterBook.Monsters.All(m => m.Name.Length > 2), true);
+Check("attributes stay inside the byte the record holds",
+    MonsterBook.Monsters.All(m => m.Strength <= 40 && m.Agility <= 40 && m.Endurance <= 40
+                               && m.Accuracy <= 40 && m.Talent <= 40 && m.Power <= 40), true);
+Check("Attack column reads from Ranged",
+    MonsterBook.Monsters.First(m => m.Name == "Beholder").Attack, "Ranged");
 Console.WriteLine();
 
-Console.WriteLine("RuneBook (Confirmed from manual):");
-Check("rune count is 25", RuneBook.Runes.Count, 25);
-Check("power rune count is 5", RuneBook.PowerRunes.Count, 5);
-Check("first rune is Uraz (Strength)", RuneBook.Runes[0].Norse, "Uraz");
-Check("first rune is power rune", RuneBook.Runes[0].IsPowerRune, true);
-Check("Raido is not power rune", RuneBook.Runes.First(r => r.Norse == "Raido").IsPowerRune, false);
-Check("Raido saves game", RuneBook.Runes.First(r => r.Norse == "Raido").Effect, "Saves the game (one use per rune)");
+Console.WriteLine("ItemBook (decoded from OBJ.DAT):");
+Check("object count matches OBJ.DAT", ItemBook.Items.Count, GameFacts.ObjectCount);
+Check("ids are the table order", ItemBook.Items.Select((it, i) => it.Id == i).All(b => b), true);
+Check("first object is Random Object", ItemBook.Items[0].Name, "Random Object");
+Check("ById(1) is Bolt", ItemBook.ById(1)?.Name, "Bolt");
+Check("ById(-1) is null", ItemBook.ById(-1), null);
+Check("ById(past end) is null", ItemBook.ById(ItemBook.Items.Count), null);
+Check("25 runes in the object table", ItemBook.Items.Count(i => i.Category == "Rune"), GameFacts.TotalRunes);
+Check("Uraz Rune is a rune", ItemBook.Items.First(i => i.Name == "Uraz Rune").Category, "Rune");
+Check("Fireball Scroll is magic", ItemBook.Items.First(i => i.Name == "Fireball Scroll").Category, "Magic");
+Check("Jera Potion is a potion", ItemBook.Items.First(i => i.Name == "Jera Potion").Category, "Potion");
+Check("Gold Key is a key", ItemBook.Items.First(i => i.Name == "Gold Key").Category, "Key");
+Check("every object is named", ItemBook.Items.All(i => i.Name.Length > 0), true);
+Console.WriteLine();
+
+Console.WriteLine("RuneBook (game object table plus the manual's meanings):");
+Check("rune count is 25", RuneBook.Runes.Count, GameFacts.TotalRunes);
+Check("power rune count is 5", RuneBook.PowerRunes.Count, GameFacts.PowerRuneCount);
+Check("first rune is Uraz", RuneBook.Runes[0].Norse, "Uraz");
+Check("first rune is a power rune", RuneBook.Runes[0].IsPowerRune, true);
+Check("Raido is not a power rune", RuneBook.Runes.First(r => r.Norse == "Raido").IsPowerRune, false);
+Check("Raido saves the game", RuneBook.Runes.First(r => r.Norse == "Raido").Effect,
+    "Saves the game (one save per rune)");
 Check("Thurisaz is Gateway", RuneBook.Runes.First(r => r.Norse == "Thurisaz").English, "Gateway");
-Check("all 5 power runes have IsPowerRune", RuneBook.PowerRunes.All(r => r.IsPowerRune), true);
 Check("power rune names", string.Join(",", RuneBook.PowerRunes.Select(r => r.Norse)),
     "Uraz,Ehwaz,Eihwaz,Teiwaz,Inguz");
+Check("Kano keeps the manual's spelling as a variant",
+    RuneBook.Runes.First(r => r.Norse == "Kano").ManualSpelling, "Keno");
+Check("Othila keeps the manual's spelling as a variant",
+    RuneBook.Runes.First(r => r.Norse == "Othila").ManualSpelling, "Othilia");
+Check("Variant is blank when the spellings agree",
+    RuneBook.Runes.First(r => r.Norse == "Uraz").Variant, "");
+Check("every rune name appears in the game's object table",
+    RuneBook.Runes.All(r => ItemBook.Items.Any(i => i.Name == r.Norse + " Rune")), true);
 Console.WriteLine();
 
 Console.WriteLine("ScanValue helpers (parse / fit / canonicalize):");
@@ -157,6 +389,16 @@ Console.WriteLine();
 Console.WriteLine(failures == 0 ? "ALL CHECKS PASSED" : $"{failures} CHECK(S) FAILED");
 return failures == 0 ? 0 : 1;
 
+static byte[] BuildActor(int hp, int sp)
+{
+    var buf = new byte[CharacterFormat.ActorSize];
+    CharacterFormat.WriteU16(buf, CharacterFormat.ActorCurrentHp, hp);
+    CharacterFormat.WriteU16(buf, CharacterFormat.ActorCurrentSp, sp);
+    var name = System.Text.Encoding.ASCII.GetBytes(CharacterFormat.PlayerActorName + "\0");
+    Array.Copy(name, 0, buf, CharacterFormat.ActorName, name.Length);
+    return buf;
+}
+
 sealed class FakeHost(List<(nuint, long, ScanWidth)> writes) : IScanHost
 {
     public bool Write(nuint address, long value, ScanWidth width)
@@ -166,4 +408,45 @@ sealed class FakeHost(List<(nuint, long, ScanWidth)> writes) : IScanHost
     }
     public bool Read(nuint address, ScanWidth width, out long value) { value = 0; return false; }
     public void ReportWriteFailure(nuint address) { }
+}
+
+/// <summary>A single flat region of fake guest RAM, so the locator can run with no game attached.</summary>
+sealed class FakeMemory(nuint baseAddress, byte[] ram) : IMemorySource
+{
+    public IEnumerable<MemoryRegion> EnumerateRegions()
+    {
+        yield return new MemoryRegion(baseAddress, (nuint)ram.Length);
+    }
+
+    public int Read(nuint address, byte[] buffer, int count)
+    {
+        if (address < baseAddress) return 0;
+        long offset = (long)(address - baseAddress);
+        if (offset >= ram.Length) return 0;
+        int n = (int)Math.Min(count, ram.Length - offset);
+        if (n > buffer.Length) n = buffer.Length;
+        Array.Copy(ram, offset, buffer, 0, n);
+        return n;
+    }
+}
+
+sealed class FakeCharacterHost : ICharacterHost
+{
+    public List<(nuint address, byte[] bytes, int length)> Writes { get; } = new();
+
+    public bool IsAttached => true;
+
+    // Mirrors ProcessMemory.WriteRange: the offset applies to the address as well as the source,
+    // so what is recorded is the effective address the game would see.
+    public bool WriteBytes(nuint structureAddress, byte[] source, int offset, int length)
+    {
+        var slice = new byte[length];
+        Array.Copy(source, offset, slice, 0, length);
+        Writes.Add((structureAddress + (nuint)offset, slice, length));
+        return true;
+    }
+
+    public (nuint address, byte[] bytes, int length) Last => Writes[^1];
+
+    public int LastWord => Last.length >= 2 ? Last.bytes[0] | (Last.bytes[1] << 8) : Last.bytes[0];
 }

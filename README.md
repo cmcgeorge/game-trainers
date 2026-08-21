@@ -104,7 +104,7 @@ Shared options (identical for the root launcher and every trainer):
 - **`-Test`** — run the trainer's verification harness (warns if it has none).
 - **`-Publish`** — publish a single self-contained win-x64 exe; skips launch.
 
-Only `AirborneRangerTrainer`, `AlternateRealityTrainer`, `AmberstarTrainer`, `BardsTale1Trainer`, `BattleTech1Trainer`, `BeachHead2000Trainer`, `Civilization3ConquestsTrainer`, `ColonizationTrainer`, `DarkDesigns1Trainer`, `DarklandsTrainer`, `DragonWarsTrainer`, `EyeOfTheBeholder1Trainer`,
+Only `AirborneRangerTrainer`, `AlternateRealityTrainer`, `AmberstarTrainer`, `BardsTale1Trainer`, `BattleTech1Trainer`, `BeachHead2000Trainer`, `Civilization3ConquestsTrainer`, `ColonizationTrainer`, `DarkDesigns1Trainer`, `DarklandsTrainer`, `DarksypreTrainer`, `DragonWarsTrainer`, `EyeOfTheBeholder1Trainer`,
 `HillsfarTrainer`, `ImperialismIITrainer`, `JumpmanLivesTrainer`, `LegendOfFaerghailTrainer`, `LegendOfGrimrock1Trainer`, `MightAndMagic1Trainer`, `MinesOfTitanTrainer`, `MoriaTrainer`, `PiratesTrainer`, `PoolOfRadianceTrainer`,
 `RailroadTycoonTrainer`, `SwordOfAragonTrainer`, `SwordOfTheSamuraiTrainer`, `ThePerfectGeneral2Trainer`, `TheQuestTrainer`, `WarOfTheLanceTrainer`, `WastelandTrainer`, and
 `Wizardry1Trainer` ship a verification harness; `-Test` warns and is ignored on the others (including `QuestForGlory1Trainer`). `SwordOfTheSamuraiTrainer` also has `.\Edit-SotsSave.ps1` for offline save editing.

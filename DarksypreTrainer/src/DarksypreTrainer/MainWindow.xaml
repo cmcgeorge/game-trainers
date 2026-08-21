@@ -13,6 +13,16 @@
             <Setter Property="Margin" Value="2"/>
             <Setter Property="Padding" Value="8,3"/>
         </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+        </Style>
+        <Style x:Key="LiveValue" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
+        </Style>
     </Window.Resources>
 
     <DockPanel>
@@ -33,10 +43,102 @@
 
         <TabControl Margin="6">
 
+            <TabItem Header="Character">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Locate character" Command="{Binding LocateCommand}"
+                                        ToolTip="Search the attached emulator's memory for the live character. Runs automatically on attach."/>
+                                <Button Content="Refill HP &amp; SP" Command="{Binding RefillCommand}"
+                                        ToolTip="Set current hit points and spell points to their maxima."/>
+                                <Button Content="Max attributes" Command="{Binding MaxAttributesCommand}"
+                                        ToolTip="Raise all six attributes to 20, the game's own cap."/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding CharacterStatus}" TextWrapping="Wrap" Margin="2,6,0,0"
+                                       Foreground="#555" FontSize="11"/>
+                        </StackPanel>
+                    </Border>
+
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" IsEnabled="{Binding HasCharacter}">
+                        <StackPanel Margin="8" DataContext="{Binding Character}">
+                            <GroupBox Header="Vitals" Padding="8">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="120"/>
+                                        <ColumnDefinition Width="80"/>
+                                        <ColumnDefinition Width="100"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Grid.Row="0" Grid.Column="1" Text="Live" Style="{StaticResource FieldLabel}"
+                                               FontWeight="Bold"/>
+                                    <TextBlock Grid.Row="0" Grid.Column="2" Text="Maximum" Style="{StaticResource FieldLabel}"
+                                               FontWeight="Bold"/>
+
+                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Hit points" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CurrentHp}" Style="{StaticResource LiveValue}"/>
+                                    <TextBox   Grid.Row="1" Grid.Column="2" Text="{Binding MaxHp, UpdateSourceTrigger=LostFocus}"/>
+                                    <CheckBox  Grid.Row="1" Grid.Column="3" Content="Freeze" VerticalAlignment="Center"
+                                               IsChecked="{Binding FreezeHp}"
+                                               ToolTip="Re-write current hit points every ~200 ms so nothing can hurt you below the value they had when you ticked this."/>
+
+                                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Spell points" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding CurrentSp}" Style="{StaticResource LiveValue}"/>
+                                    <TextBox   Grid.Row="2" Grid.Column="2" Text="{Binding MaxSp, UpdateSourceTrigger=LostFocus}"/>
+                                    <CheckBox  Grid.Row="2" Grid.Column="3" Content="Freeze" VerticalAlignment="Center"
+                                               IsChecked="{Binding FreezeSp}"
+                                               ToolTip="Re-write current spell points every ~200 ms so casting never runs you dry."/>
+
+                                    <TextBlock Grid.Row="3" Grid.Column="0" Text="Encumbrance" Style="{StaticResource FieldLabel}"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding CurrentEncumbrance}" Style="{StaticResource LiveValue}"/>
+                                    <TextBox   Grid.Row="3" Grid.Column="2" Text="{Binding MaxEncumbrance, UpdateSourceTrigger=LostFocus}"/>
+                                    <TextBlock Grid.Row="3" Grid.Column="4" Foreground="#777" FontSize="11"
+                                               VerticalAlignment="Center" TextWrapping="Wrap"
+                                               Text="Carried weight is recomputed by the game from what you hold, so only the maximum is editable."/>
+                                </Grid>
+                            </GroupBox>
+
+                            <GroupBox Header="Attributes" Padding="8" Margin="0,8,0,0">
+                                <StackPanel>
+                                    <ItemsControl ItemsSource="{Binding Attributes}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                                    <TextBlock Text="{Binding Name}" Width="120"
+                                                               Style="{StaticResource FieldLabel}"/>
+                                                    <TextBox Width="80" Text="{Binding Value, UpdateSourceTrigger=LostFocus}"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Foreground="#777" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"
+                                               Text="Attribute edits are clamped to 1..20, the cap the manual states. The character sheet redraws them the next time the game repaints it — press A in game to force it."/>
+                                </StackPanel>
+                            </GroupBox>
+
+                            <GroupBox Header="Where this came from" Padding="8" Margin="0,8,0,0">
+                                <TextBlock Text="{Binding AddressSummary}" FontFamily="Consolas" FontSize="11"
+                                           Foreground="#555" TextWrapping="Wrap"/>
+                            </GroupBox>
+                        </StackPanel>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+
             <TabItem Header="Value Scanner">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
                         <StackPanel>
+                            <TextBlock Text="For anything the Character tab does not cover — score, level number, inventory. HP, SP, encumbrance and the attributes are found automatically; you do not need to scan for them."
+                                       TextWrapping="Wrap" Foreground="#555" FontSize="11" Margin="0,0,0,6"/>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="Type:" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                 <ComboBox Width="80" ItemsSource="{Binding Widths}"
@@ -91,6 +193,7 @@
                     <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
                         <StackPanel Orientation="Horizontal">
                             <Button Content="Freeze all"      Command="{Binding FreezeAllCommand}"/>
+                            <Button Content="Unfreeze all"    Command="{Binding UnfreezeAllCommand}"/>
                             <Button Content="Remove selected" Command="{Binding RemoveFrozenCommand}"/>
                             <TextBlock VerticalAlignment="Center" Margin="10,0,0,0" Foreground="#555"
                                        Text="Pin any value here via the Value Scanner tab. Edit Target to poke a value; tick Freeze to re-write it every ~200 ms."/>
@@ -116,7 +219,7 @@
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
                         <TextBlock TextWrapping="Wrap" Foreground="#555"
-                                   Text="Reference: all 14 confirmed spells across the 6 magic classes. SP cost is split 50/50 between preparation and casting. Spells are found on scrolls; add them to the spell book (found on Level 1) for repeated use."/>
+                                   Text="Reference: all 14 spells across the 6 magic classes — the same 14 the game's own object table ships scrolls for. SP cost is split 50/50 between preparation and casting. Spells are found on scrolls; add them to the spell book (found on Level 1) for repeated use. F1–F7 cast prepared spells."/>
                     </Border>
                     <DataGrid ItemsSource="{Binding Spells}" AutoGenerateColumns="False"
                               CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True"
@@ -156,17 +259,40 @@
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
                         <TextBlock TextWrapping="Wrap" Foreground="#555"
-                                   Text="Reference: monster categories and tactics. Monsters become exponentially harder on higher levels. When near death, monsters run away. Flying monsters and slithering monsters do not trigger weight plates."/>
+                                   Text="Every creature the game ships in CR.DAT, with the attributes read out of its own record — monsters are not held to the player's cap of 20. &quot;Tier&quot; rises with the depth a creature first appears at. Ranged attackers throw fireballs, bolts or gas: close to melee range to suppress them, or Hold/Freeze them."/>
                     </Border>
                     <DataGrid ItemsSource="{Binding Monsters}" AutoGenerateColumns="False"
                               CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True"
                               HeadersVisibility="Column" Margin="0,6,0,0">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Name"      Binding="{Binding Name}"      Width="120"/>
-                            <DataGridTextColumn Header="Category"  Binding="{Binding Category}"  Width="130"/>
-                            <DataGridTextColumn Header="Movement"  Binding="{Binding Movement}"  Width="70"/>
-                            <DataGridTextColumn Header="Attack"    Binding="{Binding Attack}"    Width="120"/>
-                            <DataGridTextColumn Header="Tactics"   Binding="{Binding Tactics}"   Width="*"/>
+                            <DataGridTextColumn Header="Name"    Binding="{Binding Name}"       Width="130"/>
+                            <DataGridTextColumn Header="Attack"  Binding="{Binding Attack}"     Width="60"/>
+                            <DataGridTextColumn Header="Tier"    Binding="{Binding Tier}"       Width="40"/>
+                            <DataGridTextColumn Header="STR"     Binding="{Binding Strength}"   Width="40"/>
+                            <DataGridTextColumn Header="AGI"     Binding="{Binding Agility}"    Width="40"/>
+                            <DataGridTextColumn Header="END"     Binding="{Binding Endurance}"  Width="40"/>
+                            <DataGridTextColumn Header="ACC"     Binding="{Binding Accuracy}"   Width="40"/>
+                            <DataGridTextColumn Header="TAL"     Binding="{Binding Talent}"     Width="40"/>
+                            <DataGridTextColumn Header="PWR"     Binding="{Binding Power}"      Width="40"/>
+                            <DataGridTextColumn Header="Tactics" Binding="{Binding Tactics}"    Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Items">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
+                        <TextBlock TextWrapping="Wrap" Foreground="#555"
+                                   Text="Every object in the game's own OBJ.DAT table, in table order. The index is the object's slot in that table — useful when reading raw memory. Press T in game to take the item you are standing on."/>
+                    </Border>
+                    <DataGrid ItemsSource="{Binding Items}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True"
+                              HeadersVisibility="Column" Margin="0,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="#"        Binding="{Binding Id}"       Width="50"/>
+                            <DataGridTextColumn Header="Category" Binding="{Binding Category}" Width="90"/>
+                            <DataGridTextColumn Header="Name"     Binding="{Binding Name}"     Width="*"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
@@ -176,7 +302,7 @@
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
                         <TextBlock TextWrapping="Wrap" Foreground="#555"
-                                   Text="Reference: all 25 runes. The 5 power runes (marked with a check) must be collected and exchanged on Level 36 before entering the final 3 levels. Raido saves the game (one use per rune). Thurisaz takes you to the next level."/>
+                                   Text="All 25 runes, named as the game's own object table spells them. The 5 power runes (marked with a check) must be collected and exchanged on Level 36 before entering the final levels. Raido saves the game (one use per rune). Thurisaz takes you to the next level."/>
                     </Border>
                     <DataGrid ItemsSource="{Binding Runes}" AutoGenerateColumns="False"
                               CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True"
@@ -186,6 +312,7 @@
                             <DataGridTextColumn Header="English"  Binding="{Binding English}" Width="100"/>
                             <DataGridCheckBoxColumn Header="Power" Binding="{Binding IsPowerRune, Mode=OneWay}" Width="50"/>
                             <DataGridTextColumn Header="Effect"   Binding="{Binding Effect}"  Width="*"/>
+                            <DataGridTextColumn Header="Variant"  Binding="{Binding Variant}" Width="110"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
