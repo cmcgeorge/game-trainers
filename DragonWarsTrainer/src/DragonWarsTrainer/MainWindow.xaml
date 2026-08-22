@@ -213,6 +213,10 @@
                                     <Button Content="Max Attributes" Click="MaxAttributes_Click"/>
                                     <Button Content="Max Skills" Click="MaxSkills_Click"/>
                                     <Button Content="Learn All Spells" Click="LearnSpells_Click"/>
+                                    <ComboBox x:Name="SpellSchoolCombo" Width="120"
+                                              ItemsSource="{Binding SpellSchoolNames}"
+                                              SelectedIndex="0"/>
+                                    <Button Content="Learn School" Click="LearnSchoolSpells_Click"/>
                                     <Button Content="Max Money" Click="MaxMoney_Click"/>
                                     <Button Content="Max Everything" Click="MaxEverything_Click"/>
                                 </WrapPanel>

@@ -88,6 +88,14 @@ public sealed class CharacterRecord
             U8(RosterFormat.OffSpells + i, 0xFF);
     }
 
+    /// <summary>Marks every spell in a school known (sets the bits for that school's spells).</summary>
+    public void LearnSchoolSpells(int schoolIndex)
+    {
+        if (schoolIndex < 0 || schoolIndex >= RosterFormat.SpellsBySchool.Length) return;
+        foreach (var (byteIndex, bit) in RosterFormat.SpellsBySchool[schoolIndex])
+            SetSpell(byteIndex, bit, true);
+    }
+
     // --- identity / progression ----------------------------------------------
     /// <summary>Unspent advancement points the character has available to allocate (e.g. after levelling up).</summary>
     public int UnspentPoints { get => U8(RosterFormat.OffUnspentPoints); set => U8(RosterFormat.OffUnspentPoints, value); }

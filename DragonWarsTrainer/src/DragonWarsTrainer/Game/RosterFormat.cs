@@ -126,6 +126,37 @@ public static class RosterFormat
         new[] { "Summon Salamander", "Charger", "Zak's Speed", "Kill Ray", "Prison", "(unused)", "(unused)", "(unused)" }
     };
 
+    /// <summary>
+    /// Maps each magic school to the (spell-byte-index, bit-position) pairs of its spells in the
+    /// roster bitfield, so the trainer can learn one school at a time instead of all-or-nothing.
+    /// </summary>
+    public static readonly string[] SpellSchoolNames =
+        { "Low Magic", "High Magic", "Druid Magic", "Sun Magic", "Miscellaneous" };
+
+    public static readonly (int ByteIndex, int Bit)[][] SpellsBySchool =
+    {
+        // Low Magic: Mage Fire, Disarm, Charm, Luck, Lesser Heal, Mage Light
+        new[] { (0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 5) },
+        // High Magic: Fire Light, Elvar's Fire, Poog's Vortex, Ice Chill, Big Chill, Dazzle,
+        //   Mystic Might, Reveal Glamour, Sala's Swift, Vorn's Guard, Cowardice, Healing,
+        //   Group Heal, Cloak Arcane, Sense Traps, Air/Earth/Water/Fire Summon
+        new[] { (0, 6), (0, 7), (1, 0), (1, 1), (1, 2), (1, 3), (1, 4), (1, 5),
+                (1, 6), (1, 7), (2, 0), (2, 1), (2, 2), (2, 3), (2, 4), (2, 5),
+                (2, 6), (2, 7), (3, 0) },
+        // Druid Magic: Death Curse, Fire Blast, Insect Plague, Whirl Wind, Scare, Brambles,
+        //   Greater Healing, Cure All, Create Wall, Soften Stone, Invoke Spirit, Beast Call, Wood Spirit
+        new[] { (3, 1), (3, 2), (3, 3), (3, 4), (3, 5), (3, 6), (3, 7),
+                (4, 0), (4, 1), (4, 2), (4, 3), (4, 4), (4, 5) },
+        // Sun Magic: Sun Stroke, Exorcism, Rage/Wrath of Mithras, Fire Storm, Inferno, Holy Aim,
+        //   Battle Power, Column of Fire, Mithras' Bless, Armor of Light, Sun Light, Heal,
+        //   Major Healing, Disarm Trap, Guidance, Radiance, Summon Salamander, Charger
+        new[] { (4, 6), (4, 7), (5, 0), (5, 1), (5, 2), (5, 3), (5, 4), (5, 5),
+                (5, 6), (5, 7), (6, 1), (6, 2), (6, 3), (6, 4), (6, 5), (6, 6),
+                (6, 7), (7, 0), (7, 1) },
+        // Miscellaneous: Light Flash, Zak's Speed, Kill Ray, Prison
+        new[] { (6, 0), (7, 2), (7, 3), (7, 4) },
+    };
+
     public static readonly string[] Genders = { "Male", "Female", "Sometimes", "Never" };
 
     public static string GenderName(int v) => v >= 0 && v < Genders.Length ? Genders[v] : $"?({v})";

@@ -22,6 +22,7 @@ public sealed class CharacterViewModel : ObservableObject
     public ObservableCollection<ItemSlotViewModel> Items { get; } = new();
 
     public string[] GenderOptions => RosterFormat.Genders;
+    public string[] SpellSchoolNames => RosterFormat.SpellSchoolNames;
 
     private bool _freezeHealth;
     public bool FreezeHealth { get => _freezeHealth; set => SetField(ref _freezeHealth, value); }
@@ -234,6 +235,15 @@ public sealed class CharacterViewModel : ObservableObject
         Poke(RosterFormat.OffSpells, RosterFormat.SpellByteCount);
     }
 
+    public void LearnSchoolSpells(int schoolIndex)
+    {
+        Record.LearnSchoolSpells(schoolIndex);
+        var bits = RosterFormat.SpellsBySchool[schoolIndex];
+        int minByte = bits.Min(b => b.ByteIndex);
+        int maxByte = bits.Max(b => b.ByteIndex);
+        Poke(RosterFormat.OffSpells + minByte, maxByte - minByte + 1);
+    }
+
     public void MaxMoney()
     {
         Record.Gold = RosterFormat.MaxGold; Poke(RosterFormat.OffGold, 4);
@@ -279,9 +289,16 @@ public sealed class CharacterViewModel : ObservableObject
     /// </summary>
     public void RefreshLiveSummary(byte[] fresh)
     {
+        int invOff = InventoryFormat.OffInventory;
+        int invLen = InventoryFormat.SlotCount * InventoryFormat.SlotSize;
+        bool inventoryChanged = !fresh.AsSpan(invOff, invLen).SequenceEqual(
+            Record.Bytes.AsSpan(invOff, invLen));
         Array.Copy(fresh, 0, Record.Bytes, 0, RosterFormat.RecordSize);
-        foreach (var it in Items) it.Refresh();
-        OnPropertyChanged(nameof(ItemCount));
+        if (inventoryChanged)
+        {
+            foreach (var it in Items) it.Refresh();
+            OnPropertyChanged(nameof(ItemCount));
+        }
         RaiseDerived();
     }
 

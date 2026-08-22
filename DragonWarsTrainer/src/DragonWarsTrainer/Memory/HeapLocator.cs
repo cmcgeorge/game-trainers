@@ -37,6 +37,7 @@ public static class HeapLocator
 {
     private const int ChunkSize = 1 << 20;                 // 1 MiB scan window
     private const int WindowSize = 0x40;                   // bytes read to validate a candidate
+    private const int PageSize = 0x1000;                   // salvage granularity when a chunk read fails
     private const int MaxCandidates = 500_000;             // safety cap on the initial sweep
 
     // Board dimensions are stored as the true width/height (the wrap modulus in the engine). Real
@@ -67,26 +68,61 @@ public static class HeapLocator
         foreach (var region in mem.EnumerateRegions())
         {
             ct.ThrowIfCancellationRequested();
-            for (nuint offset = 0; offset < region.Size;)
+            nuint regionEnd = region.Base + region.Size;
+            for (nuint start = region.Base; start < regionEnd;)
             {
-                int readWant = (int)Math.Min((nuint)(ChunkSize + WindowSize), region.Size - offset);
-                int read = mem.Read(region.Base + offset, buf, readWant);
-                if (read < WindowSize) break;
+                nuint remaining = regionEnd - start;
+                int readWant = (int)Math.Min((nuint)(ChunkSize + WindowSize), remaining);
+                int read = mem.Read(start, buf, readWant);
 
-                for (int i = 0; i + WindowSize <= read; i++)
+                if (read >= WindowSize)
                 {
-                    if (Plausible(buf, i))
+                    for (int i = 0; i + WindowSize <= read; i++)
                     {
-                        hits.Add(region.Base + offset + (nuint)i);
+                        if (Plausible(buf, i))
+                        {
+                            hits.Add(start + (nuint)i);
+                            if (hits.Count >= MaxCandidates) return hits;
+                        }
+                    }
+                    start += (nuint)Math.Max(PageSize, read - WindowSize + 1);
+                }
+                else if (readWant > PageSize)
+                {
+                    foreach (var hit in ScanRegionByPage(mem, start, regionEnd, ct))
+                    {
+                        hits.Add(hit);
                         if (hits.Count >= MaxCandidates) return hits;
                     }
+                    break;
                 }
-
-                nuint advance = (nuint)Math.Max(1, read - WindowSize + 1);
-                offset += advance;
+                else
+                {
+                    break;
+                }
             }
         }
         return hits;
+    }
+
+    private static IEnumerable<nuint> ScanRegionByPage(ProcessMemory mem, nuint start, nuint regionEnd, CancellationToken ct)
+    {
+        int overlap = WindowSize - 1;
+        byte[] page = new byte[PageSize + overlap];
+        for (nuint p = start; p < regionEnd; p += PageSize)
+        {
+            ct.ThrowIfCancellationRequested();
+            nuint remaining = regionEnd - p;
+            int readLen = (int)Math.Min((nuint)(PageSize + overlap), remaining);
+            int read = mem.Read(p, page, readLen);
+            if (read < WindowSize && readLen > PageSize)
+                read = mem.Read(p, page, (int)Math.Min((nuint)PageSize, remaining));
+            if (read < WindowSize) continue;
+
+            for (int i = 0; i + WindowSize <= read; i++)
+                if (Plausible(page, i))
+                    yield return p + (nuint)i;
+        }
     }
 
     /// <summary>Reads and validates the Heap at a single address, or null if it no longer looks valid.</summary>
@@ -124,14 +160,15 @@ public static class HeapLocator
 
     /// <summary>
     /// Narrows a candidate set after the party walked a known number of squares in a straight line:
-    /// keeps only addresses whose combined X+Y shift equals <paramref name="steps"/> since
-    /// <paramref name="baseline"/> was captured. Matching by total distance means the caller does not
-    /// have to know which compass direction the party faced (Dragon Wars moves the party forward
-    /// relative to its facing), so a step counts whether it landed on the X or the Y axis. Distances
-    /// are measured on the wrapping grid (walking off one edge reappears on the other), and any
-    /// candidate whose board id changed is dropped, since leaving the map through a door randomises
-    /// the coordinates and would otherwise lock a false address. Returns the survivors with fresh
-    /// readings, ready to serve as the next baseline.
+    /// keeps only addresses whose position shifted by exactly <paramref name="steps"/> on a single
+    /// axis (X or Y, not both) since <paramref name="baseline"/> was captured. Dragon Wars moves the
+    /// party forward relative to its facing, so a straight-line walk always changes exactly one axis;
+    /// requiring single-axis movement rejects false candidates whose unrelated fields happened to
+    /// shift diagonally by the same total distance. Distances are measured on the wrapping grid
+    /// (walking off one edge reappears on the other), and any candidate whose board id changed is
+    /// dropped, since leaving the map through a door randomises the coordinates and would otherwise
+    /// lock a false address. Returns the survivors with fresh readings, ready to serve as the next
+    /// baseline.
     /// </summary>
     public static List<(nuint Address, HeapReading Reading)> NarrowBySteps(
         ProcessMemory mem, IEnumerable<(nuint Address, HeapReading Reading)> baseline,
@@ -144,9 +181,10 @@ public static class HeapLocator
             var now = Read(mem, addr);
             if (now is null) continue;
             if (now.Value.BoardId != before.BoardId) continue;   // walked off the map — not a straight-line step
-            int moved = WrappedDelta(now.Value.X, before.X, before.MaxX)
-                      + WrappedDelta(now.Value.Y, before.Y, before.MaxY);
-            if (moved != steps) continue;
+            int dx = WrappedDelta(now.Value.X, before.X, before.MaxX);
+            int dy = WrappedDelta(now.Value.Y, before.Y, before.MaxY);
+            bool straightMove = (dx == steps && dy == 0) || (dx == 0 && dy == steps);
+            if (!straightMove) continue;
             survivors.Add((addr, now.Value));
         }
         return survivors;

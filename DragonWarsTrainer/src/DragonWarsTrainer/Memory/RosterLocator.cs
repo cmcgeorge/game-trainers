@@ -99,17 +99,53 @@ public static class RosterLocator
                 int readLen = (int)Math.Min((nuint)(want + overlap), remaining);
                 int read = mem.Read(start, buf, readLen);
 
-                for (int i = 0; i + RosterBytes <= read; i++)
+                if (read >= RosterBytes)
                 {
-                    if (!IsValidCharacter(buf, i)) continue;   // cheap gate: slot 0 must be a real member
-                    var slots = TryReadRoster(buf, i, start);
-                    if (slots != null) return slots;
+                    for (int i = 0; i + RosterBytes <= read; i++)
+                    {
+                        if (!IsValidCharacter(buf, i)) continue;   // cheap gate: slot 0 must be a real member
+                        var slots = TryReadRoster(buf, i, start);
+                        if (slots != null) return slots;
+                    }
+                }
+                else if (want > PageSize)
+                {
+                    // ProcessMemory.Read is all-or-nothing, so a single unreadable page fails the
+                    // whole chunk. Rather than skip the entire 1 MiB window (which can hold the
+                    // roster past that page), salvage the rest of the region page by page.
+                    var salvaged = FindByStructureByPage(mem, start, regionEnd, ct);
+                    if (salvaged != null) return salvaged;
+                    break;
                 }
 
                 start += (nuint)Math.Max(PageSize, want);   // next window; overlap re-covers the seam
             }
         }
         return new List<LocatedCharacter>();
+    }
+
+    private static List<LocatedCharacter>? FindByStructureByPage(ProcessMemory mem, nuint start, nuint regionEnd, CancellationToken ct)
+    {
+        int overlap = RosterBytes - 1;
+        byte[] page = new byte[PageSize + overlap];
+        for (nuint p = start; p < regionEnd; p += PageSize)
+        {
+            ct.ThrowIfCancellationRequested();
+            nuint remaining = regionEnd - p;
+            int readLen = (int)Math.Min((nuint)(PageSize + overlap), remaining);
+            int read = mem.Read(p, page, readLen);
+            if (read < RosterBytes && readLen > PageSize)
+                read = mem.Read(p, page, (int)Math.Min((nuint)PageSize, remaining));
+            if (read < RosterBytes) continue;
+
+            for (int i = 0; i + RosterBytes <= read; i++)
+            {
+                if (!IsValidCharacter(page, i)) continue;
+                var slots = TryReadRoster(page, i, p);
+                if (slots != null) return slots;
+            }
+        }
+        return null;
     }
 
     // Validates the MaxSlots-slot window at <paramref name="offset"/> as a roster and, if it holds,

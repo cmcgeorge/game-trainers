@@ -26,6 +26,7 @@ public sealed class MapsViewModel : ObservableObject
 
     private List<(nuint Address, HeapReading Reading)> _candidates = new();
     private nuint? _lockedAddress;
+    private bool _hasNarrowed;
     private int? _liveBoardId;
     private int? _liveMaxX;
     private int? _liveMaxY;
@@ -270,10 +271,12 @@ public sealed class MapsViewModel : ObservableObject
         if (_isScanning) return;
 
         _scanCts?.Dispose();
-        _scanCts = new CancellationTokenSource();
-        var ct = _scanCts.Token;
+        var cts = new CancellationTokenSource();
+        _scanCts = cts;
+        var ct = cts.Token;
 
         _isScanning = true;
+        _hasNarrowed = false;
         _lockedAddress = null;
         ClearLiveBoardState();
         _candidates = new();
@@ -303,15 +306,12 @@ public sealed class MapsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Status = "Snapshot error: " + ex.Message;
+            if (cts == _scanCts) Status = "Snapshot error: " + ex.Message;
             return;
         }
         finally
         {
-            // Always clear the busy flag and refresh command state on whatever path we leave by, so a
-            // cancellation can never strand the buttons disabled regardless of who cancelled us.
-            _isScanning = false;
-            RaiseSearchState();
+            if (cts == _scanCts) { _isScanning = false; RaiseSearchState(); }
         }
 
         if (_getMem() != mem) return;   // detached/re-attached while scanning
@@ -334,8 +334,9 @@ public sealed class MapsViewModel : ObservableObject
         int steps = StepsMoved;
 
         _scanCts?.Dispose();
-        _scanCts = new CancellationTokenSource();
-        var ct = _scanCts.Token;
+        var cts = new CancellationTokenSource();
+        _scanCts = cts;
+        var ct = cts.Token;
 
         _isScanning = true;
         var previous = _candidates;
@@ -352,20 +353,18 @@ public sealed class MapsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Status = "Apply move error: " + ex.Message;
+            if (cts == _scanCts) Status = "Apply move error: " + ex.Message;
             return;
         }
         finally
         {
-            // Always clear the busy flag and refresh command state on whatever path we leave by, so a
-            // cancellation can never strand the buttons disabled regardless of who cancelled us.
-            _isScanning = false;
-            RaiseSearchState();
+            if (cts == _scanCts) { _isScanning = false; RaiseSearchState(); }
         }
 
         if (_getMem() != mem) return;   // detached/re-attached while narrowing
 
         _candidates = survivors;
+        _hasNarrowed = true;
         StepsMoved = 1;
         RaiseSearchState();
         Status = _candidates.Count switch
@@ -382,6 +381,7 @@ public sealed class MapsViewModel : ObservableObject
         _isScanning = false;
         _candidates = new();
         _lockedAddress = null;
+        _hasNarrowed = false;
         ClearLiveBoardState();
         StepsMoved = 1;
         RaiseSearchState();
@@ -400,6 +400,7 @@ public sealed class MapsViewModel : ObservableObject
         _isScanning = false;
         _candidates = new();
         _lockedAddress = null;
+        _hasNarrowed = false;
         ClearLiveBoardState();
         LivePosition = "";
         RaiseSearchState();
@@ -422,7 +423,7 @@ public sealed class MapsViewModel : ObservableObject
             return;
         }
 
-        if (_lockedAddress == null && _candidates.Count == 1)
+        if (_lockedAddress == null && _hasNarrowed && _candidates.Count == 1)
             _lockedAddress = _candidates[0].Address;
 
         if (_lockedAddress == null) return;
@@ -505,12 +506,14 @@ public sealed class MapsViewModel : ObservableObject
 
     private void RaiseSearchState()
     {
-        _lockedAddress = _candidates.Count == 1 && _lockedAddress == null ? _candidates[0].Address : _lockedAddress;
+        _lockedAddress = _hasNarrowed && _candidates.Count == 1 && _lockedAddress == null ? _candidates[0].Address : _lockedAddress;
         SearchState = _lockedAddress != null
             ? "Locked on a single address."
             : _candidates.Count == 0
                 ? "No candidates — click Snapshot memory."
-                : $"{_candidates.Count} candidate(s) — walk a known distance, then Apply move.";
+                : _candidates.Count == 1 && !_hasNarrowed
+                    ? "1 candidate — walk a known distance, then Apply move to confirm."
+                    : $"{_candidates.Count} candidate(s) — walk a known distance, then Apply move.";
         OnPropertyChanged(nameof(HasLock));
         (SnapshotCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (ApplyMoveCommand as RelayCommand)?.RaiseCanExecuteChanged();

@@ -154,6 +154,27 @@ if (board is not null)
 }
 Console.WriteLine();
 
+Console.WriteLine("Per-school spell learning:");
+Check("school count", RosterFormat.SpellSchoolNames.Length, 5);
+Check("school map length", RosterFormat.SpellsBySchool.Length, RosterFormat.SpellSchoolNames.Length);
+
+var spellRec = new CharacterRecord(new byte[RosterFormat.RecordSize]);
+for (int s = 0; s < RosterFormat.SpellsBySchool.Length; s++)
+{
+    spellRec.LearnSchoolSpells(s);
+    foreach (var (byteIdx, bit) in RosterFormat.SpellsBySchool[s])
+        Check($"school {s} spell ({byteIdx},{bit})", spellRec.GetSpell(byteIdx, bit), true);
+}
+
+int totalSchoolBits = RosterFormat.SpellsBySchool.Sum(s => s.Length);
+Check("total school spell bits = 61 named spells", totalSchoolBits, 61);
+
+bool unusedBitsClear = true;
+for (int bit = 5; bit <= 7; bit++)
+    if (spellRec.GetSpell(7, bit)) unusedBitsClear = false;
+Check("unused spell bits (7,5)-(7,7) remain clear", unusedBitsClear, true);
+Console.WriteLine();
+
 Console.WriteLine(failures == 0
     ? "ALL CHECKS PASSED — the 512-byte record layout decodes the sample party correctly."
     : $"{failures} CHECK(S) FAILED.");

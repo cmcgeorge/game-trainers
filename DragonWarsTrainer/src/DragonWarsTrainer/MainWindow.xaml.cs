@@ -28,6 +28,13 @@ public partial class MainWindow : Window
     private void MaxAttributes_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxAttributes();
     private void MaxSkills_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxSkills();
     private void LearnSpells_Click(object sender, RoutedEventArgs e) => Vm(sender)?.LearnAllSpells();
+    private void LearnSchoolSpells_Click(object sender, RoutedEventArgs e)
+    {
+        var vm = Vm(sender);
+        if (vm == null) return;
+        int idx = SpellSchoolCombo.SelectedIndex;
+        if (idx >= 0) vm.LearnSchoolSpells(idx);
+    }
     private void MaxMoney_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxMoney();
     private void MaxEverything_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxEverything();
 

@@ -176,6 +176,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     {
         _poll.Stop();
         _scanCts?.Cancel();
+        _isScanning = false;
         _mem?.Dispose();
         _mem = null;
         Party.Clear();
@@ -198,13 +199,14 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         IsScanning = true;
         Status = "Scanning memory for the party roster…";
         _scanCts?.Dispose();
-        _scanCts = new CancellationTokenSource();
-        var ct = _scanCts.Token;
+        var cts = new CancellationTokenSource();
+        _scanCts = cts;
+        var ct = cts.Token;
         var mem = _mem;
         try
         {
             var found = await Task.Run(() => RosterLocator.FindAll(mem, ct), ct);
-            if (mem != _mem) return;   // detached/re-attached while scanning
+            if (mem != _mem || cts != _scanCts) return;   // detached/re-attached while scanning
             Party.Clear();
             foreach (var lc in found)
                 Party.Add(new CharacterViewModel(this, lc));
@@ -218,9 +220,9 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
                 ? "No party found. Make sure characters are loaded (past the title screen), then Re-scan."
                 : $"Found {Party.Count} character(s).";
         }
-        catch (OperationCanceledException) { if (mem == _mem) Status = "Scan cancelled."; }
-        catch (Exception ex) { if (mem == _mem) Status = "Scan error: " + ex.Message; }
-        finally { IsScanning = false; RaiseCommands(); }
+        catch (OperationCanceledException) { if (mem == _mem && cts == _scanCts) Status = "Scan cancelled."; }
+        catch (Exception ex) { if (mem == _mem && cts == _scanCts) Status = "Scan error: " + ex.Message; }
+        finally { if (cts == _scanCts) { IsScanning = false; RaiseCommands(); } }
     }
 
     // --- party-wide actions --------------------------------------------------
