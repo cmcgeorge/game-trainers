@@ -127,6 +127,20 @@ public static class SpellBook
     public static IEnumerable<SpellInfo> ForSchool(string school) =>
         All.Where(s => string.Equals(s.School, school, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>The spell list in the order the record's memorized- and known-spell blocks store
+    /// them — one byte per spell, 84 entries for memorized, 100 for known. The <see cref="All"/>
+    /// list is already in this order (cleric 1-5, druid 1, mage 1-5), so this is a direct reference
+    /// rather than a reshuffle.</summary>
+    public static readonly IReadOnlyList<SpellInfo> InRecordOrder = All;
+
+    /// <summary>The index of a spell in the record's spell blocks, or -1 if not found.</summary>
+    public static int RecordIndexOf(string school, string name)
+    {
+        for (int i = 0; i < InRecordOrder.Count; i++)
+            if (InRecordOrder[i].School == school && InRecordOrder[i].Name == name) return i;
+        return -1;
+    }
+
     /// <summary>Filter the spell list by a case-insensitive substring of the name, school or effect.</summary>
     public static IEnumerable<SpellInfo> Search(string? term)
     {

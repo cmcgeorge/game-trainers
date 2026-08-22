@@ -89,6 +89,7 @@ public static class ItemLocator
         var head = HeadOf(owner.Record);
         if (head.IsNull) return null;
         int expected = owner.Record.Bytes[CoabFormat.OffNumberOfItems];
+        if (expected == 0) return null;   // no items to anchor a guest-base resolution against
 
         nuint from = owner.Address > (nuint)BaseSearchWindow ? owner.Address - (nuint)BaseSearchWindow : 0;
         nuint to = owner.Address + (nuint)BaseSearchWindow;

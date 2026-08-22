@@ -56,6 +56,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public SaveEditorViewModel SaveEditor { get; } = new();
     public LiveInventoryViewModel LiveInventory { get; } = new();
     public MapsViewModel Maps { get; } = new();
+    public PartyGeneratorViewModel PartyGen { get; }
 
     /// <summary>Auto-re-rolls a new character on the create-a-character screen until a target roll is hit.</summary>
     public CharacterRollerViewModel Roller { get; }
@@ -173,6 +174,66 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         }
     }
 
+    private bool _autoWeaken;
+    /// <summary>
+    /// Keep every creature in the arena on 1 HP, AC 20 and THAC0 20 for as long as it is ticked —
+    /// the standing version of the Weaken button. The poll loop applies it to whatever the combat
+    /// sweep is currently listing, so a battle that starts while this is on is weakened within a
+    /// tick or two without anything being clicked; between battles there is nothing to act on and
+    /// it does nothing. Loot-safe: the party still lands the killing blows, so bodies, treasure and
+    /// XP all count.
+    /// </summary>
+    public bool AutoWeaken
+    {
+        get => _autoWeaken;
+        set
+        {
+            if (!SetProperty(ref _autoWeaken, value)) return;
+            if (value)
+            {
+                AutoKill = false;              // two standing edits to the same records; pick one
+                int n = ApplyAutoCombat();     // don't make the user wait a tick for the fight on screen
+                Status = n > 0
+                    ? $"Auto-weaken ON — {n} enemy record(s) put on 1 HP; every new encounter follows automatically."
+                    : "Auto-weaken ON — enemies will be put on 1 HP, AC 20, THAC0 20 as each battle starts.";
+            }
+            else Status = "Auto-weaken OFF — enemies fight at full strength again.";
+        }
+    }
+
+    private bool _autoKill;
+    /// <summary>
+    /// Zero every arena record as it appears — the standing version of the Kill button, and it
+    /// carries the same cost: the engine never processes these as kills, so encounters pay no XP
+    /// and leave no treasure. Left off unless asked for, and it asks once before switching on;
+    /// <see cref="AutoWeaken"/> is the toggle that wins fights and keeps the loot.
+    /// </summary>
+    public bool AutoKill
+    {
+        get => _autoKill;
+        set
+        {
+            // Confirm before the field changes, so a declined prompt leaves the toggle off. The
+            // check box has already drawn itself ticked by the time its binding gets here, and a
+            // notification raised inside that update is swallowed — post the correction behind it.
+            if (value && !_autoKill && !ConfirmAutoKill())
+            {
+                _poll.Dispatcher.BeginInvoke(() => OnPropertyChanged(nameof(AutoKill)));
+                return;
+            }
+            if (!SetProperty(ref _autoKill, value)) return;
+            if (value)
+            {
+                AutoWeaken = false;
+                int n = ApplyAutoCombat();
+                Status = n > 0
+                    ? $"Auto-kill ON — {n} enemy record(s) zeroed; every new encounter follows automatically. No XP, no treasure."
+                    : "Auto-kill ON — every encounter's records will be zeroed as it starts. No XP, no treasure.";
+            }
+            else Status = "Auto-kill OFF.";
+        }
+    }
+
     private string _monsterFilter = "";
     public string MonsterFilter { get => _monsterFilter; set { if (SetProperty(ref _monsterFilter, value)) { _monsterView = MonsterBook.Search(value).ToList(); OnPropertyChanged(nameof(Monsters)); } } }
 
@@ -237,6 +298,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             () => IsAttached ? SelectedProcess?.Id : null,
             s => Status = s);
 
+        PartyGen = new PartyGeneratorViewModel(() => Party, SaveEditor, s => Status = WithCombatCaveat(s));
+
         RefreshProcesses();
         TryAutoAttach();
     }
@@ -300,6 +363,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     {
         _poll.Stop();
         _scanCts?.Cancel();
+        IsScanning = false;      // a cancelled scan must not block the next attach's auto-scan
         Roller.Reset();          // stop the roll loop before disposing the handle; the locked roll
                                  // address belonged to the process we're leaving anyway
         MemorySearch.Detach();
@@ -314,8 +378,11 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         _godMode = false; OnPropertyChanged(nameof(GodMode));
         _freezeStatus = false; OnPropertyChanged(nameof(FreezeStatus));
         _freezeSpells = false; OnPropertyChanged(nameof(FreezeSpells));
+        _autoWeaken = false; OnPropertyChanged(nameof(AutoWeaken));
+        _autoKill = false; OnPropertyChanged(nameof(AutoKill));
         OnPropertyChanged(nameof(FreezeAll));
         OnPropertyChanged(nameof(IsAttached));
+        PartyGen.Refresh();      // the live party is gone; the generator's readout must say so
         RaiseCommands();
         Status = "Detached.";
     }
@@ -353,6 +420,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             if (GodMode) foreach (var c in Party) c.FreezeHp = true;
             if (FreezeStatus) foreach (var c in Party) c.FreezeStatus = true;
             if (FreezeSpells) foreach (var c in Party) c.FreezeSpells = true;
+            PartyGen.Refresh();   // the party the generator would write over has just changed
             Status = Party.Count == 0 && Enemies.Count == 0
                 ? "No records found. Make sure a party is loaded (past the title screen), then Re-scan."
                 : $"Found {Party.Count} character(s) and {Enemies.Count} combatant/monster record(s).";
@@ -379,6 +447,63 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         (n == 1 ? "Zero this enemy's record?" : $"Zero all {n} enemy records?") +
         "\n\nThe engine never processes this as a kill, so the encounter pays no XP and leaves no " +
         "treasure — and it cannot be undone.\n\nUse Weaken instead to win the fight and keep the loot.");
+
+    /// <summary>Asked once, when <see cref="AutoKill"/> is switched on rather than on every
+    /// encounter it then acts on — a prompt per fight would be worse than no prompt at all.</summary>
+    private bool ConfirmAutoKill() => Confirm(
+        "Zero every enemy record automatically, for every battle from now on?\n\n" +
+        "The engine never processes these as kills, so no encounter will pay XP or leave treasure " +
+        "while this is on, and none of it can be undone.\n\n" +
+        "Auto-weaken wins the fights and keeps the loot.");
+
+    /// <summary>
+    /// The standing half of <see cref="AutoWeaken"/>/<see cref="AutoKill"/>: apply the ticked one to
+    /// every arena record that still needs it, and return how many were touched. Runs off
+    /// <see cref="Enemies"/>, which the arena sweep keeps current, so a battle starting is enough to
+    /// bring new creatures under it; creatures already in the target state, and any already out of
+    /// the fight, are skipped so nothing is re-written every tick and no corpse is stood back up.
+    ///
+    /// <para>Each record is re-read and re-identified here rather than on the poll loop's copy.
+    /// That is what makes the pass safe to run unattended: these writes follow a remembered
+    /// address, and the game frees and reuses heap slots across area and combat transitions, so a
+    /// slot that has been handed to something else — a party record shares the same 640 KiB DOS
+    /// heap — would otherwise be stamped with 1 HP. The list itself can be up to a tick stale (the
+    /// arena sweep runs every other tick, and not at all while the party is unlocated), and the
+    /// toggles call this before any sweep has run at all, so the check cannot be left to them.
+    /// Reading here also means the decision is made on this instant's hit points, not on the ones
+    /// the creature had before the blow that just landed.</para>
+    /// </summary>
+    private int ApplyAutoCombat()
+    {
+        // Nothing to do is the common case — leave without touching the game at all.
+        if (_mem == null || (!AutoWeaken && !AutoKill)) return 0;
+
+        int n = 0;
+        foreach (var e in Enemies)
+        {
+            // A record being typed into belongs to the user until they're done with it: WeakenNow
+            // and KillNow raise the very properties the combat editor binds, and its boxes commit
+            // on lost focus, so writing here would wipe a half-typed value.
+            if (EnemyEditorFocused && ReferenceEquals(e, SelectedEnemy)) continue;
+
+            // Shares the poll loop's scratch buffer: both run on the UI thread, and the poll tick
+            // has finished with it by the time this is called.
+            if (!CharacterLocator.Reread(_mem, e.Address, _pollBuf, e.Record)) continue;
+            e.RefreshLiveSummary(_pollBuf);
+
+            if (AutoWeaken) { if (e.NeedsWeakening) { e.WeakenNow(); n++; } }
+            else if (e.NeedsKilling) { e.KillNow(); n++; }
+        }
+        return n;
+    }
+
+    // Wording for a pass the user didn't click for: name the toggle that did it, so a status line
+    // that appears on its own mid-fight is traceable to the checkbox that's still ticked.
+    private static string NoteAutoWeaken(int n) =>
+        $"Auto-weaken: {n} enemy record(s) on 1 HP, AC 20, THAC0 20 — one hit each, and the kills still pay XP and treasure.";
+
+    private static string NoteAutoKill(int n) =>
+        $"Auto-kill: {n} enemy record(s) zeroed. The engine counts none of them as kills, so this encounter pays nothing.";
 
     // Both messages exist because the difference between the two buttons is not visible on screen
     // until the fight is over and the treasure screen is (or isn't) offered.
@@ -430,8 +555,11 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         // state until the next Scan.
         foreach (var c in Party)
         {
-            c.ApplyFreeze();
-            if (CharacterLocator.Reread(_mem, c.Address, _pollBuf, c.Record)) c.RefreshLiveSummary(_pollBuf);
+            if (CharacterLocator.Reread(_mem, c.Address, _pollBuf, c.Record))
+            {
+                c.RefreshLiveSummary(_pollBuf);
+                c.ApplyFreeze();
+            }
         }
 
         if (++_tick % 2 == 0) SweepEnemies();
@@ -440,6 +568,12 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         {
             if (CharacterLocator.Reread(_mem, e.Address, _pollBuf, e.Record)) e.RefreshLiveSummary(_pollBuf);
         }
+        // Re-reads and re-identifies each record itself, so it is safe here and equally safe from
+        // the toggles' setters. Reported over SweepEnemies' "Battle on" line, which it just made
+        // untrue.
+        int autoDone = ApplyAutoCombat();
+        if (autoDone > 0) Status = AutoWeaken ? NoteAutoWeaken(autoDone) : NoteAutoKill(autoDone);
+
         // The combat editor watches a creature that is being hit while you look at it, so unlike
         // the party panel its fields do track the record — except while they're being typed into.
         if (!EnemyEditorFocused) SelectedEnemy?.RefreshCombatEditors();
@@ -516,10 +650,11 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         else if (before > 0 && next.Count == 0) Status = "Battle over — no monster records in memory.";
     }
 
-    /// <summary>Is this the same creature the view-model was built for? Name, class and max HP
-    /// identify it; current HP and status are exactly what a battle changes.</summary>
+    /// <summary>Is this the same creature the view-model was built for? Identity is Name, Race,
+    /// Class and Gender — the fields a battle never changes. Max HP was previously included but
+    /// is dropped by level drain, so a drained creature would read as a different one.</summary>
     private static bool SameCreature(CharacterRecord a, CharacterRecord b) =>
-        a.HpMax == b.HpMax && a.Class == b.Class && a.Name == b.Name;
+        a.IsSameCreatureAs(b);
 
     // --- global hotkeys ------------------------------------------------------
     public void InitHotkeys(IntPtr hwnd)

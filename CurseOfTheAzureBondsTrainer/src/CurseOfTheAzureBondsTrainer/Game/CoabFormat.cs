@@ -118,6 +118,12 @@ public static class CoabFormat
     public const int OffMageSlots = 0x137;
     public const int SpellSlotLevels = 5;
 
+    /// <summary>Class bitmask — one bit per class the character has: mage 0x01, cleric 0x02,
+    /// thief 0x04, fighter 0x08, and the extended bits for druid/paladin/ranger/monk. It duplicates
+    /// what the class byte and per-class levels already say, and every record decoded so far agrees
+    /// with all three — so anything that rewrites a character's class must rewrite this too.</summary>
+    public const int OffClassMask = 0x12B;
+
     public const int OffXpAward = 0x13C;           // UInt16: XP granted for killing this creature (monsters)
 
     public const int OffOrderNumber = 0x143;       // marching-order slot
@@ -205,6 +211,43 @@ public static class CoabFormat
     /// <summary>The six combat-icon parts, one per <see cref="OffIconColor"/> byte.</summary>
     public static readonly string[] IconColorParts =
         { "Body", "Arm", "Leg", "Hair/Face", "Shield", "Weapon" };
+
+    // Race byte values, indexing Races. Named so code that has to reason about a race never
+    // carries a bare number.
+    public const int RaceMonster = 0;
+    public const int RaceDwarf = 1;
+    public const int RaceElf = 2;
+    public const int RaceGnome = 3;
+    public const int RaceHalfElf = 4;
+    public const int RaceHalfling = 5;
+    public const int RaceHalfOrc = 6;
+    public const int RaceHuman = 7;
+
+    // Class byte values, indexing Classes. All eight base classes and every combination the game
+    // itself offers at character creation are named.
+    public const int ClassCleric = 0;
+    public const int ClassDruid = 1;
+    public const int ClassFighter = 2;
+    public const int ClassPaladin = 3;
+    public const int ClassRanger = 4;
+    public const int ClassMage = 5;
+    public const int ClassThief = 6;
+    public const int ClassMonk = 7;
+    public const int ClassClericFighter = 8;
+    public const int ClassClericFighterMage = 9;
+    public const int ClassClericRanger = 10;
+    public const int ClassClericMage = 11;
+    public const int ClassClericThief = 12;
+    public const int ClassFighterMage = 13;
+    public const int ClassFighterThief = 14;
+    public const int ClassFighterMageThief = 15;
+    public const int ClassMageThief = 16;
+    public const int ClassMonster = 17;
+
+    // Alignment byte values.
+    public const int AlignmentLawfulGood = 0;
+    public const int AlignmentNeutralGood = 3;
+    public const int AlignmentChaoticGood = 6;
 
     public static string RaceName(int v) => v >= 0 && v < Races.Length ? Races[v] : $"?({v})";
     public static string ClassName(int v) => v >= 0 && v < Classes.Length ? Classes[v] : $"?({v})";

@@ -411,4 +411,46 @@ public sealed class SaveEditorViewModel : ObservableObject
         }
         catch (Exception ex) { Status = "Duplicate failed: " + ex.Message; }
     }
+
+    // --- generated party ------------------------------------------------------
+    /// <summary>How many characters the loaded save slot holds (0 when nothing is loaded).</summary>
+    public int LoadedCharacterCount => _save?.Characters.Count ?? 0;
+
+    /// <summary>One line describing what a party-generator write would land on.</summary>
+    public string LoadedSlotSummary => _save == null
+        ? "No save folder loaded — load one on the Powers or Inventory tab."
+        : $"Save slot {_save.Slot} in {_save.Folder} — {LoadedCharacterCount} character(s): " +
+          string.Join(", ", Characters.Select(c => c.Name));
+
+    /// <summary>
+    /// Writes generated characters over the loaded slot's characters, in party order, and saves
+    /// each one's .SAV file. Only as many characters as the slot already holds can be replaced.
+    /// Returns the number of records rewritten.
+    /// </summary>
+    public int ApplyGeneratedParty(IReadOnlyList<RolledCharacter> rolled)
+    {
+        if (_save == null) { Status = "Load a save folder first (Powers or Inventory tab)."; return 0; }
+        if (rolled.Count == 0) { Status = "Roll a party first."; return 0; }
+
+        try
+        {
+            if (!ReadyToWrite()) { Status = "Edit cancelled."; return 0; }
+            int n = Math.Min(rolled.Count, Characters.Count);
+            for (int i = 0; i < n; i++)
+            {
+                rolled[i].StampOnto(Characters[i].Model.Record);
+                SaveGame.WriteRecord(Characters[i].Model);
+                Characters[i].Refresh();
+            }
+            OnPropertyChanged(nameof(LoadedSlotSummary));
+            Status = $"Wrote {n} generated character(s) into save slot {_save.Slot}. " +
+                     $"Backup: {_lastBackup}. Load that save in the game to play them." +
+                     (rolled.Count > n
+                        ? $" The slot holds only {n} character(s), so {rolled.Count - n} of the generated " +
+                          "party had nowhere to go."
+                        : "");
+            return n;
+        }
+        catch (Exception ex) { Status = "Party write failed: " + ex.Message; return 0; }
+    }
 }

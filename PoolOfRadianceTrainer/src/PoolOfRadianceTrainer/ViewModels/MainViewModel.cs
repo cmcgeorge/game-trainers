@@ -357,6 +357,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     {
         _poll.Stop();
         _scanCts?.Cancel();
+        IsScanning = false;      // a cancelled scan must not block the next attach's auto-scan
         Roller.Reset();          // stop the roll loop before disposing the handle; the locked roll
                                  // address belonged to the process we're leaving anyway
         MemorySearch.Detach();
@@ -548,8 +549,11 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         // state until the next Scan.
         foreach (var c in Party)
         {
-            c.ApplyFreeze();
-            if (CharacterLocator.Reread(_mem, c.Address, _pollBuf, c.Record)) c.RefreshLiveSummary(_pollBuf);
+            if (CharacterLocator.Reread(_mem, c.Address, _pollBuf, c.Record))
+            {
+                c.RefreshLiveSummary(_pollBuf);
+                c.ApplyFreeze();
+            }
         }
 
         if (++_tick % 2 == 0) SweepEnemies();
@@ -637,10 +641,11 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         else if (before > 0 && next.Count == 0) Status = "Battle over — no monster records in memory.";
     }
 
-    /// <summary>Is this the same creature the view-model was built for? Name, class and max HP
-    /// identify it; current HP and status are exactly what a battle changes.</summary>
+    /// <summary>Is this the same creature the view-model was built for? Identity is Name, Race,
+    /// Class and Gender — the fields a battle never changes. Max HP was previously included but
+    /// is dropped by level drain, so a drained creature would read as a different one.</summary>
     private static bool SameCreature(CharacterRecord a, CharacterRecord b) =>
-        a.HpMax == b.HpMax && a.Class == b.Class && a.Name == b.Name;
+        a.IsSameCreatureAs(b);
 
     // --- global hotkeys ------------------------------------------------------
     public void InitHotkeys(IntPtr hwnd)

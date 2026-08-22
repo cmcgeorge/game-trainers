@@ -1,9 +1,16 @@
 using System.Collections.ObjectModel;
+using System.Text;
 using CurseOfTheAzureBondsTrainer.Game;
 using CurseOfTheAzureBondsTrainer.Memory;
 using CurseOfTheAzureBondsTrainer.Mvvm;
 
 namespace CurseOfTheAzureBondsTrainer.ViewModels;
+
+/// <summary>One class the change-class picker offers, and whether the character's race may take it.</summary>
+public sealed record ClassOption(int Value, string Name, bool Legal)
+{
+    public string Display => Legal ? Name : Name + "   (not for this race)";
+}
 
 /// <summary>
 /// Editable view over a single located character/monster record. Every setter mutates the
@@ -93,6 +100,7 @@ public sealed class CharacterViewModel : ObservableObject
         }
 
         BuildRawBytes();
+        RebuildClassOptions();
     }
 
     private void BuildRawBytes()
@@ -131,12 +139,22 @@ public sealed class CharacterViewModel : ObservableObject
     public int RaceIndex
     {
         get => Record.Race;
-        set { Record.Race = value; Poke(CoabFormat.OffRace, 1); OnPropertyChanged(); RaiseDerived(); }
+        set
+        {
+            Record.Race = value; Poke(CoabFormat.OffRace, 1); OnPropertyChanged(); RaiseDerived();
+            RebuildClassOptions();   // a different race allows a different set of classes
+        }
     }
+    /// <summary>The raw class byte. Writing it changes the label on the sheet and nothing else —
+    /// see <see cref="ApplyClassChange"/> for the edit that also brings the derived numbers along.</summary>
     public int ClassIndex
     {
         get => Record.Class;
-        set { Record.Class = value; Poke(CoabFormat.OffClass, 1); OnPropertyChanged(); RaiseDerived(); }
+        set
+        {
+            Record.Class = value; Poke(CoabFormat.OffClass, 1); OnPropertyChanged(); RaiseDerived();
+            OnPropertyChanged(nameof(ClassChangePreview));
+        }
     }
     public int AlignmentIndex
     {
@@ -300,14 +318,49 @@ public sealed class CharacterViewModel : ObservableObject
     /// </summary>
     public void WeakenNow()
     {
-        Record.HpCurrent = 1; Poke(CoabFormat.OffHpCur, 1);
-        Record.ArmorClass = 20; Poke(CoabFormat.OffAcCur, 1);
-        Record.ArmorClassBase = 20; Poke(CoabFormat.OffAcBase, 1);
-        Record.Thac0 = 20; Poke(CoabFormat.OffThac0Cur, 1);
-        Record.Thac0Base = 20; Poke(CoabFormat.OffThac0Base, 1);
+        Record.HpCurrent = CharacterRecord.WeakenedHp; Poke(CoabFormat.OffHpCur, 1);
+        Record.ArmorClass = CharacterRecord.WeakenedAc; Poke(CoabFormat.OffAcCur, 1);
+        Record.ArmorClassBase = CharacterRecord.WeakenedAc; Poke(CoabFormat.OffAcBase, 1);
+        Record.Thac0 = CharacterRecord.WeakenedThac0; Poke(CoabFormat.OffThac0Cur, 1);
+        Record.Thac0Base = CharacterRecord.WeakenedThac0; Poke(CoabFormat.OffThac0Base, 1);
         OnPropertyChanged(nameof(HpCurrent)); OnPropertyChanged(nameof(ArmorClass));
         OnPropertyChanged(nameof(Thac0)); RaiseDerived();
     }
+
+    /// <summary>
+    /// Is this creature already out of the fight? True once it is dying, dead, petrified or off the
+    /// battlefield (statuses 5, 6, 7, and 2/8) — the states an automatic sweep must leave alone,
+    /// because writing a hit point back into a corpse is the one way these edits can put a creature
+    /// the party already beat back on its feet.
+    ///
+    /// <para>Hit points settle it before status does, since the engine stamps the status a tick
+    /// later than the blow: 0 is finished, and so is anything reading <i>above</i> max. That second
+    /// test is not redundant — current HP is an unsigned byte, so a creature the engine has taken
+    /// below zero reads back as 251 rather than -5, and <c>&lt;= 0</c> alone would wave it through
+    /// as a healthy creature and stand it up on 1 HP.</para>
+    ///
+    /// <para>Status 4 (Unconscious) is deliberately <i>not</i> here. On a monster with hit points
+    /// left it means slept or held, not beaten — it wakes up and goes on fighting, so an automatic
+    /// pass has every reason to act on it. Unconsciousness that came from damage is already caught
+    /// by the hit-point test above.</para>
+    /// </summary>
+    public bool IsOutOfTheFight =>
+        Record.HpCurrent <= 0 || Record.HpCurrent > Record.HpMax ||
+        Record.Status is 2 or 5 or 6 or 7 or 8;
+
+    /// <summary>
+    /// Does an automatic pass have anything to do to this creature? False for one already standing
+    /// in the weakened state, so the auto sweep isn't re-writing five bytes per monster per tick,
+    /// and false for one already out of the fight (see <see cref="IsOutOfTheFight"/>). Tested
+    /// against <see cref="CharacterRecord.IsWeakened"/> rather than the looser mark the arena sweep
+    /// goes by, so a creature healed off its last hit point is weakened again.
+    /// </summary>
+    public bool NeedsWeakening => !IsOutOfTheFight && !Record.IsWeakened;
+
+    /// <summary>Does an automatic pass have anything to zero? False for a creature already out of
+    /// the fight, so the sweep neither re-writes a dead record every tick nor rewrites a "gone"
+    /// creature back into a body on the field.</summary>
+    public bool NeedsKilling => !IsOutOfTheFight;
 
     /// <summary>
     /// Zero this record's current HP and mark it dead — the combat panel uses it to drop a monster.
@@ -328,6 +381,120 @@ public sealed class CharacterViewModel : ObservableObject
         Record.HpCurrent = 0; Poke(CoabFormat.OffHpCur, 1);
         Record.Status = 6; Poke(CoabFormat.OffStatus, 1);   // dead
         OnPropertyChanged(nameof(HpCurrent)); OnPropertyChanged(nameof(StatusIndex)); RaiseDerived();
+    }
+
+    // --- party generation -----------------------------------------------------
+    /// <summary>
+    /// Writes a <see cref="RolledCharacter"/> over this record, touching only
+    /// <see cref="RolledCharacter.WrittenRanges"/>. The record keeps its money, its carried items,
+    /// its equipped items, its effects, encumbrance and its place in the game's own linked lists,
+    /// so the result is the same character sheet with a new person on it. After the write the record
+    /// still occupies the same address in the live game, so the poll loop's
+    /// <see cref="CharacterRecord.IsSameCreatureAs"/> check still recognises this address on the
+    /// next tick and keeps refreshing it.
+    /// </summary>
+    public void ApplyGenerated(RolledCharacter rolled)
+    {
+        ArgumentNullException.ThrowIfNull(rolled);
+        rolled.StampOnto(Record);
+        foreach (var (offset, length) in RolledCharacter.WrittenRanges) Poke(offset, length);
+
+        if (FreezeSpells)
+        {
+            _spellSnapshot = new byte[CoabFormat.MemorizedSpellsLen];
+            Array.Copy(Record.Bytes, CoabFormat.OffMemorizedSpells, _spellSnapshot, 0, CoabFormat.MemorizedSpellsLen);
+        }
+        RefreshAll();
+    }
+
+    // --- class change ---------------------------------------------------------
+    /// <summary>The classes offered by the change-class picker: what this race may take, or every
+    /// playable class when <see cref="AllowIllegalClasses"/> is on.</summary>
+    public ObservableCollection<ClassOption> ClassChangeOptions { get; } = new();
+
+    private bool _allowIllegalClasses;
+    /// <summary>Offer class/race combinations the game itself would refuse (a dwarven magic-user).
+    /// The record holds whatever is written, but the game's own screens may disagree with it.</summary>
+    public bool AllowIllegalClasses
+    {
+        get => _allowIllegalClasses;
+        set { if (SetProperty(ref _allowIllegalClasses, value)) RebuildClassOptions(); }
+    }
+
+    private int _classChangeTarget = -1;
+    /// <summary>The class the picker is pointed at (a class byte).</summary>
+    public int ClassChangeTarget
+    {
+        get => _classChangeTarget;
+        set { if (SetProperty(ref _classChangeTarget, value)) OnPropertyChanged(nameof(ClassChangePreview)); }
+    }
+
+    private void RebuildClassOptions()
+    {
+        int previous = _classChangeTarget;
+        var legal = ClassTables.LegalClasses(Record.Race);
+
+        ClassChangeOptions.Clear();
+        foreach (int cls in ClassTables.PlayableClasses)
+        {
+            bool ok = legal.Contains(cls);
+            if (!ok && !_allowIllegalClasses) continue;
+            ClassChangeOptions.Add(new ClassOption(cls, CoabFormat.ClassName(cls), ok));
+        }
+
+        bool Offered(int cls) => ClassChangeOptions.Any(o => o.Value == cls);
+        ClassChangeTarget = Offered(previous) ? previous
+            : Offered(Record.Class) ? Record.Class
+            : ClassChangeOptions.FirstOrDefault()?.Value ?? -1;
+
+        OnPropertyChanged(nameof(ClassChangePreview));
+    }
+
+    /// <summary>What the picked class change would do, as the panel and the confirm dialog show it:
+    /// the new levels and derived numbers, then any warnings, then the consequences worth knowing.</summary>
+    public string ClassChangePreview
+    {
+        get
+        {
+            if (!ClassTables.IsPlayableClass(_classChangeTarget)) return "Pick a class.";
+            try
+            {
+                var plan = ClassChange.Plan(Record, _classChangeTarget);
+                var sb = new StringBuilder(plan.Summary);
+                foreach (var w in plan.Warnings) sb.Append("\n⚠  ").Append(w);
+                foreach (var n in plan.Notes) sb.Append("\n·  ").Append(n);
+                return sb.ToString();
+            }
+            catch (Exception ex) { return "Can't plan that change: " + ex.Message; }
+        }
+    }
+
+    /// <summary>
+    /// Applies the picked class change: writes the new class and every number that depends on it —
+    /// per-class levels, THAC0, saving throws, thief skills, spells known and spells per day — and
+    /// leaves hit points, experience, abilities, money and items alone. Returns the status line.
+    /// </summary>
+    public string ApplyClassChange()
+    {
+        if (!ClassTables.IsPlayableClass(_classChangeTarget)) return "Pick a class first.";
+
+        var plan = ClassChange.Plan(Record, _classChangeTarget);
+        ClassChange.Apply(Record, plan);
+        foreach (var (offset, length) in ClassChange.WrittenRanges) Poke(offset, length);
+
+        if (FreezeSpells)
+        {
+            _spellSnapshot = new byte[CoabFormat.MemorizedSpellsLen];
+            Array.Copy(Record.Bytes, CoabFormat.OffMemorizedSpells, _spellSnapshot, 0, CoabFormat.MemorizedSpellsLen);
+        }
+
+        RefreshAll();
+        OnPropertyChanged(nameof(ClassChangePreview));
+
+        string warnings = plan.Warnings.Count == 0 ? "" : " " + string.Join(" ", plan.Warnings);
+        return $"{Record.Name} is now a {plan.ToName} ({plan.LevelText}). " +
+               $"THAC0 {plan.Thac0}, saves {string.Join("/", plan.Saves)}. Hit points and experience unchanged." +
+               warnings;
     }
 
     // --- freeze / live refresh ----------------------------------------------

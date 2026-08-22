@@ -246,6 +246,14 @@ public sealed class SaveGame
         WriteAtomic(c.SavPath, c.SavBytes);
     }
 
+    /// <summary>Writes a character's record back to its .SAV file, copying the 422-byte record into
+    /// the full raw .SAV bytes first so any trailing bytes are preserved.</summary>
+    public static void WriteRecord(SaveCharacter c)
+    {
+        Array.Copy(c.Record.Bytes, 0, c.SavBytes, 0, CoabFormat.RecordSize);
+        WriteAtomic(c.SavPath, c.SavBytes);
+    }
+
     /// <summary>Writes bytes via a same-directory temp file plus an atomic replace, so a failed or
     /// partial write can never leave the real save file truncated or half-written.</summary>
     private static void WriteAtomic(string path, byte[] data)

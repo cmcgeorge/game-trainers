@@ -18,6 +18,7 @@ public partial class MainWindow : Window
         _vm.Confirm = message => MessageBox.Show(this, message, "Curse of the Azure Bonds Trainer",
             MessageBoxButton.OKCancel, MessageBoxImage.Warning) == MessageBoxResult.OK;
         _vm.SaveEditor.Confirm = _vm.Confirm;
+        _vm.PartyGen.Confirm = _vm.Confirm;
         Loaded += OnLoaded;
         Closed += OnClosed;
     }
@@ -41,6 +42,21 @@ public partial class MainWindow : Window
     private void MaxEverything_Click(object sender, RoutedEventArgs e) => Vm(sender)?.MaxEverything();
     private void RestoreDrained_Click(object sender, RoutedEventArgs e) => Vm(sender)?.RestoreDrainedStats();
     private void RandomizeIconColors_Click(object sender, RoutedEventArgs e) => Vm(sender)?.RandomizeIconColors();
+
+    // The class-change button needs a confirm dialog, because the change is irreversible and the
+    // preview it shows (what it will do, what it won't, and any warnings) should be in front of the
+    // user before they click OK.
+    private void ChangeClass_Click(object sender, RoutedEventArgs e)
+    {
+        if (Vm(sender) is not { } character) return;
+        if (!_vm.Confirm($"Change {character.Name}'s class?\n\n{character.ClassChangePreview}\n\n" +
+                         "This cannot be undone."))
+        {
+            _vm.Status = "Class change cancelled.";
+            return;
+        }
+        _vm.Status = character.ApplyClassChange();
+    }
 
     // The Combat tab's monster fields are refreshed from live memory every poll tick, which would
     // wipe out a half-typed value. GotKeyboardFocus/LostKeyboardFocus bubble from the boxes to the

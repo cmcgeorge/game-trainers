@@ -280,6 +280,33 @@ public sealed class CharacterRecord
         }
     }
 
+    // --- weakened state ------------------------------------------------------
+    // The combat panel's Weaken button and the standing AutoWeaken toggle stamp these values
+    // into a creature's record. LooksWeakened has to recognise the same numbers the writer stamps.
+
+    public const int WeakenedHp = 1;
+    public const int WeakenedAc = 20;
+    public const int WeakenedThac0 = 20;
+
+    /// <summary>
+    /// Does this record still stand in every part of the state Weaken left it in? The test for
+    /// whether there is anything left to do to it — deliberately stricter than
+    /// <see cref="LooksWeakened"/>, because a creature the game has since healed off its last hit
+    /// point needs weakening again even though it is still wearing the trainer's armour class.
+    /// </summary>
+    public bool IsWeakened =>
+        HpCurrent == WeakenedHp &&
+        ArmorClass == WeakenedAc && ArmorClassBase == WeakenedAc &&
+        Thac0 == WeakenedThac0 && Thac0Base == WeakenedThac0;
+
+    /// <summary>
+    /// Does this record carry the mark of the trainer's "Weaken"? Only the armour-class pair is
+    /// tested, because AC 20 is the single field Weaken puts outside what the signature scan will
+    /// otherwise admit, and it is the only one the game itself never sets a monster to.
+    /// </summary>
+    public bool LooksWeakened =>
+        HpMax > 0 && ArmorClass == WeakenedAc && ArmorClassBase == WeakenedAc;
+
     public CharacterRecord Clone() => new(Bytes);
 
     public override string ToString() =>
