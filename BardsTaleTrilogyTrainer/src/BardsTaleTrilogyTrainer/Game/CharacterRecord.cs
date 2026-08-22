@@ -154,6 +154,7 @@ public sealed class CharacterRecord
     {
         var levels = new int[CharacterFormat.SpellLevelSlots];
         nuint array = _mem.ReadPtr(Address + (nuint)CharacterFormat.OffSpellLevels);
+        if (array == 0) return levels;
         int count = Math.Min(_mem.ReadArrayLength(array), levels.Length);
         for (int i = 0; i < count; i++)
             levels[i] = _mem.ReadI32(array + (nuint)(Il2Cpp.ArrayHeaderSize + i * 4));

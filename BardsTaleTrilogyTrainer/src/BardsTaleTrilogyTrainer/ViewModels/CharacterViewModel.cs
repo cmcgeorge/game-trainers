@@ -470,11 +470,13 @@ public sealed class CharacterViewModel : ObservableObject
             : $"Blocked — {check.Reason}";
     }
 
-    /// <summary>Called by the poll loop to apply freezes.</summary>
+    /// <summary>Called by the poll loop to apply freezes. Reads the current max from the record
+    /// each tick rather than using a cached value, so a level drain or other max-reducing effect
+    /// is respected immediately instead of over-healing past the real max.</summary>
     public void PollFreezes()
     {
-        if (_freezeHp && _hpMax > 0) _record.HpCur = _hpMax;
-        if (_freezeSp && _spMax > 0) _record.SpCur = _spMax;
+        if (_freezeHp && _record.HpMax > 0) _record.HpCur = _record.HpMax;
+        if (_freezeSp && _record.SpMax > 0) _record.SpCur = _record.SpMax;
     }
 }
 
@@ -501,24 +503,23 @@ public sealed class SpellLevelViewModel : ObservableObject
 
     public string Name { get; }
 
-    /// <summary>Spell level 0–7; editing writes it to the game immediately.</summary>
+    /// <summary>Spell level 0–7; editing writes it to the game immediately.
+    /// Out-of-range input is clamped rather than thrown, so a bad UI binding cannot crash the poll loop.</summary>
     public int Level
     {
         get => _level;
         set
         {
-            if (value < 0 || value > CharacterFormat.MaxSpellLevel)
-                throw new ArgumentOutOfRangeException(nameof(value), value,
-                    $"Spell level must be 0–{CharacterFormat.MaxSpellLevel}.");
-            if (!SetField(ref _level, value) || _suppressWrite) return;
-            _owner.WriteSpellLevel(ClassId, value);
+            int clamped = Math.Clamp(value, 0, CharacterFormat.MaxSpellLevel);
+            if (!SetField(ref _level, clamped) || _suppressWrite) return;
+            _owner.WriteSpellLevel(ClassId, clamped);
         }
     }
 
     /// <summary>
     /// Refreshes the row from a freshly read <c>m_spellLevel</c> array.
     ///
-    /// <para>The value is clamped rather than trusted. The setter rejects anything outside
+    /// <para>The value is clamped rather than trusted. The setter clamps anything outside
     /// 0–7 because a caller asking for level 9 is a bug, but this is the read path: the array
     /// comes out of the game, and on the structural-scan fallback it can come out of an object
     /// that only <em>looks</em> like a character, so junk is a normal input here. Letting the

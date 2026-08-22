@@ -63,5 +63,5 @@ public sealed class StatViewModel : ObservableObject
         OnPropertyChanged(nameof(Current));
     }
 
-    private static ushort Clamp(int v) => (ushort)Math.Clamp(v, 0, 0xFFFF);
+    private static ushort Clamp(int v) => (ushort)Math.Clamp(v, 0, 99);
 }

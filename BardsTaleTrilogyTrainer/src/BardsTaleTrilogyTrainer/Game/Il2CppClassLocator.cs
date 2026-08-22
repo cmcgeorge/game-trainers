@@ -120,29 +120,38 @@ public static class Il2CppClassLocator
         ulong moduleHigh = moduleBase + moduleSize;
         int probes = 0;
 
-        for (nuint offset = 0; offset < moduleSize; offset += ChunkSize)
+        for (nuint offset = 0; offset < moduleSize;)
         {
             ct.ThrowIfCancellationRequested();
             int want = (int)Math.Min((nuint)ChunkSize, moduleSize - offset);
             int read = mem.Read(moduleBase + offset, buf, want);
-            if (read < 8) continue;
-
-            for (int i = 0; i + 8 <= read; i += 8)
+            if (read >= 8)
             {
-                ulong value = BitConverter.ToUInt64(buf, i);
-                if (value < MinPlausiblePointer || value > MaxPlausiblePointer) continue;
-                if (value >= moduleLow && value < moduleHigh) continue;   // an internal pointer, not a class
-                var candidate = (nuint)value;
-                if (!seen.Add(candidate)) continue;
-                if (++probes > MaxProbes) return;
+                for (int i = 0; i + 8 <= read; i += 8)
+                {
+                    ulong value = BitConverter.ToUInt64(buf, i);
+                    if (value < MinPlausiblePointer || value > MaxPlausiblePointer) continue;
+                    if (value >= moduleLow && value < moduleHigh) continue;   // an internal pointer, not a class
+                    var candidate = (nuint)value;
+                    if (!seen.Add(candidate)) continue;
+                    if (++probes > MaxProbes) return;
 
-                string? name = ReadClassName(mem, candidate);
-                if (name == null || !wanted.Contains(name)) continue;
+                    string? name = ReadClassName(mem, candidate);
+                    if (name == null || !wanted.Contains(name)) continue;
 
-                found[name] = candidate;
-                wanted.Remove(name);
-                if (wanted.Count == 0) return;
+                    found[name] = candidate;
+                    wanted.Remove(name);
+                    if (wanted.Count == 0) return;
+                }
             }
+
+            // Advance by the actual bytes read, rounded up to 8-byte alignment so the
+            // inner loop's 8-byte stride stays aligned with real pointer boundaries.
+            // Since ChunkSize is itself 8-byte aligned, no aligned pointer can straddle
+            // a full-read boundary, so no overlap is needed.
+            int advance = (read + 7) & ~7;
+            if (advance == 0) advance = 8;
+            offset += (nuint)advance;
         }
     }
 

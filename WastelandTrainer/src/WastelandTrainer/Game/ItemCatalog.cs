@@ -116,7 +116,7 @@ public static class ItemCatalog
         new(60, "Finster's head",     "Gear & Quest", "Proof of dealing with Finster; a major quest item."),
         new(61, "Blackstar key",      "Gear & Quest", "One of the four Guardian Citadel keys — keep the set together."),
         new(62, "Bloodstaff",         "Gear & Quest", "The Needles cult relic — a pivotal story and bargaining item."),
-        new(63, "Bloodstaff",         "Gear & Quest", "A second Bloodstaff entry (the game has a real one and a decoy) — keep the one your clue points to."),
+        new(63, "Bloodstaff (decoy)", "Gear & Quest", "A second Bloodstaff entry (the game has a real one and a decoy) — keep the one your clue points to."),
         new(64, "Broken toaster",     "Gear & Quest", "Fix it with Toaster Repair for a reward."),
         new(65, "Chemical",           "Gear & Quest", "Reagent used in a crafting/quest step."),
         new(66, "Clone fluid",        "Gear & Quest", "Fluid for the Darwin cloning equipment."),

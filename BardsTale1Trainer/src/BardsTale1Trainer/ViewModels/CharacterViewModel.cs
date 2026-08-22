@@ -63,13 +63,13 @@ public sealed class CharacterViewModel : ObservableObject
     public int ClassIndex
     {
         get => Record.Class;
-        set { if (Record.Class != value && value >= 0) { Record.Class = (ushort)value; PushRange(PartyFormat.OffClass, 2); RaiseAll(); } }
+        set { if (Record.Class != value && value >= 0 && value < PartyFormat.Classes.Length) { Record.Class = (ushort)value; PushRange(PartyFormat.OffClass, 2); RaiseAll(); } }
     }
 
     public int RaceIndex
     {
         get => Record.Race;
-        set { if (Record.Race != value && value >= 0) { Record.Race = (byte)value; PushByte(PartyFormat.OffRace); RaiseAll(); } }
+        set { if (Record.Race != value && value >= 0 && value < PartyFormat.Races.Length) { Record.Race = (byte)value; PushByte(PartyFormat.OffRace); RaiseAll(); } }
     }
 
     public int ArmorClass
@@ -179,15 +179,21 @@ public sealed class CharacterViewModel : ObservableObject
         var buf = _mem!.Read(Record.Address, PartyFormat.RecordSize);
         if (buf.Length < PartyFormat.RecordSize) return;
         _suppressPush = true;
-        Record.Load(buf);
-        // Refresh the name from the roster row too (it can change in-game).
-        if (NameAddress != 0)
+        try
         {
-            var nameBuf = _mem!.Read(NameAddress, PartyFormat.PartyRowNameLength);
-            if (nameBuf.Length == PartyFormat.PartyRowNameLength)
-                Record.Name = CharacterRecord.DecodeRosterName(nameBuf);
+            Record.Load(buf);
+            // Refresh the name from the roster row too (it can change in-game).
+            if (NameAddress != 0)
+            {
+                var nameBuf = _mem!.Read(NameAddress, PartyFormat.PartyRowNameLength);
+                if (nameBuf.Length == PartyFormat.PartyRowNameLength)
+                    Record.Name = CharacterRecord.DecodeRosterName(nameBuf);
+            }
         }
-        _suppressPush = false;
+        finally
+        {
+            _suppressPush = false;
+        }
         RaiseAll();
     }
 

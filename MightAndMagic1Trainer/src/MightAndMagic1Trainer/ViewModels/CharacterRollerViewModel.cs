@@ -189,7 +189,11 @@ public sealed class CharacterRollerViewModel : ObservableObject
     public bool IsBusy { get => _isBusy; private set { if (SetField(ref _isBusy, value)) RaiseAll(); } }
 
     private bool _isRolling;
-    public bool IsRolling { get => _isRolling; private set { if (SetField(ref _isRolling, value)) RaiseAll(); } }
+    public bool IsRolling { get => _isRolling; private set { if (SetField(ref _isRolling, value)) { RaiseAll(); OnPropertyChanged(nameof(CanEditMinimums)); } } }
+
+    /// <summary>False while a roll loop is running, so the UI can disable minimum-editing controls
+    /// (the background loop snapshots the minimums at start and ignores changes made mid-roll).</summary>
+    public bool CanEditMinimums => !IsRolling;
 
     private bool _isLocked;
     public bool IsLocked { get => _isLocked; private set { if (SetField(ref _isLocked, value)) { OnPropertyChanged(nameof(LockInfo)); RaiseAll(); } } }

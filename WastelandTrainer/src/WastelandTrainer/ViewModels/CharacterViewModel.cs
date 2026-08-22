@@ -55,9 +55,21 @@ public sealed class CharacterViewModel : ObservableObject
         foreach (var info in SkillBook.Skills)
         {
             var skill = info;
-            Skills.Add(new SkillRowViewModel(skill,
+            SkillRowViewModel? row = null;
+            row = new SkillRowViewModel(skill,
                 () => Record.GetSkillLevel(skill.Id),
-                v => { Record.SetSkillLevel(skill.Id, v); Poke(CharacterFormat.OffSkills, CharacterFormat.SkillBlockBytes); }));
+                v =>
+                {
+                    if (Record.SetSkillLevel(skill.Id, v))
+                    {
+                        Poke(CharacterFormat.OffSkills, CharacterFormat.SkillBlockBytes);
+                    }
+                    else
+                    {
+                        System.Windows.Application.Current?.Dispatcher?.BeginInvoke(new Action(() => row?.Refresh()));
+                    }
+                });
+            Skills.Add(row);
         }
 
         for (int i = 0; i < CharacterFormat.ItemSlots; i++)
@@ -171,7 +183,16 @@ public sealed class CharacterViewModel : ObservableObject
     public int MaxCon
     {
         get => Record.MaxCon;
-        set { Record.MaxCon = value; Poke(CharacterFormat.OffMaxCon, 2); OnPropertyChanged(); RaiseDerived(); }
+        set
+        {
+            int oldCon = Record.Con;
+            Record.MaxCon = value;
+            Poke(CharacterFormat.OffMaxCon, 2);
+            if (Record.Con != oldCon) Poke(CharacterFormat.OffCon, 2);
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(Con));
+            RaiseDerived();
+        }
     }
 
     // --- quick actions -------------------------------------------------------
@@ -270,6 +291,7 @@ public sealed class CharacterViewModel : ObservableObject
     /// </summary>
     public void RefreshLiveSummary(byte[] fresh)
     {
+        string oldName = Record.Name;
         bool inventoryChanged = !fresh.AsSpan(CharacterFormat.OffInventory, CharacterFormat.ItemBlockBytes)
             .SequenceEqual(Record.Bytes.AsSpan(CharacterFormat.OffInventory, CharacterFormat.ItemBlockBytes));
         Array.Copy(fresh, 0, Record.Bytes, 0, CharacterFormat.RecordSize);
@@ -278,6 +300,7 @@ public sealed class CharacterViewModel : ObservableObject
             foreach (var it in Items) it.Refresh();
             OnPropertyChanged(nameof(ItemCount));
         }
+        if (Record.Name != oldName) OnPropertyChanged(nameof(Name));
         RaiseDerived();
     }
 

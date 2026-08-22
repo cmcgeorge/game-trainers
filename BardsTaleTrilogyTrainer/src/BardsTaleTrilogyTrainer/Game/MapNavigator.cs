@@ -190,7 +190,14 @@ public sealed class MapNavigator
         // arrays are not up yet and there is nothing to check against.
         var (cities, dungeons) = ReadMapArrayCounts();
         int available = map.IsDungeon ? dungeons : cities;
-        if (available > 0 && (map.Index < 0 || map.Index >= available))
+        if (available <= 0)
+        {
+            string kind = map.IsDungeon ? "dungeon" : "city";
+            message = $"The running game's {kind} map array is not available yet. " +
+                      "Enter a map first, then try teleporting.";
+            return false;
+        }
+        if (map.Index < 0 || map.Index >= available)
         {
             string kind = map.IsDungeon ? "dungeon" : "city";
             message = $"{map.Name} is {kind} map {map.Index}, but the running game only has " +

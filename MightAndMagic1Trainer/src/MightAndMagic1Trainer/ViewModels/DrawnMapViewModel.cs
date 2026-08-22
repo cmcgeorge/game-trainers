@@ -116,6 +116,32 @@ public sealed class DrawnMapViewModel : ObservableObject
     public string LivePositionText =>
         _hasPositionLock && _liveX >= 0 ? $"party at X {_liveX} · Y {_liveY}" : "";
 
+    private bool _exportPassability = true;
+    public bool ExportPassability
+    {
+        get => _exportPassability;
+        set
+        {
+            if (SetField(ref _exportPassability, value) && value)
+            {
+                ExportGraphics = false;
+            }
+        }
+    }
+
+    private bool _exportGraphics;
+    public bool ExportGraphics
+    {
+        get => _exportGraphics;
+        set
+        {
+            if (SetField(ref _exportGraphics, value) && value)
+            {
+                ExportPassability = false;
+            }
+        }
+    }
+
     private double _markerX, _markerY;
     public double MarkerX { get => _markerX; private set => SetField(ref _markerX, value); }
     public double MarkerY { get => _markerY; private set => SetField(ref _markerY, value); }
@@ -465,6 +491,240 @@ public sealed class DrawnMapViewModel : ObservableObject
         return pen;
     }
 
+    public void ExportCurrentMap(string filePath)
+    {
+        if (_selectedMap == null) return;
+
+        var ds = _getDataSeg();
+        var mem = _getMem();
+        byte[]? buffer = null;
+        bool isFromMemory = false;
+
+        if (ds != null && mem != null && _mazeBufferOffset is int mo)
+        {
+            var readBytes = mem.Read(ds.BaseAddress + (nuint)mo, 512);
+            if (readBytes.Length == 512)
+            {
+                buffer = readBytes;
+                isFromMemory = true;
+            }
+        }
+
+        if (buffer == null)
+        {
+            buffer = new byte[512];
+            if (_selectedMap.Plane1 != null)
+            {
+                Array.Copy(_selectedMap.Plane1, 0, buffer, 0, 256);
+            }
+            if (_selectedMap.Plane2 != null)
+            {
+                Array.Copy(_selectedMap.Plane2, 0, buffer, 256, 256);
+            }
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("======================================================================");
+        sb.AppendLine("MIGHT & MAGIC 1 - MAZE LAYOUT EXPORT");
+        sb.AppendLine("======================================================================");
+        sb.AppendLine($"Map Index:      {_selectedMap.Index}");
+        sb.AppendLine($"Map Name:       {_selectedMap.DisplayName}");
+        sb.AppendLine($"Export Type:    {(ExportPassability ? "Passability Plane (Plane 2)" : "Graphics Plane (Plane 1)")}");
+        sb.AppendLine($"Source:         {(isFromMemory ? "Live Game Memory (DOSBox)" : "Parsed Trainer Database")}");
+        sb.AppendLine($"Date/Time:      {DateTime.Now.ToString("g", CultureInfo.InvariantCulture)}");
+        sb.AppendLine("======================================================================");
+        sb.AppendLine();
+
+        sb.AppendLine("----------------------------------------------------------------------");
+        sb.AppendLine("1. 16x16 Hex Grid (arranged North-up: Y=15 at the top, Y=0 at the bottom)");
+        sb.AppendLine("----------------------------------------------------------------------");
+        sb.AppendLine("    X=  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15");
+        sb.AppendLine("       -----------------------------------------------------------");
+
+        byte[] plane1 = new byte[256];
+        byte[] plane2 = new byte[256];
+        Array.Copy(buffer, 0, plane1, 0, 256);
+        Array.Copy(buffer, 256, plane2, 0, 256);
+
+        byte[] selectedPlane = ExportPassability ? plane2 : plane1;
+
+        for (int y = 15; y >= 0; y--)
+        {
+            sb.Append($"Y={y:D2} |");
+            for (int x = 0; x < 16; x++)
+            {
+                byte val = selectedPlane[y * 16 + x];
+                sb.Append($" {val:X2} ");
+            }
+            sb.AppendLine();
+        }
+        sb.AppendLine();
+
+        sb.AppendLine("----------------------------------------------------------------------");
+        sb.AppendLine("2. 33x33 ASCII Art Map");
+        sb.AppendLine("----------------------------------------------------------------------");
+
+        if (ExportGraphics && !isFromMemory && _selectedMap.Plane1 == null)
+        {
+            sb.AppendLine("[Notice: Raw graphic data (Plane 1) is not available for this bundled layout.]");
+            sb.AppendLine("[Load your own Mazedata.dta or attach to the live game to view/export it.]");
+        }
+        else
+        {
+            char[,] grid = new char[33, 33];
+            for (int r = 0; r < 33; r++)
+            {
+                for (int c = 0; c < 33; c++)
+                {
+                    grid[r, c] = ' ';
+                }
+            }
+
+            for (int r = 0; r <= 16; r++)
+            {
+                for (int c = 0; c <= 16; c++)
+                {
+                    grid[r * 2, c * 2] = '+';
+                }
+            }
+
+            for (int y = 0; y < 16; y++)
+            {
+                int r = 15 - y;
+                for (int x = 0; x < 16; x++)
+                {
+                    byte v1 = plane1[y * 16 + x];
+                    byte v2 = plane2[y * 16 + x];
+
+                    byte val = ExportPassability ? v2 : v1;
+
+                    byte w = (byte)((val >> 0) & 3);
+                    byte n = (byte)((val >> 2) & 3);
+                    byte e = (byte)((val >> 4) & 3);
+                    byte s = (byte)((val >> 6) & 3);
+
+                    grid[2 * r + 1, 2 * x] = GetGlyph(w, (byte)((v1 >> 0) & 3), (byte)((v2 >> 0) & 3), ExportPassability);
+                    grid[2 * r, 2 * x + 1] = GetGlyph(n, (byte)((v1 >> 2) & 3), (byte)((v2 >> 2) & 3), ExportPassability);
+                    grid[2 * r + 1, 2 * x + 2] = GetGlyph(e, (byte)((v1 >> 4) & 3), (byte)((v2 >> 4) & 3), ExportPassability);
+                    grid[2 * r + 2, 2 * x + 1] = GetGlyph(s, (byte)((v1 >> 6) & 3), (byte)((v2 >> 6) & 3), ExportPassability);
+                }
+            }
+
+            for (int r = 0; r < 33; r++)
+            {
+                for (int c = 0; c < 33; c++)
+                {
+                    sb.Append(grid[r, c]);
+                }
+                sb.AppendLine();
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("Legend:");
+            sb.AppendLine("  + : Grid corners");
+            if (ExportPassability)
+            {
+                sb.AppendLine("  # : Solid Wall");
+                sb.AppendLine("  D : Door (passable)");
+                sb.AppendLine("  S : Special Edge (secret door, one-way, or trigger)");
+                sb.AppendLine("  o : Illusory Wall (drawn as wall, but passable/open)");
+                sb.AppendLine("    : Open / passable space");
+            }
+            else
+            {
+                sb.AppendLine("  1 : Graphic Type 1");
+                sb.AppendLine("  2 : Graphic Type 2");
+                sb.AppendLine("  3 : Graphic Type 3");
+                sb.AppendLine("    : No wall graphic drawn");
+            }
+        }
+        sb.AppendLine();
+
+        sb.AppendLine("----------------------------------------------------------------------");
+        sb.AppendLine("3. Cell-by-Cell Detailed Breakdown");
+        sb.AppendLine("----------------------------------------------------------------------");
+
+        for (int y = 15; y >= 0; y--)
+        {
+            for (int x = 0; x < 16; x++)
+            {
+                byte v1 = plane1[y * 16 + x];
+                byte v2 = plane2[y * 16 + x];
+
+                byte val = ExportPassability ? v2 : v1;
+
+                byte w = (byte)((val >> 0) & 3);
+                byte n = (byte)((val >> 2) & 3);
+                byte e = (byte)((val >> 4) & 3);
+                byte s = (byte)((val >> 6) & 3);
+
+                sb.AppendLine($"[X={x:D2}, Y={y:D2}] Byte: 0x{val:X2}");
+                if (ExportPassability)
+                {
+                    sb.AppendLine($"  - West:  {DescribePassabilityEdge(w, (byte)((v1 >> 0) & 3))}");
+                    sb.AppendLine($"  - North: {DescribePassabilityEdge(n, (byte)((v1 >> 2) & 3))}");
+                    sb.AppendLine($"  - East:  {DescribePassabilityEdge(e, (byte)((v1 >> 4) & 3))}");
+                    sb.AppendLine($"  - South: {DescribePassabilityEdge(s, (byte)((v1 >> 6) & 3))}");
+                }
+                else
+                {
+                    sb.AppendLine($"  - West:  {DescribeGraphicsEdge(w)}");
+                    sb.AppendLine($"  - North: {DescribeGraphicsEdge(n)}");
+                    sb.AppendLine($"  - East:  {DescribeGraphicsEdge(e)}");
+                    sb.AppendLine($"  - South: {DescribeGraphicsEdge(s)}");
+                }
+            }
+        }
+
+        File.WriteAllText(filePath, sb.ToString());
+    }
+
+    private char GetGlyph(byte val, byte gVal, byte pVal, bool isPassability)
+    {
+        if (isPassability)
+        {
+            return val switch
+            {
+                1 => '#',
+                2 => 'D',
+                3 => 'S',
+                _ => gVal != 0 ? 'o' : ' '
+            };
+        }
+        else
+        {
+            return val switch
+            {
+                1 => '1',
+                2 => '2',
+                3 => '3',
+                _ => ' '
+            };
+        }
+    }
+
+    private string DescribePassabilityEdge(byte val, byte gVal)
+    {
+        return val switch
+        {
+            1 => "Solid Wall",
+            2 => "Door (passable)",
+            3 => "Special Edge (secret door, one-way, or trigger)",
+            _ => gVal != 0 ? "Open (Illusory Wall - graphic drawn but passable)" : "Open Space"
+        };
+    }
+
+    private string DescribeGraphicsEdge(byte val)
+    {
+        return val switch
+        {
+            1 => "Wall Graphic Type 1",
+            2 => "Wall Graphic Type 2",
+            3 => "Wall Graphic Type 3",
+            _ => "No wall graphic drawn"
+        };
+    }
+
     // --- persistence ------------------------------------------------------------
     private string? _mazedataPath;
     private int _savedIndex;
@@ -526,11 +786,7 @@ public sealed class DrawnMapViewModel : ObservableObject
         _mazeBufferOffset = rememberedBufferOffset;
     }
 
-    private static string? DefaultMazedataPath()
-    {
-        const string guess = @"C:\Temp\Games\MM1\Mazedata.dta";
-        return File.Exists(guess) ? guess : null;
-    }
+    private static string? DefaultMazedataPath() => null;
 
     private void SaveSettings()
     {

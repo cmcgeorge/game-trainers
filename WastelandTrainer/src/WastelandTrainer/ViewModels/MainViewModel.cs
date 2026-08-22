@@ -102,6 +102,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         MaxEverythingPartyCommand = new RelayCommand(_ => ForEachParty(c => c.MaxEverything()), _ => Party.Count > 0);
 
         Maps = new MapsViewModel(() => _mem, () => _partyHeaderBase);
+        SaveEditor.InitializeLiveCapture(() => (Maps.LiveX, Maps.LiveY, Maps.LiveMapId, Maps.HasParty));
         Roller = new CharacterRollerViewModel(
             () => _mem,
             () => IsAttached ? SelectedProcess?.Id : null,
@@ -259,6 +260,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
             }
         }
         Maps.Tick();
+        SaveEditor.RaiseLivePositionChanged();
     }
 
     // --- ICharacterHost ------------------------------------------------------
@@ -275,6 +277,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
         (MaxSkillsPartyCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (MaxMoneyPartyCommand as RelayCommand)?.RaiseCanExecuteChanged();
         (MaxEverythingPartyCommand as RelayCommand)?.RaiseCanExecuteChanged();
+        SaveEditor.RaiseLivePositionChanged();
     }
 
     public void Dispose()

@@ -49,11 +49,14 @@ public sealed class SaveEditorViewModel : ObservableObject, ICharacterHost
         set => SetField(ref _selectedCharacter, value);
     }
 
+    private Func<(int X, int Y, int MapId, bool HasParty)>? _getLivePosition;
+
     public ICommand OpenCommand { get; }
     public ICommand SaveCommand { get; }
     public ICommand ApplyTeleportCommand { get; }
     public ICommand AddBookmarkCommand { get; }
     public ICommand RemoveBookmarkCommand { get; }
+    public ICommand CaptureLivePositionCommand { get; }
 
     public SaveEditorViewModel()
     {
@@ -64,6 +67,8 @@ public sealed class SaveEditorViewModel : ObservableObject, ICharacterHost
             _ => IsLoaded && !string.IsNullOrWhiteSpace(BookmarkName));
         RemoveBookmarkCommand = new RelayCommand(t => RemoveBookmark(t as TeleportTarget),
             t => IsUserBookmark(t as TeleportTarget));
+        CaptureLivePositionCommand = new RelayCommand(_ => CaptureLivePosition(),
+            _ => _getLivePosition != null && _getLivePosition().HasParty);
         _bookmarks.AddRange(TeleportBookmarks.Load());
         RebuildTeleportTargets();
         TryAutoOpen();
@@ -104,6 +109,36 @@ public sealed class SaveEditorViewModel : ObservableObject, ICharacterHost
         PersistBookmarks();
         RebuildTeleportTargets();
         Status = $"Removed \"{target.Name}\" from the Jump-to list.";
+    }
+
+    public void InitializeLiveCapture(Func<(int X, int Y, int MapId, bool HasParty)> getLivePosition)
+    {
+        _getLivePosition = getLivePosition;
+        RaiseLivePositionChanged();
+    }
+
+    public void RaiseLivePositionChanged()
+    {
+        (CaptureLivePositionCommand as RelayCommand)?.RaiseCanExecuteChanged();
+    }
+
+    private void CaptureLivePosition()
+    {
+        if (_getLivePosition == null) return;
+        var (x, y, mapId, hasParty) = _getLivePosition();
+        if (!hasParty) return;
+
+        string name = BookmarkName.Trim();
+        if (name.Length == 0) name = $"Live Capture ({mapId}, {x}, {y})";
+
+        var target = new TeleportTarget(name, mapId, x, y,
+            $"Captured from live attached game at map {mapId} ({x},{y}).");
+        _bookmarks.RemoveAll(b => string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase));
+        _bookmarks.Add(target);
+        PersistBookmarks();
+        RebuildTeleportTargets();
+        BookmarkName = "";
+        Status = $"Saved \"{name}\" — map {mapId} at ({x},{y}). It's now in the Jump-to list.";
     }
 
     private void PersistBookmarks()

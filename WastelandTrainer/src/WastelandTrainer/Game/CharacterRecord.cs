@@ -76,8 +76,17 @@ public sealed class CharacterRecord
     public int ArmorClass { get => U8(CharacterFormat.OffArmorClass); set => U8(CharacterFormat.OffArmorClass, value); }
     // MAXCON is clamped to 1..MaxPlausibleCon so an edited ranger always stays within the range the
     // locator treats as a real record — a wildly out-of-range MAXCON would make the whole roster
-    // window fail validation on the next scan.
-    public int MaxCon { get => U16(CharacterFormat.OffMaxCon); set => U16(CharacterFormat.OffMaxCon, Math.Clamp(value, 1, CharacterFormat.MaxPlausibleCon)); }
+    // window fail validation on the next scan. Lowering MAXCON also clamps CON down so the record
+    // can never be left with CON > MAXCON (which would make the ranger vanish from the next scan).
+    public int MaxCon
+    {
+        get => U16(CharacterFormat.OffMaxCon);
+        set
+        {
+            U16(CharacterFormat.OffMaxCon, Math.Clamp(value, 1, CharacterFormat.MaxPlausibleCon));
+            if (Con > MaxCon) Con = MaxCon;
+        }
+    }
     // Current CON is clamped to its max: the locator rejects a record whose CON exceeds MAXCON, so an
     // edit that set CON above MAXCON would make the ranger vanish from the next scan. Raise MAXCON first.
     public int Con { get => U16(CharacterFormat.OffCon); set => U16(CharacterFormat.OffCon, Math.Clamp(value, 0, MaxCon)); }

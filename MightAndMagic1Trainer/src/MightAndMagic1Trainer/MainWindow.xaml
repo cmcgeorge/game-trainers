@@ -995,6 +995,11 @@
                                 <TextBlock Text="{Binding MazeStatus}" Foreground="{StaticResource FgDim}"
                                            VerticalAlignment="Center" Margin="10,0,0,0"/>
                             </WrapPanel>
+                            <WrapPanel Margin="0,0,0,6">
+                                <Button Content="📤 Export Map..." Click="OnExportMapClicked" Margin="0,0,10,0"/>
+                                <RadioButton Content="Passability Plane (Plane 2)" IsChecked="{Binding ExportPassability}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                <RadioButton Content="Graphics Plane (Plane 1)" IsChecked="{Binding ExportGraphics}" VerticalAlignment="Center"/>
+                            </WrapPanel>
                             <ComboBox ItemsSource="{Binding Maps}" SelectedItem="{Binding SelectedMap}" Height="28"
                                       IsEnabled="{Binding HasMaze}" ScrollViewer.CanContentScroll="False">
                                 <ComboBox.ItemTemplate>
@@ -1392,7 +1397,8 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Grid.Column="0" Text="{Binding Name}" VerticalAlignment="Center"/>
                                             <TextBox Grid.Column="1" Width="60" HorizontalAlignment="Left"
-                                                     Text="{Binding Minimum, UpdateSourceTrigger=PropertyChanged}"/>
+                                                     Text="{Binding Minimum, UpdateSourceTrigger=PropertyChanged}"
+                                                     IsEnabled="{Binding DataContext.CanEditMinimums, RelativeSource={RelativeSource AncestorType=ItemsControl}}"/>
                                         </Grid>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>

@@ -53,7 +53,7 @@ public static class PartyLocator
                 int read = mem.Read(region.Base + offset, buf, want);
                 if (read < anchor.Length)
                 {
-                    scanned += (nuint)want;
+                    scanned += (nuint)read;
                     break;
                 }
 

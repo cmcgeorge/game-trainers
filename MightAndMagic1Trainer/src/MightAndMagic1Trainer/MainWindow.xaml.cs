@@ -220,6 +220,24 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnExportMapClicked(object sender, RoutedEventArgs e)
+    {
+        if (_vm.DrawnMap.SelectedMap == null) return;
+        var mode = _vm.DrawnMap.ExportPassability ? "passability" : "graphics";
+        var dlg = new SaveFileDialog
+        {
+            Title = "Export currently detected/selected map",
+            Filter = "Text files (*.txt)|*.txt|All files (*.*)|*.*",
+            DefaultExt = ".txt",
+            FileName = $"MM1_Map_{_vm.DrawnMap.SelectedMap.Index:D2}_{_vm.DrawnMap.SelectedMap.RawName}_{mode}_export.txt",
+            InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+        };
+        if (dlg.ShowDialog(this) == true)
+        {
+            _vm.DrawnMap.ExportCurrentMap(dlg.FileName);
+        }
+    }
+
     // The X/Y search grid tells its view model when a cell edit is open, so the tab's
     // auto-refresh poll won't overwrite the value the user is currently typing.
     private void OnXyGridBeginningEdit(object sender, DataGridBeginningEditEventArgs e)
@@ -236,9 +254,6 @@ public partial class MainWindow : Window
     // then the bundled sample roster under docs\, otherwise the app's own folder.
     private static string DefaultRosterDir()
     {
-        const string gameDir = @"C:\Temp\Games\MM1";
-        if (Directory.Exists(gameDir)) return gameDir;
-
         var docs = Path.Combine(AppContext.BaseDirectory, "docs");
         return Directory.Exists(docs) ? docs : AppContext.BaseDirectory;
     }

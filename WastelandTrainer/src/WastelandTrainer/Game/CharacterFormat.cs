@@ -67,6 +67,7 @@ public static class CharacterFormat
     public const int PartyHeaderSize = 0x100;
     public const int HeaderPartyX = 0x08;    // absolute rosterBase - 0xF8
     public const int HeaderPartyY = 0x09;    // absolute rosterBase - 0xF7
+    public const int HeaderPartyMap = 0x0A;
     public const int HeaderMapName = 0xD0;   // absolute rosterBase - 0x30, 12 ASCII bytes
     public const int MapNameLength = 12;
 

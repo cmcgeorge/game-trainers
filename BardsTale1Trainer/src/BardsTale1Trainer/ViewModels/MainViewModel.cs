@@ -158,21 +158,21 @@ public sealed class MainViewModel : ObservableObject
     private int _autoReadCounter;
 
     // --- party-wide freeze toggles ----------------------------------------------
-    private bool _freezeHpAll = true;
+    private bool _freezeHpAll;
     public bool FreezeHpAll
     {
         get => _freezeHpAll;
         set { if (SetField(ref _freezeHpAll, value)) ForEachChar(c => c.FreezeHp = value); }
     }
 
-    private bool _freezeSpAll = true;
+    private bool _freezeSpAll;
     public bool FreezeSpAll
     {
         get => _freezeSpAll;
         set { if (SetField(ref _freezeSpAll, value)) ForEachChar(c => c.FreezeSp = value); }
     }
 
-    private bool _freezeGoldAll = true;
+    private bool _freezeGoldAll;
     public bool FreezeGoldAll
     {
         get => _freezeGoldAll;
@@ -369,7 +369,7 @@ public sealed class MainViewModel : ObservableObject
             var bytes = File.ReadAllBytes(path);
             var rec = CharacterRecord.FromTpw(bytes);
             if (rec == null) { Status = "That file is too small to be a .TPW character."; return; }
-            rec.Slot = Characters.Count;
+            rec.Slot = Math.Min(Characters.Count, PartyFormat.PartySlots - 1);
             var vm = new CharacterViewModel(rec, null);   // file-only (writes go to Save .TPW)
             Characters.Add(vm);
             _tpwPaths[vm] = path;

@@ -73,6 +73,9 @@ public sealed class MapsViewModel : ObservableObject
     private int _liveY;
     public int LiveY { get => _liveY; private set => SetField(ref _liveY, value); }
 
+    private int _liveMapId;
+    public int LiveMapId { get => _liveMapId; private set => SetField(ref _liveMapId, value); }
+
     private bool _hasParty;
     /// <summary>True once a readable live position has been found (shows the green dot).</summary>
     public bool HasParty { get => _hasParty; private set => SetField(ref _hasParty, value); }
@@ -102,6 +105,7 @@ public sealed class MapsViewModel : ObservableObject
         _staleReads = 0;
         LivePosition = "";
         HasParty = false;
+        LiveMapId = 0;
     }
 
     /// <summary>Poll-tick refresh: re-read the party-state header for the live X/Y. The 0xD0 map-name
@@ -129,6 +133,7 @@ public sealed class MapsViewModel : ObservableObject
         _staleReads = 0;
         LiveX = _headerBuf[CharacterFormat.HeaderPartyX];
         LiveY = _headerBuf[CharacterFormat.HeaderPartyY];
+        LiveMapId = _headerBuf[CharacterFormat.HeaderPartyMap];
         LivePosition = $"X {LiveX} · Y {LiveY}";
         HasParty = true;
     }

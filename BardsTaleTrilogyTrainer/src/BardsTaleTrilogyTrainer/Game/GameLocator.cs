@@ -35,10 +35,9 @@ public static class GameLocator
 {
     private const int ChunkSize = 1 << 20;
 
-    /// <summary>Find the game process by name.</summary>
     /// <summary>
-    /// The running game, or null. The caller owns the returned <see cref="Process"/>; the
-    /// others the enumeration produced are disposed here rather than left to a finaliser.
+    /// Find the game process by name. The caller owns the returned <see cref="Process"/>;
+    /// the others the enumeration produced are disposed here rather than left to a finaliser.
     /// </summary>
     public static Process? FindGameProcess()
     {
@@ -197,7 +196,7 @@ public static class GameLocator
                 int read = mem.Read(regionBase + offset, buf, want);
                 if (read < CharacterFormat.ProbeSize)
                 {
-                    scanned += (nuint)want;
+                    scanned += (nuint)read;
                     break;
                 }
 
