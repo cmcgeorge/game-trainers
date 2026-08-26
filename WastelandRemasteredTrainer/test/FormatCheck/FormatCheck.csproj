@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- The view models bind against ICommand, so the harness needs the WPF reference set to
+         exercise them. It stays a plain console app; no window is ever created. -->
+    <UseWPF>true</UseWPF>
+    <AssemblyName>FormatCheck</AssemblyName>
+    <RootNamespace>WastelandRemasteredTrainer.FormatCheck</RootNamespace>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WastelandRemasteredTrainer\WastelandRemasteredTrainer.csproj" />
+  </ItemGroup>
+
+</Project>

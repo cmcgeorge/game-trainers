@@ -175,6 +175,17 @@
     infinite uses, and edit HP/SP/XP/level/gold/attributes. 'BardsTaleTrilogy'
     is enough to be unique; note that a bare 'BardsTale' also matches
     BardsTale1Trainer.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer WastelandRemastered
+    Builds and launches the Wasteland Remastered trainer. A native Win32 target,
+    so no DOSBox: start "Wasteland Remastered" (the Steam remaster), load or begin
+    a game, then Attach. The trainer sweeps GameAssembly.dll's data sections for
+    the IL2CPP Party class pointer and follows Party.m_instance to the players
+    list -- no value searching. It edits attributes, CON, money, skills and
+    inventory in place, with freeze toggles and quick max buttons.
+    'WastelandRemastered' is enough to be unique; note that a bare 'Wasteland'
+    also matches WastelandTrainer.
 #>
 [CmdletBinding()]
 param(

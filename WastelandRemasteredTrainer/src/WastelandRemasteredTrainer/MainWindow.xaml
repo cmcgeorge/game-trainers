@@ -1,0 +1,323 @@
+<Window x:Class="WastelandRemasteredTrainer.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:WastelandRemasteredTrainer.ViewModels"
+        Title="Wasteland Remastered Trainer"
+        Height="820" Width="1040"
+        WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+        <Style x:Key="LabelStyle" TargetType="Label">
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,2,6,2"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+
+        <!-- Numeric entry. A bad value (empty box, stray letter) is shown rather than silently
+             dropped: without ValidatesOnExceptions WPF discards the update and the old number
+             is written on the next commit with no sign anything went wrong. -->
+        <Style x:Key="InputStyle" TargetType="TextBox">
+            <Setter Property="Width" Value="70"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,2,10,2"/>
+            <Setter Property="Padding" Value="3,1"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Style.Triggers>
+                <Trigger Property="Validation.HasError" Value="True">
+                    <Setter Property="BorderBrush" Value="#C62828"/>
+                    <Setter Property="BorderThickness" Value="1.5"/>
+                    <Setter Property="Background" Value="#FFF3F3"/>
+                    <Setter Property="ToolTip"
+                            Value="{Binding RelativeSource={RelativeSource Self},
+                                            Path=(Validation.Errors)[0].ErrorContent}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style x:Key="BtnStyle" TargetType="Button">
+            <Setter Property="Padding" Value="10,3"/>
+            <Setter Property="Margin" Value="3,2"/>
+            <Setter Property="MinWidth" Value="70"/>
+        </Style>
+        <Style x:Key="SmallBtnStyle" TargetType="Button">
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="Margin" Value="2,1"/>
+            <Setter Property="FontSize" Value="10"/>
+        </Style>
+        <Style x:Key="GroupStyle" TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,6"/>
+            <Setter Property="Padding" Value="8,4"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel Margin="8">
+        <!-- Status -->
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+            <TextBlock Text="{Binding StatusMessage}" FontSize="12" TextWrapping="Wrap" FontWeight="Medium"/>
+            <TextBlock Text="{Binding PartyStateText}" FontSize="11" Foreground="Gray" TextWrapping="Wrap"/>
+            <ProgressBar Height="4" Margin="0,4,0,0" Maximum="1"
+                         Value="{Binding LocateProgress, Mode=OneWay}"
+                         Visibility="{Binding IsLocating, Converter={StaticResource BoolToVis}}"/>
+        </StackPanel>
+
+        <!-- Session + party-wide actions -->
+        <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+            <Button Content="Attach" Command="{Binding AttachCommand}" Style="{StaticResource BtnStyle}"/>
+            <Button Content="Locate" Command="{Binding LocateCommand}" Style="{StaticResource BtnStyle}"/>
+            <Button Content="Cancel Scan" Command="{Binding CancelLocateCommand}" Style="{StaticResource BtnStyle}"/>
+            <Button Content="Detach" Command="{Binding DetachCommand}" Style="{StaticResource BtnStyle}"/>
+            <Border Width="16"/>
+            <Button Content="Refresh All" Command="{Binding RefreshAllCommand}" Style="{StaticResource BtnStyle}"/>
+            <Button Content="Write Pending" Command="{Binding WriteAllCommand}" Style="{StaticResource BtnStyle}"
+                    ToolTip="Writes every character's unwritten edits. Untouched fields are left alone."/>
+            <Border Width="16"/>
+            <Button Content="Full Heal All" Command="{Binding FullHealAllCommand}" Style="{StaticResource BtnStyle}"/>
+            <Button Content="Max Attrs All" Command="{Binding MaxAttributesAllCommand}" Style="{StaticResource BtnStyle}"/>
+            <Button Content="Max Skills All" Command="{Binding MaxSkillsAllCommand}" Style="{StaticResource BtnStyle}"/>
+            <Button Content="Max Money All" Command="{Binding MaxMoneyAllCommand}" Style="{StaticResource BtnStyle}"/>
+            <Button Content="Max Everything All" Command="{Binding MaxEverythingAllCommand}" Style="{StaticResource BtnStyle}"/>
+        </WrapPanel>
+
+        <!-- Character list -->
+        <ListBox DockPanel.Dock="Left" Width="190" Margin="0,0,8,0"
+                 ItemsSource="{Binding Characters}"
+                 SelectedIndex="{Binding SelectedCharacterIndex}"
+                 DisplayMemberPath="ListLabel"/>
+
+        <!-- Character editor -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="4,0" DataContext="{Binding SelectedCharacter}">
+
+                <!-- Identity + write controls -->
+                <GroupBox Header="Character" Style="{StaticResource GroupStyle}">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Bold" Margin="0,0,14,0"/>
+                            <TextBlock Text="{Binding Rank}" FontSize="11" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                            <TextBlock Text="{Binding NpcLabel}" FontSize="11" Foreground="Gray"
+                                       VerticalAlignment="Center" Margin="0,0,14,0"/>
+                            <TextBlock Text="{Binding AddressText}" FontSize="10" Foreground="Gray"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <Button Content="Write" Command="{Binding WriteCommand}" Style="{StaticResource BtnStyle}"
+                                    ToolTip="Writes only the fields you have edited."/>
+                            <Button Content="Revert" Command="{Binding RevertCommand}" Style="{StaticResource BtnStyle}"/>
+                            <Button Content="Refresh" Command="{Binding RefreshCommand}" Style="{StaticResource BtnStyle}"/>
+                            <Button Content="Max Everything" Command="{Binding MaxEverythingCommand}"
+                                    Style="{StaticResource BtnStyle}"/>
+                            <TextBlock Text="{Binding PendingLabel}" FontSize="11" Foreground="Gray"
+                                       VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Attributes -->
+                <GroupBox Header="Attributes" Style="{StaticResource GroupStyle}">
+                    <WrapPanel>
+                        <Label Content="STR" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding Strength, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="IQ" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding IQ, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="LCK" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding Luck, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="SPD" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding Speed, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="AGL" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding Agility, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="DEX" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding Dextermity, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="CHR" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding Charisma, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Button Content="Max Attrs" Command="{Binding MaxAttributesCommand}"
+                                Style="{StaticResource SmallBtnStyle}"/>
+                    </WrapPanel>
+                </GroupBox>
+
+                <!-- Vitals -->
+                <GroupBox Header="Vitals" Style="{StaticResource GroupStyle}">
+                    <WrapPanel>
+                        <Label Content="Max CON" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding MaxCon, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="Cur CON" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding CurCon, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="Unc CON" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding UncCon, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="Disease" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding Disease, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <CheckBox Content="Freeze CON" IsChecked="{Binding FreezeCon}"
+                                  VerticalAlignment="Center" Margin="6,0,10,0"
+                                  ToolTip="Re-pins current CON to the game's own maximum every 400 ms."/>
+                        <Button Content="Full Heal" Command="{Binding FullHealCommand}"
+                                Style="{StaticResource SmallBtnStyle}"/>
+                    </WrapPanel>
+                </GroupBox>
+
+                <!-- Progression -->
+                <GroupBox Header="Progression" Style="{StaticResource GroupStyle}">
+                    <WrapPanel>
+                        <Label Content="Level" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding Level, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="Experience" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}" Width="90"
+                                 Text="{Binding Experience, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="Skill Pts" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}"
+                                 Text="{Binding SkillPoints, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="Sex" Style="{StaticResource LabelStyle}"/>
+                        <ComboBox Width="90" Margin="0,2,10,2" VerticalAlignment="Center"
+                                  ItemsSource="{x:Static vm:CharacterViewModel.GenderChoices}"
+                                  SelectedIndex="{Binding Sex}"/>
+                        <Label Content="Nationality" Style="{StaticResource LabelStyle}"/>
+                        <ComboBox Width="100" Margin="0,2,10,2" VerticalAlignment="Center"
+                                  ItemsSource="{x:Static vm:CharacterViewModel.NationalityChoices}"
+                                  SelectedIndex="{Binding Nationality}"/>
+                    </WrapPanel>
+                </GroupBox>
+
+                <!-- Money & equipment -->
+                <GroupBox Header="Money &amp; Equipment" Style="{StaticResource GroupStyle}">
+                    <WrapPanel>
+                        <Label Content="Money" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}" Width="90"
+                                 Text="{Binding Money, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <CheckBox Content="Freeze Money" IsChecked="{Binding FreezeMoney}"
+                                  VerticalAlignment="Center" Margin="6,0,10,0"
+                                  ToolTip="Pins money to the amount showing when you tick the box."/>
+                        <Button Content="Max Money" Command="{Binding MaxMoneyCommand}"
+                                Style="{StaticResource SmallBtnStyle}"/>
+                        <Label Content="AC" Style="{StaticResource LabelStyle}"/>
+                        <TextBox Style="{StaticResource InputStyle}" Width="50"
+                                 Text="{Binding AC, UpdateSourceTrigger=PropertyChanged,
+                                                ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                        <Label Content="Weapon" Style="{StaticResource LabelStyle}"/>
+                        <ComboBox Width="180" Margin="0,2,10,2" VerticalAlignment="Center"
+                                  ItemsSource="{x:Static vm:CharacterViewModel.ItemCatalog}"
+                                  DisplayMemberPath="Label" SelectedValuePath="Id"
+                                  SelectedValue="{Binding Weapon}"/>
+                        <Label Content="Armor" Style="{StaticResource LabelStyle}"/>
+                        <ComboBox Width="180" Margin="0,2,10,2" VerticalAlignment="Center"
+                                  ItemsSource="{x:Static vm:CharacterViewModel.ItemCatalog}"
+                                  DisplayMemberPath="Label" SelectedValuePath="Id"
+                                  SelectedValue="{Binding Armor}"/>
+                    </WrapPanel>
+                </GroupBox>
+
+                <!-- Skills -->
+                <GroupBox Header="Skills" Style="{StaticResource GroupStyle}">
+                    <StackPanel>
+                        <WrapPanel Margin="0,0,0,4">
+                            <TextBlock Text="{Binding SkillSlotsLabel}" FontSize="11" Foreground="Gray"
+                                       VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <Button Content="Max Skills" Command="{Binding MaxSkillsCommand}"
+                                    Style="{StaticResource SmallBtnStyle}"/>
+                            <Label Content="at level" Style="{StaticResource LabelStyle}"/>
+                            <TextBox Style="{StaticResource InputStyle}" Width="40"
+                                     Text="{Binding LearnLevel, UpdateSourceTrigger=PropertyChanged,
+                                                    ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                            <Button Content="Learn All Skills" Command="{Binding LearnAllSkillsCommand}"
+                                    Style="{StaticResource SmallBtnStyle}"
+                                    ToolTip="There are 35 skills but only 30 slots — whatever does not fit is reported."/>
+                        </WrapPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="170">
+                            <ItemsControl ItemsSource="{Binding Skills}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1" ToolTip="{Binding Detail}">
+                                            <TextBlock Text="{Binding Name}" FontSize="11" Width="140"
+                                                       VerticalAlignment="Center"/>
+                                            <TextBox Width="44" FontSize="11" Padding="3,1"
+                                                     Text="{Binding Level, UpdateSourceTrigger=LostFocus,
+                                                                    ValidatesOnExceptions=True,
+                                                                    NotifyOnValidationError=True}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+                </GroupBox>
+
+                <!-- Inventory -->
+                <GroupBox Header="Inventory" Style="{StaticResource GroupStyle}">
+                    <StackPanel>
+                        <WrapPanel Margin="0,0,0,4">
+                            <TextBlock Text="{Binding ItemSlotsLabel}" FontSize="11" Foreground="Gray"
+                                       VerticalAlignment="Center" Margin="0,0,12,0"/>
+                            <Button Content="Max Ammo" Command="{Binding MaxAmmoCommand}"
+                                    Style="{StaticResource SmallBtnStyle}"/>
+                            <Button Content="Clear Jams" Command="{Binding ClearJamsCommand}"
+                                    Style="{StaticResource SmallBtnStyle}"/>
+                            <CheckBox Content="Freeze Ammo" IsChecked="{Binding FreezeAmmo}"
+                                      VerticalAlignment="Center" Margin="8,0,12,0"
+                                      ToolTip="Tops every ammo-bearing item up each poll tick."/>
+                            <Label Content="Add" Style="{StaticResource LabelStyle}"/>
+                            <ComboBox Width="200" Margin="0,2,6,2" VerticalAlignment="Center"
+                                      ItemsSource="{x:Static vm:CharacterViewModel.ItemCatalog}"
+                                      DisplayMemberPath="Label" SelectedValuePath="Id"
+                                      SelectedValue="{Binding AddItemId}"/>
+                            <TextBox Style="{StaticResource InputStyle}" Width="44"
+                                     Text="{Binding AddItemAmmo, UpdateSourceTrigger=PropertyChanged,
+                                                    ValidatesOnExceptions=True, NotifyOnValidationError=True}"/>
+                            <Button Content="Add Item" Command="{Binding AddItemCommand}"
+                                    Style="{StaticResource SmallBtnStyle}"/>
+                        </WrapPanel>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="200">
+                            <ItemsControl ItemsSource="{Binding Items}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" Margin="0,1" ToolTip="{Binding Detail}">
+                                            <TextBlock Text="{Binding SlotLabel}" FontSize="11" Width="26"
+                                                       VerticalAlignment="Center" Foreground="Gray"/>
+                                            <ComboBox Width="210" FontSize="11" VerticalAlignment="Center"
+                                                      ItemsSource="{x:Static vm:CharacterViewModel.ItemCatalog}"
+                                                      DisplayMemberPath="Label" SelectedValuePath="Id"
+                                                      SelectedValue="{Binding ItemId}"/>
+                                            <TextBox Width="44" FontSize="11" Padding="3,1" Margin="6,0"
+                                                     Text="{Binding Ammo, UpdateSourceTrigger=LostFocus,
+                                                                    ValidatesOnExceptions=True,
+                                                                    NotifyOnValidationError=True}"/>
+                                            <CheckBox Content="Jam" IsChecked="{Binding Jammed}" FontSize="10"
+                                                      VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                            <Button Content="Remove" Command="{Binding RemoveCommand}"
+                                                    Style="{StaticResource SmallBtnStyle}"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+                </GroupBox>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
