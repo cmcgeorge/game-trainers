@@ -44,7 +44,7 @@ attached to is the one the offsets were measured on.
 ### Other options
 
 ```powershell
-.\Run.ps1 -Test -NoRun          # 737 checks, no game and no copyrighted files needed
+.\Run.ps1 -Test -NoRun          # 803 checks, no game and no copyrighted files needed
 .\Run.ps1 -Configuration Debug  # Debug build
 .\Run.ps1 -Clean                # delete bin/obj first
 .\Run.ps1 -NoBuild              # launch the last build
@@ -319,19 +319,22 @@ src/TheQuestTrainer/
     AdventureReader.cs    the ordered record walk, and a parser per object
     Adventure.cs          one decoded world, as typed records
     AdventureCatalog.cs   which adventures a Quest installation holds
-  Cluebooks/
+  Cluebooks/            what the document says; how it is written comes from the shared library
     Cluebook.cs           chapters, dossiers and the notes that say what not to trust
-    WorldPlan.cs          the outdoor grid as an SVG plan
-    HtmlCluebookWriter.cs one self-contained page
-    TextCluebookWriter.cs the same document, as text
+    WorldPlan.cs          the outdoor grid, laid out over a shared SvgCanvas
+    HtmlCluebookWriter.cs the section structure, over a shared HtmlPage
+    TextCluebookWriter.cs the same sections, over a shared TextDocument
   Memory/IMemorySource.cs the process slice the locator needs, so it can be faked
   ViewModels/             MainViewModel (session + IGameHost), MapViewModel, CluebookViewModel, rows, ProcessPicker
   MainWindow.xaml         Character / Skills / Inventory / Map / Cluebook / Reference tabs
-test/FormatCheck/         737 checks over synthetic records, a synthetic heap and a synthetic world
+test/FormatCheck/         803 checks over synthetic records, a synthetic heap and a synthetic world
 ```
 
-References `GameTrainers.Common` for both `Memory` (`ProcessMemory`, `NativeMethods`) and `Mvvm`
-(`ObservableObject`, `RelayCommand`).
+References `GameTrainers.Common` for `Memory` (`ProcessMemory`, `NativeMethods`), `Mvvm`
+(`ObservableObject`, `RelayCommand`) and `Documents` (`SvgCanvas`, `HtmlPage`, `TextDocument` — the
+markup and wrapping behind the cluebook, shared with the Alternate Reality city plan). The world plan
+uses `SvgCanvas.Responsive`, which takes the page's width; a drawing saved as its own file uses
+`SvgCanvas.File`, which is sized and laid out one element per line so it can still be read.
 
 ---
 
@@ -341,7 +344,7 @@ References `GameTrainers.Common` for both `Memory` (`ProcessMemory`, `NativeMeth
 .\Run.ps1 -Test -NoRun
 ```
 
-737 checks against a synthetic 32-bit address space with the same section geometry as the real
+803 checks against a synthetic 32-bit address space with the same section geometry as the real
 image. It covers the cases a live game cannot be asked to produce: a module relocated away from its
 preferred base, a stale static slot, an empty slot, a build whose `.data` does not cover the slot, a
 record whose vtable points at writable memory, the new-character prototype sitting next to the live

@@ -110,7 +110,8 @@ in `CharacterFormat.cs` reviewable from the repository alone. If you change an o
 
 Three projects in `AlternateRealityTrainer.sln`: the WPF app, its test harness, and the shared
 `GameTrainers.Common` library it references (pulling both `GameTrainers.Common.Memory` and
-`GameTrainers.Common.Mvvm` via csproj `<Using>` items — note their `ObservableObject` uses
+`GameTrainers.Common.Mvvm` via csproj `<Using>` items, and `GameTrainers.Common.Documents` for the
+SVG export — note their `ObservableObject` uses
 `SetField`).
 
 - `src/AlternateRealityTrainer/` — the WPF app (`AssemblyName` **`ARTrainer`**, `RootNamespace`
@@ -126,8 +127,13 @@ Three projects in `AlternateRealityTrainer.sln`: the WPF app, its test harness, 
       than 12 KB; pass `null` for an offline view (which is how `FormatCheck` uses it).
     - `AttributeBook` / `CityBook` / `PotionBook` / `GameFacts` — pure reference data.
     - `CityMap.cs` — the drawn 64 × 64 location map: cell geometry, the per-kind palette, and a
-      standalone SVG renderer. Both the WPF canvas and **Save map…** go through it, so the on-screen
-      map and the exported one cannot disagree. North counts up from the southern edge, so row 1 is
+      standalone SVG renderer built on `GameTrainers.Common.Documents.SvgCanvas`. The geometry and
+      the palette stay here because they are about this city; the markup, the escaping and the
+      invariant number formatting are shared with the other trainer that draws a plan, and are not
+      to be hand-rolled back into this file. It uses `SvgCanvas.File`, not the compact layout: the
+      export is a file somebody opens, and `docs/city-map.svg` is a committed copy of it, so it stays
+      one element per line rather than becoming a single 400 KB line. Both the WPF canvas and **Save map…** go through it, so
+      the on-screen map and the exported one cannot disagree. North counts up from the southern edge, so row 1 is
       drawn at the *bottom* — `FormatCheck` pins that, because a mirrored map is the easy mistake.
       `MainWindow.xaml` tiles its grid brush with the literals `15` and `120`; the harness asserts
       they still equal `CellSize` and `CellSize × MajorEvery`.

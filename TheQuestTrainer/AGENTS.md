@@ -47,15 +47,15 @@ src/TheQuestTrainer/
     AdventureReader.cs    the ordered record walk and a parser per object
     Adventure.cs          one decoded world, as typed records
     AdventureCatalog.cs   which adventures an installation holds
-  Cluebooks/
+  Cluebooks/            what the document says; how it is written is GameTrainers.Common.Documents
     Cluebook.cs           chapters, dossiers, notes
-    WorldPlan.cs          the outdoor grid as SVG
-    HtmlCluebookWriter.cs one self-contained page
-    TextCluebookWriter.cs the same document as text
+    WorldPlan.cs          the outdoor grid, laid out over an SvgCanvas
+    HtmlCluebookWriter.cs the section structure, over an HtmlPage
+    TextCluebookWriter.cs the same sections, over a TextDocument
   Memory/IMemorySource.cs the process slice the locator needs, so it can be faked
   ViewModels/             MainViewModel (session + IGameHost), MapViewModel, CluebookViewModel, rows, ProcessPicker
   MainWindow.xaml         Character / Skills / Inventory / Map / Cluebook / Reference tabs
-test/FormatCheck/         737 checks over synthetic records, a synthetic heap and a synthetic world
+test/FormatCheck/         803 checks over synthetic records, a synthetic heap and a synthetic world
 ```
 
 References `GameTrainers.Common` for both `Memory` and `Mvvm`, via csproj `<Using>` items.
@@ -251,6 +251,22 @@ is non-zero stores its id and stops; the engine fills the wording in afterwards 
 Read it as though it always carried text and you run off the end of the second person you meet.
 `Adventure.ResolveTopic` is where the two halves are put back together.
 
+**The markup is not this trainer's to write.** `GameTrainers.Common.Documents` holds the SVG, HTML
+and plain-text builders, and `Cluebooks/` holds the layout and the section structure. The split is
+not tidiness: the escaping, the invariant number formatting, the self-closing rule and the
+self-contained rule are the things that were got wrong by hand — twice, in two trainers — and they
+are now got right in one place. `DocumentChecks.cs` in the harness is where they are pinned, because
+the shared library has no harness of its own. Do not hand-roll `<svg`, `<!DOCTYPE` or a wrap loop
+here again — including a bare `int.ToString()` for a number that goes into markup, which is the one
+way a current-culture value can still get through.
+
+**Escape by context, and when in doubt escape more.** `HtmlPage.Escape` and `EscapeAttribute` do the
+same thing today — both take quotes out — and the writer still calls `A()` rather than `E()` for the
+four ids that go inside `id="…"` and `href="…"`. That is not redundancy: those ids are arbitrary
+bytes out of somebody else's adventure file, the port briefly stopped escaping quotes in them, and a
+quote there closes the attribute and turns the rest of it into markup. The harness builds an
+adventure whose quest id *is* an event handler and checks it comes out inert.
+
 **The cluebook says what it does not know, on its own first page.** It lists what a map *names*, not
 where anything stands, and it never claims a conversation gives or takes a thing — only that it names
 it. Those limits are in `Cluebook.BuildNotes` and in the README, and they are there because the
@@ -302,7 +318,7 @@ Do not add these without a very good reason, and update the README and the UI co
 ## Testing
 
 ```powershell
-.\Run.ps1 -Test -NoRun          # 737 checks, no game, no copyrighted files
+.\Run.ps1 -Test -NoRun          # 803 checks, no game, no copyrighted files
 ```
 
 `test/FormatCheck/Fakes.cs` builds a synthetic 32-bit address space with the same three-section

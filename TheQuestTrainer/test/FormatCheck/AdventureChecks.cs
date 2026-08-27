@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.IO;
+using GameTrainers.Common.Documents;
 using TheQuestTrainer.Adventures;
 using TheQuestTrainer.Cluebooks;
 using TheQuestTrainer.Game;
@@ -274,26 +276,48 @@ internal static partial class Program
         Check("the notes always say where this came from",
             book.Notes.Any(n => n.Contains("installed on this machine", StringComparison.Ordinal)));
 
+        // An id is arbitrary bytes out of somebody else's adventure file, and several of them end up
+        // inside double-quoted anchors. One holding a quote would close the attribute and turn the
+        // rest of it into markup, so the writer has to escape attributes differently from text.
+        var hostile = new Adventure
+        {
+            SourcePath = "fixture",
+            Database = "TheQuestTest",
+            Name = "Testland",
+            Pack = "test",
+            GridPrefix = FakeAdventure.GridPrefix,
+            GridWidth = 1,
+            GridHeight = 1,
+            FormatVersion = FakeAdventure.Version,
+            Quests = [new AdventureQuest("q\" onmouseover=\"x", "Hostile", "A quest whose id is markup.")],
+        };
+        string hostilePage = HtmlCluebookWriter.Write(Cluebook.Build(hostile));
+        Check("an id cannot close the attribute it is written into",
+            hostilePage.Contains("id=\"q-q&quot; onmouseover=&quot;x\"", StringComparison.Ordinal));
+        Check("so no event handler reaches the page",
+            !hostilePage.Contains("onmouseover=\"", StringComparison.Ordinal));
+        Check("and the id is escaped rather than dropped",
+            hostilePage.Contains("q&quot; onmouseover=&quot;x", StringComparison.Ordinal));
+
         string plan = WorldPlan.Render(book);
         Check("the plan is an SVG element",
             plan.StartsWith("<svg", StringComparison.Ordinal) && plan.EndsWith("</svg>", StringComparison.Ordinal));
         Check("the plan names a place it has a map for", plan.Contains("Testfield", StringComparison.Ordinal));
         Check("the plan draws one square per grid cell, filled or not", CountOf(plan, "<rect") == 3 * 2);
         Check("angle brackets in a name cannot break the plan",
-            WorldPlan.Escape("a<b>&\"c\"") == "a&lt;b&gt;&amp;&quot;c&quot;");
+            SvgCanvas.EscapeText("a<b>&") == "a&lt;b&gt;&amp;");
+        Check("an apostrophe survives a text node, because a place is called Xebec's Demise",
+            SvgCanvas.EscapeText("Xebec's Demise") == "Xebec's Demise");
+        Check("a quote in an attribute is escaped, because every attribute is double-quoted",
+            SvgCanvas.EscapeAttribute("a\"b") == "a&quot;b");
 
         string html = HtmlCluebookWriter.Write(book);
         Check("the HTML is a whole document",
             html.StartsWith("<!DOCTYPE html>", StringComparison.Ordinal) &&
             html.TrimEnd().EndsWith("</html>", StringComparison.Ordinal));
-        // The only URL a self-contained page may carry is the SVG namespace, which is an identifier
-        // rather than something a browser goes and asks for.
-        string withoutNamespace = html.Replace("http://www.w3.org/2000/svg", "", StringComparison.Ordinal);
-        Check("the HTML fetches nothing and runs nothing",
-            !withoutNamespace.Contains("http://", StringComparison.OrdinalIgnoreCase) &&
-            !withoutNamespace.Contains("https://", StringComparison.OrdinalIgnoreCase) &&
-            !withoutNamespace.Contains("<script", StringComparison.OrdinalIgnoreCase) &&
-            !withoutNamespace.Contains("<img", StringComparison.OrdinalIgnoreCase));
+        bool contained = HtmlPage.IsSelfContained(html, out string outbound);
+        Check(contained ? "the HTML fetches nothing and runs nothing"
+                        : "the HTML fetches nothing and runs nothing — " + outbound, contained);
         Check("the HTML contains the world plan", html.Contains("<svg", StringComparison.Ordinal));
         Check("the HTML contains a conversation", html.Contains("Who needs rescuing?", StringComparison.Ordinal));
 
@@ -429,4 +453,5 @@ internal static partial class Program
         try { action(); return false; }
         catch (ArchiveException) { return true; }
     }
+
 }

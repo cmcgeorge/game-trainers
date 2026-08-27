@@ -1,5 +1,5 @@
 using System.Globalization;
-using System.Text;
+using GameTrainers.Common.Documents;
 
 namespace AlternateRealityTrainer.Game;
 
@@ -205,126 +205,117 @@ public static class CityMap
 
     /// <summary>
     /// Renders the whole map as a standalone SVG document — the version that goes into the strategy
-    /// guide, and what <b>Save map…</b> writes. Pure text, no dependency on WPF, so the verification
-    /// harness can assert it.
+    /// guide, and what <b>Save map…</b> writes.
+    ///
+    /// The markup goes through <see cref="SvgCanvas"/>, which is shared with the other trainer that
+    /// draws a plan; the geometry and the palette stay here, because they are about this city. Pure
+    /// text, no dependency on WPF, so the verification harness can assert it.
     /// </summary>
     public static string RenderSvg(CityTerrain? terrain = null)
     {
         var legend = Legend();
-        double legendHeight = 34;
+        const double legendHeight = 34;
         double totalHeight = Height + legendHeight;
-        var sb = new StringBuilder();
 
-        string N(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
-
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{N(Width)}\" height=\"{N(totalHeight)}\" ")
-          .Append(CultureInfo.InvariantCulture, $"viewBox=\"0 0 {N(Width)} {N(totalHeight)}\" ")
-          .AppendLine("font-family=\"Segoe UI, Helvetica, Arial, sans-serif\">");
-        sb.AppendLine("  <title>The City of Xebec's Demise — locations</title>");
-        sb.AppendLine(CultureInfo.InvariantCulture,
-            $"  <rect width=\"{N(Width)}\" height=\"{N(totalHeight)}\" fill=\"#FBF8F2\"/>");
+        // A file rather than something embedded in a page: one element per line, so the exported map
+        // can be read, diffed and inspected. docs/city-map.svg is a committed copy of this output.
+        var svg = SvgCanvas.File(Width, totalHeight, "The City of Xebec's Demise",
+                                 ("font-family", "Segoe UI, Helvetica, Arial, sans-serif"));
+        svg.Title("The City of Xebec's Demise — locations");
+        svg.Rect(0, 0, Width, totalHeight, ("fill", "#FBF8F2"));
 
         // Terrain, painted under the grid so the grid lines still read on top of it.
         var tiles = Tiles(terrain);
         if (tiles.Count > 0)
         {
-            sb.AppendLine("  <g shape-rendering=\"crispEdges\">");
-            foreach (var t in tiles)
+            using (svg.Scope("g", ("shape-rendering", "crispEdges")))
             {
-                sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"    <rect x=\"{N(t.Left)}\" y=\"{N(t.Top)}\" width=\"{N(t.Size)}\" " +
-                    $"height=\"{N(t.Size)}\" fill=\"{t.Colour}\"/>");
+                foreach (var t in tiles) svg.Rect(t.Left, t.Top, t.Size, t.Size, ("fill", t.Colour));
             }
-            sb.AppendLine("  </g>");
         }
 
-        // Grid.
-        sb.AppendLine("  <g stroke=\"#DDD5C7\" stroke-width=\"1\">");
-        for (int i = 0; i <= GameFacts.CitySize; i++)
+        // Grid: the minor lines first, then the major ones over them.
+        using (svg.Scope("g", ("stroke", "#DDD5C7"), ("stroke-width", 1)))
         {
-            if (i % MajorEvery == 0) continue;
-            double p = Margin + i * CellSize;
-            sb.AppendLine(CultureInfo.InvariantCulture,
-                $"    <line x1=\"{N(p)}\" y1=\"{N(Margin)}\" x2=\"{N(p)}\" y2=\"{N(Margin + GridSize)}\"/>");
-            sb.AppendLine(CultureInfo.InvariantCulture,
-                $"    <line x1=\"{N(Margin)}\" y1=\"{N(p)}\" x2=\"{N(Margin + GridSize)}\" y2=\"{N(p)}\"/>");
+            for (int i = 0; i <= GameFacts.CitySize; i++)
+            {
+                if (i % MajorEvery == 0) continue;
+                GridLines(svg, i);
+            }
         }
-        sb.AppendLine("  </g>");
 
-        sb.AppendLine("  <g stroke=\"#B9AE9B\" stroke-width=\"1\">");
-        for (int i = 0; i <= GameFacts.CitySize; i += MajorEvery)
+        using (svg.Scope("g", ("stroke", "#B9AE9B"), ("stroke-width", 1)))
         {
-            double p = Margin + i * CellSize;
-            sb.AppendLine(CultureInfo.InvariantCulture,
-                $"    <line x1=\"{N(p)}\" y1=\"{N(Margin)}\" x2=\"{N(p)}\" y2=\"{N(Margin + GridSize)}\"/>");
-            sb.AppendLine(CultureInfo.InvariantCulture,
-                $"    <line x1=\"{N(Margin)}\" y1=\"{N(p)}\" x2=\"{N(Margin + GridSize)}\" y2=\"{N(p)}\"/>");
+            for (int i = 0; i <= GameFacts.CitySize; i += MajorEvery) GridLines(svg, i);
         }
-        sb.AppendLine("  </g>");
 
         // Axis labels.
-        sb.AppendLine("  <g fill=\"#6B6154\" font-size=\"10\" text-anchor=\"middle\">");
-        for (int n = 4; n <= GameFacts.CitySize; n += 4)
+        using (svg.Scope("g", ("fill", "#6B6154"), ("font-size", 10), ("text-anchor", "middle")))
         {
-            sb.AppendLine(CultureInfo.InvariantCulture,
-                $"    <text x=\"{N(CentreX(n))}\" y=\"{N(Margin - 8)}\">{n}</text>");
-            sb.AppendLine(CultureInfo.InvariantCulture,
-                $"    <text x=\"{N(Margin - 12)}\" y=\"{N(CentreY(n) + 3.5)}\">{n}</text>");
-        }
-        sb.AppendLine("  </g>");
-
-        // Compass hints on the outside edges.
-        sb.AppendLine("  <g fill=\"#9A8F7E\" font-size=\"10\" font-weight=\"bold\">");
-        sb.AppendLine(CultureInfo.InvariantCulture,
-            $"    <text x=\"{N(Margin - 20)}\" y=\"{N(Margin - 8)}\">N</text>");
-        sb.AppendLine(CultureInfo.InvariantCulture,
-            $"    <text x=\"{N(Margin + GridSize + 6)}\" y=\"{N(Margin + GridSize + 14)}\" text-anchor=\"end\">E &#8594;</text>");
-        sb.AppendLine("  </g>");
-
-        // Markers.
-        sb.AppendLine("  <g font-size=\"10\" font-weight=\"bold\" text-anchor=\"middle\">");
-        foreach (var m in Markers())
-        {
-            sb.AppendLine(CultureInfo.InvariantCulture,
-                $"    <g><title>{Escape(m.Description)}</title>" +
-                $"<circle cx=\"{N(m.CentreX)}\" cy=\"{N(m.CentreY)}\" r=\"{N(m.Radius)}\" " +
-                $"fill=\"{m.Colour}\" stroke=\"#FBF8F2\" stroke-width=\"1.2\"/>" +
-                $"<text x=\"{N(m.CentreX)}\" y=\"{N(m.CentreY + 3.2)}\" fill=\"#FFFFFF\">{m.Symbol}</text></g>");
-        }
-        sb.AppendLine("  </g>");
-
-        // Legend.
-        sb.AppendLine("  <g font-size=\"11\">");
-        double x = Margin;
-        double y = Height + 4;
-        if (tiles.Count > 0)
-        {
-            foreach (var kind in new[] { TerrainKind.Building, TerrainKind.Wall, TerrainKind.Scenery })
+            for (int n = 4; n <= GameFacts.CitySize; n += 4)
             {
-                string label = LabelFor(kind);
-                sb.AppendLine(CultureInfo.InvariantCulture,
-                    $"    <rect x=\"{N(x)}\" y=\"{N(y)}\" width=\"14\" height=\"14\" " +
-                    $"fill=\"{ColourFor(kind)}\" stroke=\"#B9AE9B\" stroke-width=\"0.5\"/>" +
-                    $"<text x=\"{N(x + 19)}\" y=\"{N(y + 11)}\" fill=\"#4A4238\">{label}</text>");
-                x += 19 + label.Length * 7.2 + 16;
+                svg.Text(CentreX(n), Margin - 8, n.ToString(CultureInfo.InvariantCulture));
+                svg.Text(Margin - 12, CentreY(n) + 3.5, n.ToString(CultureInfo.InvariantCulture));
             }
         }
-        foreach (var e in legend)
-        {
-            sb.AppendLine(CultureInfo.InvariantCulture,
-                $"    <circle cx=\"{N(x + 7)}\" cy=\"{N(y + 7)}\" r=\"7\" fill=\"{e.Colour}\"/>" +
-                $"<text x=\"{N(x + 7)}\" y=\"{N(y + 10.5)}\" fill=\"#FFFFFF\" font-size=\"9\" " +
-                $"font-weight=\"bold\" text-anchor=\"middle\">{e.Symbol}</text>" +
-                $"<text x=\"{N(x + 19)}\" y=\"{N(y + 11)}\" fill=\"#4A4238\">{e.Label}</text>");
-            x += 19 + e.Label.Length * 7.2 + 16;
-        }
-        sb.AppendLine("  </g>");
 
-        sb.AppendLine("</svg>");
-        return sb.ToString();
+        // Compass hints on the outside edges.
+        using (svg.Scope("g", ("fill", "#9A8F7E"), ("font-size", 10), ("font-weight", "bold")))
+        {
+            svg.Text(Margin - 20, Margin - 8, "N");
+            svg.Text(Margin + GridSize + 6, Margin + GridSize + 14, "E →", ("text-anchor", "end"));
+        }
+
+        // Markers. The title is the marker group's own child, so it is that marker's tooltip.
+        using (svg.Scope("g", ("font-size", 10), ("font-weight", "bold"), ("text-anchor", "middle")))
+        {
+            foreach (var m in Markers())
+            {
+                using (svg.Scope("g"))
+                {
+                    svg.Title(m.Description);
+                    svg.Circle(m.CentreX, m.CentreY, m.Radius,
+                               ("fill", m.Colour), ("stroke", "#FBF8F2"), ("stroke-width", 1.2));
+                    svg.Text(m.CentreX, m.CentreY + 3.2, m.Symbol.ToString(), ("fill", "#FFFFFF"));
+                }
+            }
+        }
+
+        // Legend.
+        using (svg.Scope("g", ("font-size", 11)))
+        {
+            double x = Margin;
+            double y = Height + 4;
+
+            if (tiles.Count > 0)
+            {
+                foreach (var kind in new[] { TerrainKind.Building, TerrainKind.Wall, TerrainKind.Scenery })
+                {
+                    string label = LabelFor(kind);
+                    svg.Rect(x, y, 14, 14, ("fill", ColourFor(kind)), ("stroke", "#B9AE9B"), ("stroke-width", 0.5));
+                    svg.Text(x + 19, y + 11, label, ("fill", "#4A4238"));
+                    x += 19 + label.Length * 7.2 + 16;
+                }
+            }
+
+            foreach (var e in legend)
+            {
+                svg.Circle(x + 7, y + 7, 7, ("fill", e.Colour));
+                svg.Text(x + 7, y + 10.5, e.Symbol.ToString(),
+                         ("fill", "#FFFFFF"), ("font-size", 9), ("font-weight", "bold"), ("text-anchor", "middle"));
+                svg.Text(x + 19, y + 11, e.Label, ("fill", "#4A4238"));
+                x += 19 + e.Label.Length * 7.2 + 16;
+            }
+        }
+
+        return svg.ToSvg();
     }
 
-    private static string Escape(string s) =>
-        s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+    /// <summary>The pair of grid lines at grid index <paramref name="i"/>, across and down.</summary>
+    private static void GridLines(SvgCanvas svg, int i)
+    {
+        double p = Margin + i * CellSize;
+        svg.Line(p, Margin, p, Margin + GridSize);
+        svg.Line(Margin, p, Margin + GridSize, p);
+    }
 }

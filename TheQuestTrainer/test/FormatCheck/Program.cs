@@ -49,6 +49,7 @@ internal static partial class Program
         WorldPictureChecks();
         MapViewChecks();
         PickerChecks();
+        DocumentChecks();
         ArchiveChecks();
         PalmDatabaseChecks();
         AdventureHeaderChecks();

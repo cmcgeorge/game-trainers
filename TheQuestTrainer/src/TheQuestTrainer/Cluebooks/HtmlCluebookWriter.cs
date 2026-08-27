@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using GameTrainers.Common.Documents;
 using TheQuestTrainer.Adventures;
 
 namespace TheQuestTrainer.Cluebooks;
@@ -10,6 +11,10 @@ namespace TheQuestTrainer.Cluebooks;
 /// Self-contained on purpose: the style is inline, the world plan is inline SVG, and there is no
 /// script and nothing fetched, so the file can be moved, mailed or opened offline and still be the
 /// same document. Same reason the FRUA cluebook next door writes one file.
+///
+/// The scaffold, the escaping and that self-contained rule come from <see cref="HtmlPage"/>; what is
+/// here is the section structure, which is where the document says what it is about and is therefore
+/// the part that belongs to The Quest.
 /// </summary>
 public static class HtmlCluebookWriter
 {
@@ -19,13 +24,6 @@ public static class HtmlCluebookWriter
         ArgumentNullException.ThrowIfNull(cluebook);
         var a = cluebook.Adventure;
         var s = new StringBuilder();
-
-        s.AppendLine("<!DOCTYPE html>");
-        s.AppendLine("<html lang=\"en\"><head><meta charset=\"utf-8\">");
-        s.AppendLine($"<title>{E(a.Name)} — cluebook</title>");
-        s.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
-        s.AppendLine(Style);
-        s.AppendLine("</head><body>");
 
         s.AppendLine($"<h1>{E(a.Name)}</h1>");
         s.AppendLine($"<p class=\"lede\">A cluebook for <b>The Quest</b>, decompiled from " +
@@ -40,8 +38,7 @@ public static class HtmlCluebookWriter
         Things(s, cluebook);
         Reference(s, cluebook);
 
-        s.AppendLine("</body></html>");
-        return s.ToString();
+        return new HtmlPage($"{a.Name} — cluebook").Style(Style).Append(s.ToString()).ToHtml();
     }
 
     // ---- sections -----------------------------------------------------------------------------
@@ -113,7 +110,7 @@ public static class HtmlCluebookWriter
 
         foreach (var quest in c.Quests)
         {
-            s.AppendLine($"<section class=\"entry\"><h3 id=\"q-{E(quest.Id)}\">{E(quest.Name)}</h3>");
+            s.AppendLine($"<section class=\"entry\"><h3 id=\"q-{A(quest.Id)}\">{E(quest.Name)}</h3>");
             s.AppendLine($"<p class=\"id\">{E(quest.Id)}</p>");
             if (quest.Description.Length > 0) s.AppendLine($"<p>{E(quest.Description)}</p>");
             Mentions(s, quest);
@@ -129,7 +126,7 @@ public static class HtmlCluebookWriter
         foreach (var chapter in c.Chapters)
         {
             var m = chapter.Map;
-            s.AppendLine($"<section class=\"entry\"><h3 id=\"m-{E(m.Id)}\">{E(m.Name.Length > 0 ? m.Name : m.Id)}</h3>");
+            s.AppendLine($"<section class=\"entry\"><h3 id=\"m-{A(m.Id)}\">{E(m.Name.Length > 0 ? m.Name : m.Id)}</h3>");
             s.AppendLine("<p class=\"id\">" + E(m.Id) + " · " +
                          (m.IsOutdoorCell ? $"cell {m.CellLabel}, world tiles {m.OriginX}–{m.OriginX + m.Tiles - 1} east, {m.OriginY}–{m.OriginY + m.Tiles - 1} south"
                                           : "interior") +
@@ -139,7 +136,7 @@ public static class HtmlCluebookWriter
             {
                 s.AppendLine("<p><b>People here:</b> " +
                     string.Join(", ", chapter.People.Select(p =>
-                        $"<a href=\"#p-{E(p.Id)}\">{E(p.Name.Length > 0 ? p.Name : p.Id)}</a>")) + "</p>");
+                        $"<a href=\"#p-{A(p.Id)}\">{E(p.Name.Length > 0 ? p.Name : p.Id)}</a>")) + "</p>");
             }
 
             if (chapter.Objects.Count > 0)
@@ -182,7 +179,7 @@ public static class HtmlCluebookWriter
 
         foreach (var person in c.Speakers)
         {
-            s.AppendLine($"<section class=\"entry\"><h3 id=\"p-{E(person.Id)}\">{E(person.Name.Length > 0 ? person.Name : person.Id)}</h3>");
+            s.AppendLine($"<section class=\"entry\"><h3 id=\"p-{A(person.Id)}\">{E(person.Name.Length > 0 ? person.Name : person.Id)}</h3>");
             s.Append($"<p class=\"id\">{E(person.Id)}");
             if (person.TypeId.Length > 0) s.Append($" · {E(person.TypeId)}");
             if (person.Gold > 0) s.Append($" · {person.Gold:N0} gold");
@@ -375,10 +372,19 @@ public static class HtmlCluebookWriter
 
     private static string Shorten(string text) => text.Length <= 220 ? text : text[..217] + "…";
 
-    private static string E(string value) => WorldPlan.Escape(value);
+    /// <summary>Escapes text going between tags.</summary>
+    private static string E(string value) => HtmlPage.Escape(value);
+
+    /// <summary>
+    /// Escapes a value going into a double-quoted attribute.
+    ///
+    /// A separate helper because the ids these anchors are built from come out of a third-party
+    /// adventure file, not out of this program: an id holding a quote would otherwise close the
+    /// attribute and turn the rest of it into markup.
+    /// </summary>
+    private static string A(string value) => HtmlPage.EscapeAttribute(value);
 
     private const string Style = """
-        <style>
         :root{color-scheme:light}
         body{margin:0 auto;max-width:60rem;padding:2rem 1.25rem 6rem;
              font:16px/1.6 'Iowan Old Style','Palatino Linotype',Georgia,serif;color:#2b2519;background:#fdfaf3}
@@ -412,6 +418,5 @@ public static class HtmlCluebookWriter
         dl dt{font-weight:600;margin-top:.6rem}
         dl dd{margin:.1rem 0 0 1.25rem}
         q{quotes:'“' '”'}
-        </style>
         """;
 }

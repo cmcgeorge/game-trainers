@@ -182,11 +182,12 @@ src/AlternateRealityTrainer/
                AttributeBook.cs     the seven attributes — storage order vs. display order
                CityBook.cs          every location with coordinates
                CityTerrain.cs       the 64 x 64 street map: parser, terrain kinds, self-check
-               CityMap.cs           map geometry, palette and the SVG exporter
+               CityMap.cs           map geometry and palette; the SVG itself via the shared SvgCanvas
                PotionBook.cs        the 51-row colour/taste identification table
                GameFacts.cs         controls, encounter menu, calendar, item ladders, tips
   Memory/      GameLocator.cs       anchored DGROUP scan + opt-in structural fallback
                (shared)             ProcessMemory / MemoryRegion — from GameTrainers.Common.Memory
+               (shared)             SvgCanvas — from GameTrainers.Common.Documents
   ViewModels/  MainViewModel, CharacterViewModel, AttributeViewModel, ReferenceViewModel, ICharacterHost
   App.xaml, MainWindow.xaml         the WPF UI (Character / City map / Locations / Potions / Reference)
 test/FormatCheck/                   headless verification, 417 checks
