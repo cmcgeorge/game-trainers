@@ -1,4 +1,6 @@
 using System.IO;
+using TheQuestTrainer.Adventures;
+using TheQuestTrainer.Cluebooks;
 using TheQuestTrainer.Game;
 using TheQuestTrainer.Memory;
 using TheQuestTrainer.ViewModels;
@@ -14,7 +16,7 @@ namespace TheQuestTrainer.FormatCheck;
 /// page in the middle of the heap, a record whose vtable points at writable memory — so those are
 /// what most of this file is.
 /// </summary>
-internal static class Program
+internal static partial class Program
 {
     private static int _passed;
     private static readonly List<string> _failures = new();
@@ -47,6 +49,12 @@ internal static class Program
         WorldPictureChecks();
         MapViewChecks();
         PickerChecks();
+        ArchiveChecks();
+        PalmDatabaseChecks();
+        AdventureHeaderChecks();
+        AdventureReaderChecks();
+        CluebookChecks();
+        CluebookTabChecks();
 
         Console.WriteLine();
         Console.WriteLine($"{_passed} checks passed, {_failures.Count} failed.");

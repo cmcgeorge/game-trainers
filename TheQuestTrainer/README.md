@@ -6,12 +6,17 @@ It attaches to the running game, finds your character by itself, and edits it in
 value searching, no address to paste in, and nothing to configure — press **Attach** and the
 character sheet fills in.
 
+It also **writes cluebooks**: point it at the folder the game is installed in and it decompiles each
+adventure — the base game and every downloadable one — into a strategy guide with the quests, the
+places, every conversation and the whole item catalogue. That half needs no running game.
+
 The game is a native 32-bit Windows program, so there is no DOSBox in the way.
 
 Two companion documents live in [`docs/`](docs/):
 
 - [`ReverseEngineering.md`](docs/ReverseEngineering.md) — how the character record was found, what
-  every field in it means, and (§17) how the game keeps track of where you are standing.
+  every field in it means, (§17) how the game keeps track of where you are standing, and (§18) how an
+  adventure is written to disk.
 - [`StrategyGuide.md`](docs/StrategyGuide.md) — how the game's systems actually work, with the real
   numbers.
 
@@ -39,7 +44,7 @@ attached to is the one the offsets were measured on.
 ### Other options
 
 ```powershell
-.\Run.ps1 -Test -NoRun          # 621 checks, no game and no copyrighted files needed
+.\Run.ps1 -Test -NoRun          # 737 checks, no game and no copyrighted files needed
 .\Run.ps1 -Configuration Debug  # Debug build
 .\Run.ps1 -Clean                # delete bin/obj first
 .\Run.ps1 -NoBuild              # launch the last build
@@ -162,6 +167,40 @@ game lays interiors into its grid differently from outdoor maps, and while that 
 straight out of the game's own code and the flags every shipped interior carries, nobody has stood in
 a building and checked. `docs/ReverseEngineering.md` §17.8 is explicit about which is which.
 
+### Cluebook tab
+
+Writes a strategy guide for each adventure the installation holds.
+
+Point it at the folder with `TheQuest.exe` in it — attaching fills that in for you — and press
+**Find adventures**. The base game's *Freymore* comes out of `data.pak`, and each downloadable
+adventure out of its own pak under `expansions\`. Tick the ones you want, choose a folder, and press
+**Write cluebooks**; each one is written twice, as a self-contained HTML page and as plain text.
+
+A cluebook has:
+
+- **The quests**, worded as the game's own quest log words them, each followed by everyone who talks
+  about it. That list is exact rather than a text search: a conversation names a quest by its id, and
+  ids are what the cross-reference is built from.
+- **A gazetteer** — every place with a name, its cell on the world grid, its size, whether Teleport,
+  Mark and Recall work there, and the cast of things and people the map names. The outdoor world is
+  drawn as a plan, one labelled square per map.
+- **People, and what they say** — every topic each person will discuss, what you may ask, what comes
+  back, and what you can say to that.
+- **Things** — the item catalogue by category, with value, weight, damage, armour and condition.
+- **Bestiary, magic and rules** — spells with their costs, monsters, races, skills and attributes.
+
+For *Freymore* that is 58 quests, 159 places, 222 people who will talk, 506 conversation topics and
+893 item types; for *Islands of Ice and Fire*, 36 quests and 101 people.
+
+**It reads, and only reads, the copy of the game already on the machine.** Nothing from the game is
+redistributed and no game file is written to. The first page of every cluebook says what the reader
+should not trust — chiefly that it lists what a map *names* rather than where anything stands, and
+that it does not claim to know what a conversation *does* with a quest or an item, only that it
+mentions it. See §18 of the reverse-engineering notes for why.
+
+Written offline, so it works with nothing attached. It is also the only part of the trainer that is
+useful before you start playing.
+
 ### Reference tab
 
 Attributes, skills and their governing attributes, race ids, the four conditions, the reputation
@@ -273,10 +312,22 @@ src/TheQuestTrainer/
     WorldPicture.cs       finds that picture in the paks of your own installation
     TrainerActions.cs     every edit, as read-validate-write
     FreezeWriter.cs       latched freezes, testable without a dispatcher
+  Adventures/             the offline half: adventures read off disk, not out of the process
+    PalmDatabase.cs       the .pdb container the game still ships its worlds in
+    RecordArchive.cs      the engine's own SArchive, and the alignment everything turns on
+    AdventureLayout.cs    class tags and the format version, each one a check the game makes too
+    AdventureReader.cs    the ordered record walk, and a parser per object
+    Adventure.cs          one decoded world, as typed records
+    AdventureCatalog.cs   which adventures a Quest installation holds
+  Cluebooks/
+    Cluebook.cs           chapters, dossiers and the notes that say what not to trust
+    WorldPlan.cs          the outdoor grid as an SVG plan
+    HtmlCluebookWriter.cs one self-contained page
+    TextCluebookWriter.cs the same document, as text
   Memory/IMemorySource.cs the process slice the locator needs, so it can be faked
-  ViewModels/             MainViewModel (session + IGameHost), MapViewModel, rows, ProcessPicker
-  MainWindow.xaml         Character / Skills / Inventory / Map / Reference tabs
-test/FormatCheck/         621 checks over synthetic records and a synthetic heap; needs no game
+  ViewModels/             MainViewModel (session + IGameHost), MapViewModel, CluebookViewModel, rows, ProcessPicker
+  MainWindow.xaml         Character / Skills / Inventory / Map / Cluebook / Reference tabs
+test/FormatCheck/         737 checks over synthetic records, a synthetic heap and a synthetic world
 ```
 
 References `GameTrainers.Common` for both `Memory` (`ProcessMemory`, `NativeMethods`) and `Mvvm`
@@ -290,7 +341,7 @@ References `GameTrainers.Common` for both `Memory` (`ProcessMemory`, `NativeMeth
 .\Run.ps1 -Test -NoRun
 ```
 
-621 checks against a synthetic 32-bit address space with the same section geometry as the real
+737 checks against a synthetic 32-bit address space with the same section geometry as the real
 image. It covers the cases a live game cannot be asked to produce: a module relocated away from its
 preferred base, a stale static slot, an empty slot, a build whose `.data` does not cover the slot, a
 record whose vtable points at writable memory, the new-character prototype sitting next to the live

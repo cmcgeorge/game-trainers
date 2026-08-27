@@ -539,6 +539,79 @@
             </TabItem>
 
             <!-- ======================= Reference ======================= -->
+            <!-- ======================= Cluebook ======================= -->
+            <TabItem Header="Cluebook">
+                <DockPanel Margin="8" DataContext="{Binding Book}" IsEnabled="{Binding IsIdle}">
+
+                    <GroupBox DockPanel.Dock="Top" Header="Where the game is installed">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Game folder" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBox Grid.Column="1" Text="{Binding GameFolder, UpdateSourceTrigger=PropertyChanged}"
+                                         VerticalAlignment="Center"
+                                         ToolTip="The folder holding TheQuest.exe, data.pak and expansions\. Filled in from the game when you attach." />
+                                <Button Grid.Column="2" Content="Browse…" Click="BrowseGameFolder" Margin="8,0,0,0" />
+                                <Button Grid.Column="3" Content="Find adventures" Command="{Binding FindCommand}" Margin="4,0,0,0" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0" TextWrapping="Wrap"
+                                       Text="The base game and every downloadable adventure ship one world each, inside their own .pak. Nothing here touches the running game: the cluebook is read from the files on disk, so it works whether or not the trainer is attached." />
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox DockPanel.Dock="Bottom" Header="Write">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Write to" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <TextBox Grid.Column="1" Text="{Binding OutputFolder, UpdateSourceTrigger=PropertyChanged}"
+                                         VerticalAlignment="Center" />
+                                <Button Grid.Column="2" Content="Browse…" Click="BrowseOutputFolder" Margin="8,0,0,0" />
+                                <Button Grid.Column="3" Content="Write cluebooks" Command="{Binding WriteCommand}" Margin="4,0,0,0" />
+                                <Button Grid.Column="4" Content="Open folder" Command="{Binding OpenOutputCommand}" Margin="4,0,0,0" />
+                            </Grid>
+
+                            <WrapPanel Margin="0,8,0,0">
+                                <CheckBox Content="Conversations" IsChecked="{Binding IncludeConversations}" Margin="0,0,16,0"
+                                          ToolTip="Every topic each person will discuss, and every reply. This is most of the document." />
+                                <CheckBox Content="Item catalogue" IsChecked="{Binding IncludeItems}" Margin="0,0,16,0"
+                                          ToolTip="Every item type with its value, weight, damage, armour and condition." />
+                                <CheckBox Content="Bestiary and rules" IsChecked="{Binding IncludeReference}" Margin="0,0,16,0"
+                                          ToolTip="Spells, monsters, kinds of person, races, skills and attributes." />
+                                <CheckBox Content="Empty maps" IsChecked="{Binding IncludeEmptyMaps}"
+                                          ToolTip="Give a chapter even to maps with nothing placed on them. Mostly open sea." />
+                            </WrapPanel>
+
+                            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Margin="0,8,0,0" />
+                        </StackPanel>
+                    </GroupBox>
+
+                    <DataGrid ItemsSource="{Binding Adventures}" AutoGenerateColumns="False" CanUserAddRows="False"
+                              HeadersVisibility="Column" GridLinesVisibility="Horizontal" Margin="0,8,0,8"
+                              Background="{StaticResource PanelFill}" RowBackground="{StaticResource PanelFill}"
+                              AlternatingRowBackground="{StaticResource Parchment}">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Header="Write" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="50" />
+                            <DataGridTextColumn Header="Adventure" Binding="{Binding Display}" Width="260" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Pak" Binding="{Binding Pak}" Width="120" IsReadOnly="True" />
+                            <DataGridTextColumn Header="What it holds" Binding="{Binding Detail}" Width="*" IsReadOnly="True" />
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                </DockPanel>
+            </TabItem>
+
             <TabItem Header="Reference">
                 <DataGrid ItemsSource="{Binding Reference}" AutoGenerateColumns="False" CanUserAddRows="False"
                           IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal"

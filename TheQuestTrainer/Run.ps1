@@ -13,6 +13,11 @@
     the heap for the per-level experience table every character carries. There is no value
     scanning at any point.
 
+    The Cluebook tab is the one half that needs no running game: point it at the folder The
+    Quest is installed in and it decompiles each adventure — the base game and every
+    downloadable one — into a strategy guide, written as HTML and plain text. It reads the
+    installation and writes only where you tell it to.
+
 .PARAMETER Configuration
     Build configuration: Debug or Release. Default: Release.
 

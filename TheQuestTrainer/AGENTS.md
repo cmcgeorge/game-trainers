@@ -40,10 +40,22 @@ src/TheQuestTrainer/
     WorldPicture.cs       finds that picture in the player's own paks
     TrainerActions.cs     every edit, as read-validate-write
     FreezeWriter.cs       latched freezes, no dispatcher needed
+  Adventures/           the offline half: worlds read off disk, never out of the process
+    PalmDatabase.cs       the .pdb container
+    RecordArchive.cs      the engine's own SArchive read side, alignment and all
+    AdventureLayout.cs    class tags, the format version, the map record stride
+    AdventureReader.cs    the ordered record walk and a parser per object
+    Adventure.cs          one decoded world, as typed records
+    AdventureCatalog.cs   which adventures an installation holds
+  Cluebooks/
+    Cluebook.cs           chapters, dossiers, notes
+    WorldPlan.cs          the outdoor grid as SVG
+    HtmlCluebookWriter.cs one self-contained page
+    TextCluebookWriter.cs the same document as text
   Memory/IMemorySource.cs the process slice the locator needs, so it can be faked
-  ViewModels/             MainViewModel (session + IGameHost), MapViewModel, rows, ProcessPicker
-  MainWindow.xaml         Character / Skills / Inventory / Map / Reference tabs
-test/FormatCheck/         621 checks over synthetic records and a synthetic heap; needs no game
+  ViewModels/             MainViewModel (session + IGameHost), MapViewModel, CluebookViewModel, rows, ProcessPicker
+  MainWindow.xaml         Character / Skills / Inventory / Map / Cluebook / Reference tabs
+test/FormatCheck/         737 checks over synthetic records, a synthetic heap and a synthetic world
 ```
 
 References `GameTrainers.Common` for both `Memory` and `Mvvm`, via csproj `<Using>` items.
@@ -209,6 +221,50 @@ not exceed twice its governing attribute) is enforced when *points are spent*, n
 Values of 47 and 100 against a cap of 46 were written, redrawn and survived a tab switch. `MaxSkills`
 therefore treats the cap as a target, and manual edits are not clamped to it.
 
+**The world-database reader is aligned, and that is not a detail.** `RecordArchive` skips forward to
+an even offset before every 16-bit read and to a multiple of four before every 32-bit one, because
+the game's own `SArchive` does (`FUN_00438C00`, `FUN_00438BA0`). Bytes and strings do not move.
+Delete the skipping and the first few fields of a record still decode, which is exactly why it is
+dangerous: everything after them is off by one and produces plausible prose. Removing the two `while`
+loops fails twenty-six checks, and that counterfactual is the point of them.
+
+**A tag is a check, not a type.** Every serialized object opens with a one-byte class tag and the game
+aborts when it is wrong, so `ExpectTag` is faithful. But the per-map tile and terrain records that
+follow the map list are raw data whose first byte can be anything, and several of them start with an
+item's tag or a spell's. `AdventureReader` therefore walks records **in order** from record 4000 the
+way `FUN_004C53C0` does and **stops the object phase at the map list**; it never scans for tags. The
+fixture plants a per-map record beginning with an item tag so nobody can quietly reintroduce a scan.
+
+**A parser that agrees with a serializer consumes its record exactly.** `TryParse` checks that what is
+left over is fewer than eight bytes *and all zero* — the writer's own slack — and turns anything else
+into a warning that reaches the cluebook's notes. That check is what makes "the format is decoded" a
+claim rather than a hope: both shipped worlds pass it on every record. Do not relax it to "close
+enough"; add the missing field instead.
+
+**A map owns five consecutive record ids and its placements are the fourth.** Not a search: the ids
+are allocated per map whether or not each record is written, so a span-based search hands one map's
+placements to its neighbour the first time a record in between is absent. `+3` is checked to carry
+the placement tag before it is used. Both shipped worlds agree on this exactly (§18.6).
+
+**A referenced dialog topic has no words, and that branch is load-bearing.** A topic whose first dword
+is non-zero stores its id and stops; the engine fills the wording in afterwards from the shared pool.
+Read it as though it always carried text and you run off the end of the second person you meet.
+`Adventure.ResolveTopic` is where the two halves are put back together.
+
+**The cluebook says what it does not know, on its own first page.** It lists what a map *names*, not
+where anything stands, and it never claims a conversation gives or takes a thing — only that it names
+it. Those limits are in `Cluebook.BuildNotes` and in the README, and they are there because the
+placement layout and the meaning of a reply's number were not established. If you work either of them
+out, the notes are the first thing to change; until then, do not write prose that implies more.
+
+**Nothing from the game is redistributed, and no game file is written.** The paks are opened read-only
+out of the installation the player already has, exactly as `WorldPictureLoader` does for the world map
+picture. The cluebook writes only to the folder the user chose.
+
+**The Cluebook tab works with nothing attached.** It is built with the window rather than on attach,
+and attaching only fills its game folder in — and only when the user has not typed one, because a
+player may want a cluebook for an installation other than the one they are running.
+
 **`TheQuest.exe` sets DYNAMICBASE.** Nothing may assume `0x00400000`. The observed base in one
 session was `0x00260000`.
 
@@ -236,11 +292,17 @@ Do not add these without a very good reason, and update the README and the UI co
   field order, which is enough to be interesting and nowhere near enough to be safe. It is a
   different tool.
 - **A max-health/max-mana control.** See above.
+- **Writing a world back.** The reader is deliberately read-only and there is no `SArchive` write side
+  in the shipped code — only in the test fixture, where it exists so the reader can be checked against
+  bytes it did not lay out itself. Editing an adventure is what `TheQuestEditor.exe` beside the game
+  is for.
+- **Claiming where a thing stands on a map, or what a dialog reply does.** Neither was established;
+  see the rule above and §18.6/§18.9.
 
 ## Testing
 
 ```powershell
-.\Run.ps1 -Test -NoRun          # 621 checks, no game, no copyrighted files
+.\Run.ps1 -Test -NoRun          # 737 checks, no game, no copyrighted files
 ```
 
 `test/FormatCheck/Fakes.cs` builds a synthetic 32-bit address space with the same three-section
@@ -260,6 +322,19 @@ and a disease-granted penalty side by side — that pair is what forces the sour
 rather than guessed. `FakeGame.BuildGame` writes the effect-kind table for *every* fixture, because
 a record without one is not a record the game would have; note that the table and the groups live
 past the `0x400` bytes `RecordBuilder` covers, so they are poked straight into the engine block.
+
+`AdventureFakes.cs` writes a whole synthetic world — header, quests, items, a spell, a monster, a
+person type, a dialog pool, a person with a shop and a conversation, a map object, races, skills,
+attributes, a map list and per-map placement records — with its own `ArchiveWriter`. **That writer is
+deliberately not the reader's arithmetic run backwards**: a fixture built on the reader would agree
+with any alignment bug the reader happened to contain. It also does not take the map stride or the
+placement offset from `AdventureReader`; it states 5 and 3 as the numbers observed in both shipped
+worlds, so a check against them pins the layout rather than the reader's current opinion of it.
+
+The fixture's awkward cases are the ones that broke a naive reader and are worth keeping: a
+referenced dialog topic beside one that carries its own text, an interior whose id ends in four
+digits but does not start with the grid prefix, a map with a placement record beside one without, and
+a per-map record whose first byte is an item's tag.
 
 `MapHeap` does the same for the engine manager, the world and its maps, and
 `FakeGame.BuildGameWithMap` puts the player in the middle of cell (8, 4) with three grid maps and one

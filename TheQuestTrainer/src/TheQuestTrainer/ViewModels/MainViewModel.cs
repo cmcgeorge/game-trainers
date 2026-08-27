@@ -78,6 +78,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         Processes = new ObservableCollection<ProcessEntry>();
         Reference = new ObservableCollection<ReferenceRow>();
         Map = new MapViewModel(this);
+        Book = new CluebookViewModel();
 
         AttachCommand = new RelayCommand(Attach, () => !IsAttached);
         DetachCommand = new RelayCommand(Detach, () => IsAttached);
@@ -134,6 +135,13 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
 
     /// <summary>Where the player is, where they could be, and the one write that moves them.</summary>
     public MapViewModel Map { get; }
+
+    /// <summary>
+    /// The cluebook generator, which reads the adventures off disk rather than out of the process.
+    /// It is built with the window because it works with nothing attached; attaching only fills its
+    /// game folder in.
+    /// </summary>
+    public CluebookViewModel Book { get; }
 
     /// <summary>Attaches to the selected process.</summary>
     public RelayCommand AttachCommand { get; }
@@ -771,6 +779,7 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
         _process = process;
         _memory = memory;
         _gameFolder = FolderOf(process);
+        Book.SuggestGameFolder(_gameFolder);
         _image = module.Image;
         _source = new ProcessMemorySource(memory, module.Base, module.Size);
         _actions = new TrainerActions(_source, _image) { ReadOnly = IsReadOnly };

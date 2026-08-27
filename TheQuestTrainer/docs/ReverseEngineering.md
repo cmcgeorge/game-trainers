@@ -538,9 +538,25 @@ image base) are:
 | `0x0055D2E0` | Recall → the world, the current map and the world-absolute tile pair |
 | `0x004C6590` | the world-absolute position update → the whole window/local/global conversion (§17.4) |
 | `0x00558B20` | the local→window helper → the flag that decides where a map sits in the window |
+| `0x004BF830` | the map serializer — and, through its callers, the whole world-database format (§18) |
+| `0x00438C00` | the archive's 16-bit primitive; every serializer calls it, so its callers *are* the format |
+| `0x004C53C0` | `SDungeonWorld::Load` — the header, and the order the records are walked in |
 
 A useful shortcut for finding more: the game's string table is one contiguous run in `.rdata`, and a
 raw file offset converts to a Ghidra address with `VA = fileOffset + 0x1600 + 0x400000`.
+
+The world format in §18 was found by decompiling the 122 functions that reference the archive
+primitives, which is every serializer in the game and nothing else:
+
+```powershell
+& "$env:ProgramData\chocolatey\lib\ghidra\tools\ghidra_12.1.2_PUBLIC\support\analyzeHeadless.bat" `
+    C:\GhidraWork tq -process TheQuest.exe -noanalysis `
+    -scriptPath C:\GhidraWork\scripts_ser -postScript QuestSerializers C:\GhidraWork\out\ser.c `
+    438c00 439020 438f70 438ba0
+```
+
+Each dumped function opens with its own class-tag check, so the tag table in §18.3 falls straight out
+of grepping that one file for `!= '`.
 
 `.docs/` and `.data/` are git-ignored (`.*/` in the root `.gitignore`) — RAM dumps, Ghidra projects
 and probe scripts live there and are never committed.
@@ -1236,11 +1252,288 @@ never left Freymore, so the second world has only ever been read off disk, not o
 - `manager + 0x21BC` is the window's own tile array, `WindowSize²` entries of 0x42 bytes. It holds
   what the automap draws and would be the way to render real terrain rather than tinting from the
   world map picture. Untraced.
-- The world PDBs in `pdbs/` inside each pak (Palm databases — the game began on Palm OS, type `ThQW`,
-  creator `ThQu`) hold the maps offline. Record 0 of `TheQuestBase.pdb` is
-  `Freymore\0base\0TheQuestBase\0`, which lines up with `world + 0x08`/`+0x20`/`+0x54`, and the
-  tagged records after it are items (`0x15`), map objects (`0x28`), NPCs (`0x2A`) and spells (`0x04`).
-  The map records were not identified; the trainer reads the atlas out of the running game instead,
-  which is both easier and correct for whatever expansion is loaded.
+- The world PDBs in `pdbs/` inside each pak are now decoded in full — see §18. The trainer still
+  reads the live atlas out of the running game for the Map tab, because that is correct for
+  whatever expansion happens to be loaded; the offline reader exists for the cluebook, which has
+  no process to read.
 - `manager + 0x1574` mirrors the facing and is presumably the target angle for the turn animation.
   Reading it mid-turn is how a first attempt at the facing table got the wrong answer.
+
+---
+
+## 18. The adventure on disk: how a world database is written
+
+§17 reads the world out of the running game. This section reads it off the disk instead, which is
+what the cluebook generator needs — a player wants a strategy guide before they play, not while the
+process is up.
+
+Everything below was read off the serializers in `TheQuest.exe` and then confirmed by parsing both
+shipped worlds to the last byte. "Confirmed" here has a precise meaning: a parser that agrees with a
+serializer consumes a record *exactly*, so the check is that every record ends with nothing but the
+writer's own zero padding. Freymore's 2,973 records and *Islands of Ice and Fire*'s 1,516 all do.
+
+### 18.1 A pak holds one adventure, and an adventure is one Palm database
+
+The game keeps its content in `.pak` files that are ordinary zip archives (§17.7). Under `pdbs/`
+inside each one are **Palm OS databases** — the game began on Palm OS in 2005 and the Windows
+re-release never changed the container. Type `ThQW`, creator `ThQu`.
+
+| Pak | Database | What |
+|---|---|---|
+| `data.pak` | `TheQuestBase` | **Freymore**, the base game's world |
+| `data.pak` | `TheQuestRes`, `TheQuestSound` | art and audio, same container, no world |
+| `data.pak` | `TheQuestData` | type `Data`, not a world |
+| `expansions\isle.pak` | `TheQuestExpIsle` | **Islands of Ice and Fire** |
+
+Being `ThQW` is not enough to be an adventure: `TheQuestRes` and `TheQuestSound` are `ThQW` too. What
+separates a world is its **grid prefix** — the string an outdoor map id is built from, `base_s` for
+Freymore, `isle_s` for the expansion. The two resource databases have none, because they have no
+maps to lay on a grid.
+
+The container is the documented Palm layout: a 32-byte name, big-endian dates and counts, a
+four-character type and creator at 60 and 64, a record count at 76, then one 8-byte entry per record
+giving a big-endian file offset and a 24-bit unique id. A record's length is the gap to the next one,
+and **records are padded to a multiple of four**.
+
+### 18.2 `SArchive`, and the alignment that is the whole trick
+
+Every object in a world is written by the engine's own `SArchive`, whose read side is four functions:
+
+| Function | Primitive |
+|---|---|
+| inline | `u8` — no alignment |
+| `FUN_00438C00` | `u16` — **skips forward to an even offset first** |
+| `FUN_00438BA0` | `u32` — **skips forward to a multiple of four first** |
+| `FUN_00439020` / `FUN_00438F70` | NUL-terminated string — no alignment; the two differ only in whether the reader copies |
+
+```c
+// FUN_00438C00, the 16-bit primitive
+while ((archive->align + archive->cursor) & 1) { cursor++; }   // skip to an even offset
+*dest = *(u16 *)cursor;  cursor += 2;
+```
+
+`archive->align` is the record buffer's address masked to two bits, so for a heap block it is zero
+and the alignment is simply the offset within the record. **This is the single fact the whole format
+turns on.** A reader that treats a record as a flat byte stream decodes the first few fields
+correctly and then produces plausible rubbish, because every subsequent field is off by one — the
+`00` bytes that look like padding are load-bearing.
+
+A string costs its terminator even when empty, which is why most records open with a run of `00`
+bytes where the designer left a field blank.
+
+### 18.3 Every object starts with a one-byte class tag
+
+Each serializer opens by checking one byte and aborting if it is wrong:
+
+```c
+if (!archive->writing) { if (*cursor != 'G') abort(); } else { *cursor = 'G'; }
+cursor++;
+```
+
+So the tags below are checks the game itself makes, not inferences. They came from the 122 functions
+that call the archive primitives.
+
+| Tag | Object | Serializer |
+|---|---|---|
+| `0x01` | map list | in `FUN_004C53C0` |
+| `0x03` / `0x04` | spell index / spell | `FUN_0051A180` / `FUN_00519EE0` |
+| `0x05` / `0x06` | effect / effect holder | `FUN_00505940` / `FUN_00505FE0` |
+| `0x08` / `0x09` | quest list / quest | `FUN_00515920` / `FUN_005159B0` |
+| `0x14` / `0x15` | item index / item type | — / `FUN_00509880` |
+| `0x18` | ability | `FUN_00507CC0` |
+| `0x1C` / `0x1D` | monster list / monster type | `FUN_00512460` / `FUN_00511CA0` |
+| `0x1E` / `0x1F` | person-type list / person type | — / `FUN_00510210` |
+| `0x20` | script | `FUN_005128A0` |
+| `0x21` | dialog choice | `FUN_00513300` |
+| `0x22` | dialog reply | `FUN_00513540` |
+| `0x23` / `0x24` | dialog topic / dialog | `FUN_005137C0` / `FUN_00513B60` |
+| `0x27` / `0x28` | map-object index / map object | `FUN_00516710` / `FUN_00516610` |
+| `0x29` | shop stock entry | in `FUN_00515520` |
+| `0x2B` / `0x2A` | person index / person | `FUN_005151F0` / `FUN_00514900` |
+| `0x47` | one map, inside the map list | `FUN_004BF830` |
+| `0x48` / `0x49` / `0x4A` | per-map tiles / placements / terrain | untraced |
+| `0x4E` / `0x4F` | race list / race | `FUN_00516010` / `FUN_00515B80` |
+| `0x50` / `0x51` | skill list / skill | `FUN_00517370` / `FUN_00516970` |
+| `0x52` / `0x53` | attribute list / attribute | `FUN_004FF990` |
+
+**A tag is not a type, though.** The per-map tile and terrain records that come after the map list are
+raw data whose first byte can be anything, and several of them happen to start with `0x15` or `0x04`.
+A reader that scans for tags finds those and decodes them into phantom items and phantom spells; the
+harness plants exactly that record to keep the point pinned.
+
+### 18.4 The order is the format
+
+`FUN_004C53C0` — `SDungeonWorld::Load` — opens **record 3999** by id, reads the header, then walks the
+records *in order* from **record 4000**, handing each collection loader a shared record cursor that
+it advances by however many records it consumed. That order is fixed, and it is the same in both
+shipped worlds:
+
+```
+3999  header
+4000  interior-picture index, then its pictures
+      texture index, then its textures
+      abilities, alchemy recipes, diseases
+      item pictures, hand pictures
+      item index (count), then one record per item type
+      textures, three unnamed singletons
+      monster types, person types, one unnamed singleton
+      dialog pool, one unnamed singleton
+      person index (count), then one record per person
+      quests, two unnamed singletons
+      map-object index (count), then one record per map object
+      sounds or scenes
+      spell index (count), then one record per spell
+      races, skills, attributes
+      map list                              <- the last object record
+      then five records per map
+```
+
+The reader in `Adventures/AdventureReader.cs` walks the same way and **stops the object phase at the
+map list**, because everything after it belongs to a map.
+
+### 18.5 The header, record 3999
+
+| | |
+|---|---|
+| `u32` | uninitialised — reads `CD CD CD CD` in every shipped world; the engine reads and discards it |
+| `u8` ×3 | magic `9E 49 11` |
+| `u8` | **format version** — 124 (`0x7C`) in v1.9.10 and its expansion |
+| `u8` ×2 | uninitialised |
+| string ×3 | world name, resource pack, database name — `Freymore`, `base`, `TheQuestBase` |
+| `u8` | present from version `0x77` |
+| `u8` | present from version `0x7A` |
+| `u16` ×2 | outdoor grid, in cells — 14 × 14 for both shipped worlds |
+| string | grid prefix — `base_s` |
+
+The first three strings line up with `world + 0x08`, `+0x20` and `+0x54` in the live object (§17.2),
+which is the cross-check that the offline and live readers are looking at the same thing.
+
+**The version decides the field set of everything else.** Each serializer is a chain of
+`if (version > n)` tests, so it is read from the header and never assumed; the reader refuses a
+version older than it has been checked against rather than mis-parsing one.
+
+### 18.6 The map list, and the five records a map owns
+
+The map list is one record: two resource words, a **one-byte** map count — which caps a world at 255
+maps; Freymore ships 239 and the expansion 210 — then one entry per map:
+
+```
+u16   record id of the map's own records
+u8    'G'
+str   display name        "Port of Mithria"
+str   internal id         "base_s0804"
+u16   flags               0x0290 for Port of Mithria — the same word §17.3 reads live
+u16, u8, u16, u8          ambient colour and light, day and night
+u16, u16, u8              (unidentified)
+u8 ×4                     (unidentified)
+u16 ×4                    resource indexes
+```
+
+Width and height are *not* stored: the engine derives them from bit 7 of the flags, 21 tiles for an
+outdoor cell and 35 for an interior, and `FUN_004BF830` does exactly that. The one-based cell comes
+from the four digits after the grid prefix, the same arithmetic §17.4 documents.
+
+**A map owns exactly five consecutive record ids**, whether or not each is written:
+
+| Offset | What |
+|---|---|
+| `+0` | tile data (`0x48`) — always present |
+| `+1` | outdoor terrain (`0x4A`) — outdoor cells only |
+| `+2` | untagged per-map data |
+| `+3` | **the list of map objects placed on the map** (`0x49`) |
+| `+4` | untagged per-map data |
+
+Both worlds agree exactly: all 159 of Freymore's placement records and all 88 of the expansion's sit
+at their map's id plus three, and nothing else does. That makes finding one arithmetic rather than a
+search — which matters, because a span-based search hands one map's placements to its neighbour the
+moment a record in between is absent.
+
+**The placement record's own entry layout was not worked out.** Entries carry an id only when the
+thing placed has one, and the fields around them did not resolve into anything consistent, so the
+cluebook lists which things a map names and leaves the coordinates alone. The count byte at `+1` is
+not trusted either: one record in the expansion holds more named ids than it claims entries.
+
+### 18.7 An item type is the same object §15.3 already documents
+
+`FUN_00509880` writes the fields at the same offsets §15.3 found on the live `SItemType`, in order:
+eight strings (id, resource ids, name, description, inventory and hand pictures, and the spell it
+casts), an optional effect holder, then
+
+```
+u32 +0x2C  value in gold
+u16 +0x32  weight, in hundredths        u16 +0x36 +0x38  damage, minimum and maximum
+u16 +0x3A  armour                       u16 +0x3C  enchant storage
+u16 +0x3E  full condition               u8  +0x45  category 1..15
+u8  +0x46  sub-type                     u8  +0x47  required alignment
+u8  +0x48  flags
+```
+
+`+0x3A` is the `Armor:` the item panel prints; §15.3 left it unnamed. A rusty shield reads 9 there and
+zero damage, a steel pole-axe reads 8–18 damage and zero armour, which is what settled it.
+
+### 18.8 A conversation, and the branch that breaks a naive reader
+
+A dialog (`0x24`) is two counted lists of topics. A topic (`0x23`) is:
+
+```
+u32   non-zero when this entry is a *reference* into the shared dialog pool
+str   its id
+--- and then, only when it is NOT a reference: ---
+str   the menu label      "About the village"
+u8    a gate, followed by a script when set
+str   what the player says "Can you tell me something about your village?"
+u16   reply count, then that many replies
+```
+
+**That branch is the thing.** A referenced topic stores its id and stops; the engine fills the wording
+in after the load by looking the id up in the shared pool, which is the one record that always
+carries text. A reader that ignores the flag runs off the end of the second person it meets. The
+condition in the game is `archive->flag9 || !isReference`, and `flag9` is set only while the pool
+itself is being read.
+
+A reply (`0x22`) is five optional id slots, the line of speech, four optional follow-up options
+(`0x21`, each an optional id and the wording of the option), and a length-prefixed bytecode blob the
+engine re-parses from source anyway.
+
+Those id slots are the cluebook's spine: they name quests, items and global flags in the same flat
+namespace everything else uses, so "who talks about the Slave Key" is an exact lookup rather than a
+search of the prose. **What a reply does with an id is not recorded** — the slot holds the id and a
+`u16` whose meaning was not established; in a gossip topic the numbers look like weights (75, 50, 25,
+0), which is not enough to claim anything. So the cluebook says "this reply names that thing" and
+stops there.
+
+### 18.9 Confirmed, and not
+
+Both shipped worlds parse with **zero records left undecoded**:
+
+| | Freymore | Islands of Ice and Fire |
+|---|---|---|
+| maps | 239 — 196 outdoor cells, 43 interiors | 210 — 196 outdoor, 14 interiors |
+| quests | 58 | 36 |
+| item types | 893 | 191 |
+| people | 223, of whom 222 talk | 102, of whom 101 talk |
+| map objects | 433 | 164 |
+| spells | 61 | 1 |
+| monster types / person types | 2 / 179 | 6 / 72 |
+| shared dialog topics | 49 | 30 |
+| races / skills / attributes | 6 / 20 / 5 | none — the expansion inherits the base game's |
+
+Cross-checks against §17, which read the *live* game: Freymore's map count (239), its outdoor cell
+count (196), `base_s0804`'s name (`Port of Mithria`) and its flag word (`0x0290`) all come out the
+same from the file as they did from memory. Neither number is the same arithmetic checking itself.
+
+Not established, and the cluebook says so on its own first page:
+
+- **Where anything stands.** The placement record's entry layout (§18.6).
+- **What a dialog reply does** with the ids it names (§18.8).
+- **The per-kind payload of a map object.** `FUN_00516610` is the whole base class — an id, one byte
+  and a length-prefixed blob — and the derived classes (`SMapObjectDoor`, `SMapObjectTeleport`,
+  `SMapObjectWeb` and the rest, named in the executable's own assertion strings) were not traced. The
+  reader keeps the blob and harvests its text, so a sign's wording still reaches the page.
+- **The monster list's second half.** The record holds a second, undecoded list of picture variants
+  after the monster types, so it is the one record the "consumed to the end" check is not applied to.
+- **The ten stored numbers** on a monster type and a person type. They are printed in stored order
+  rather than labelled.
+- **The script VM's opcode table** was extracted (155 commands, `FUN_004C7570`, §17.1) but is not used:
+  the ids a dialog stores are not opcodes, and the compiled bytecode a reply carries was empty in
+  every record examined.
