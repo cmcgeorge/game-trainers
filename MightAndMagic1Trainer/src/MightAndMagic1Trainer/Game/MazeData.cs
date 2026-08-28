@@ -16,12 +16,16 @@ public enum EdgeKind : byte
 /// N = bits 2–3, E = bits 4–5, S = bits 6–7. Cell (x, y) lives at byte <c>y*16 + x</c>; y = 0
 /// is the south edge (rendered at the bottom, north up).
 ///
+/// <para>This half is the decode: the bytes, and the two accessors over them. What a maze
+/// <em>means</em> — an edge's face, the secret passages, the counts — is the other half of the
+/// class, in <c>MazeFeatures.cs</c>, because two very different things ask those questions.</para>
+///
 /// <para>A maze comes either from a 512-byte record of the player's own <c>Mazedata.dta</c> —
 /// exact, including the wall graphic the live fingerprint matches on — or from the bundled
 /// <see cref="BuiltInMazes"/> grids, which carry every edge's behaviour but only whether a
 /// wall is drawn, not which graphic. Everything the renderer needs is present either way.</para>
 /// </summary>
-public sealed class MazeMap
+public sealed partial class MazeMap
 {
     public const int Size = 16;
 

@@ -138,6 +138,13 @@ public sealed class MainViewModel : ObservableObject
     /// <summary>Read-only solution walkthrough shown in the Walkthrough tab.</summary>
     public WalkthroughViewModel Walkthrough { get; } = new();
 
+    /// <summary>
+    /// Writes the cluebook. Built with the window rather than on attach, because it needs neither
+    /// the game running nor the game installed — a cluebook is read before playing, and the trainer
+    /// carries everything but the game's own words.
+    /// </summary>
+    public CluebookViewModel Cluebook { get; } = new();
+
     // --- process list -----------------------------------------------------------
     public ObservableCollection<ProcessInfo> Processes { get; } = new();
 

@@ -1,3 +1,4 @@
+using MightAndMagic1Trainer.FormatCheck;
 using MightAndMagic1Trainer.Game;
 using MightAndMagic1Trainer.Memory;
 
@@ -560,6 +561,10 @@ finally
 {
     Directory.Delete(diffDir, recursive: true);
 }
+
+// The cluebook: the .ovr overlay reader, the plans, and both writers. Its fixtures are built to the
+// documented formats rather than read from a sample, so it needs nothing from docs/.
+CluebookChecks.Run(Check);
 
 Console.WriteLine(failures == 0 ? "\nALL CHECKS PASSED" : $"\n{failures} CHECK(S) FAILED");
 return failures;

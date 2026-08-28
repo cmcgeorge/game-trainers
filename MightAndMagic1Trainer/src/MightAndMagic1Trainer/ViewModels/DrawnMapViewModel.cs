@@ -25,6 +25,38 @@ namespace MightAndMagic1Trainer.ViewModels;
 /// once (📍 X/Y Search), the trainer learns the party-position DS offset and reads the
 /// marker straight from the data segment thereafter — so the lock isn't needed again.
 /// </summary>
+/// <summary>
+/// One marked square on the drawn map: where to put the disc, and what to say about it.
+///
+/// The position is in board pixels so the view can place it on a canvas without knowing the maze
+/// geometry, and it is computed once per map change — the discs do not move while a map is up.
+/// </summary>
+public sealed class MapLandmarkViewModel
+{
+    public MapLandmarkViewModel(int number, Landmark landmark, double left, double top, string wayIn)
+    {
+        Number = number.ToString(CultureInfo.InvariantCulture);
+        Left = left;
+        Top = top;
+        var lines = new List<string> { $"{number}. {landmark.Name}  {landmark.Where}", landmark.Description };
+        if (wayIn.Length > 0) lines.Add(wayIn);
+        lines.Add($"Coordinate from {landmark.Source}.");
+        Tip = string.Join(Environment.NewLine + Environment.NewLine, lines);
+    }
+
+    /// <summary>What the disc prints.</summary>
+    public string Number { get; }
+
+    /// <summary>Board pixels from the left edge, at the centre of the square.</summary>
+    public double Left { get; }
+
+    /// <summary>Board pixels from the top edge, at the centre of the square.</summary>
+    public double Top { get; }
+
+    /// <summary>The whole entry, for the tooltip.</summary>
+    public string Tip { get; }
+}
+
 public sealed class DrawnMapViewModel : ObservableObject
 {
     public const int CellPx = 30;
@@ -67,6 +99,7 @@ public sealed class DrawnMapViewModel : ObservableObject
         {
             if (!SetField(ref _selectedMap, value)) return;
             Render();
+            BuildLandmarks();
             UpdateMarker();
             SaveSettings();
         }
@@ -86,6 +119,20 @@ public sealed class DrawnMapViewModel : ObservableObject
 
     private string _detectedText = "";
     public string DetectedText { get => _detectedText; private set => SetField(ref _detectedText, value); }
+
+    /// <summary>
+    /// The marked squares of the selected map, as discs for the board's overlay.
+    ///
+    /// <b>The same thirteen the cluebook prints, from the same table</b>, so the two cannot drift.
+    /// They are coordinates out of the walkthrough rather than squares this project decoded — a
+    /// location's overlay does hold the squares its events fire on, but what those ids index is not
+    /// worked out — and every tooltip says which guide its coordinate came from.
+    /// </summary>
+    public ObservableCollection<MapLandmarkViewModel> Landmarks { get; } = new();
+
+    private string _secretsText = "";
+    /// <summary>What the selected map's walk-through walls amount to, in one line.</summary>
+    public string SecretsText { get => _secretsText; private set => SetField(ref _secretsText, value); }
 
     // Upper bound for a DS-relative offset we'll trust (the data segment is well under this).
     // Anything outside [0, MaxDsOffset) is rejected so a persisted/learned offset can never be
@@ -372,7 +419,77 @@ public sealed class DrawnMapViewModel : ObservableObject
         int yFromTop = Math.Clamp((int)(py / CellPx), 0, MazeMap.Size - 1);
         int y = MazeMap.Size - 1 - yFromTop;
         if (_teleportOnClick) WritePosition(x, y);
-        else _setStatus($"Cell X {x} · Y {y} on {_selectedMap.DisplayName}. (Tick 🚀 Teleport on click to jump here.)");
+        else _setStatus(Describe(_selectedMap, x, y) + " (Tick 🚀 Teleport on click to jump here.)");
+    }
+
+    /// <summary>
+    /// What is known about one square: any landmark on it, and the ways out of it that go through a
+    /// drawn wall.
+    ///
+    /// <para>The second half is why this is worth having on a click. The maze planes disagreeing
+    /// about an edge <i>is</i> a secret passage, so a square that shows one is telling you where to
+    /// walk — and a plan you are looking at while playing is exactly when you want to ask.</para>
+    ///
+    /// <para>Outdoors it says nothing about them: a drawn edge you can walk through is scrub or the
+    /// edge of a wood, and a surface area has up to 257 of them.</para>
+    /// </summary>
+    private static string Describe(MazeMap map, int x, int y)
+    {
+        string where = $"Cell X {x} · Y {y} on {map.DisplayName}.";
+
+        var landmark = LandmarkBook.For(map.RawName).FirstOrDefault(l => l.X == x && l.Y == y);
+        if (landmark != null) where += $"  ★ {landmark.Name} — {landmark.Description} [{landmark.Source}]";
+
+        if (map.IsOutdoor) return where;
+
+        var ways = map.WalkThroughSides(x, y);
+        if (ways.Count > 0)
+            where += $"  ⇢ The wall{(ways.Count == 1 ? "" : "s")} on its " +
+                     string.Join(" and ", ways.Select(MazeMap.DirectionName)) +
+                     $" side{(ways.Count == 1 ? "" : "s")} can be walked straight through.";
+
+        return where;
+    }
+
+    /// <summary>
+    /// Places this map's marked squares on the board, and sums up its walk-through walls.
+    ///
+    /// Run once per map change rather than per frame: neither answer depends on the game, so a
+    /// landmark disc is as valid with nothing attached as it is mid-dungeon.
+    /// </summary>
+    private void BuildLandmarks()
+    {
+        Landmarks.Clear();
+
+        if (_selectedMap is not { } map)
+        {
+            SecretsText = "";
+            return;
+        }
+
+        int number = 0;
+        foreach (var landmark in LandmarkBook.For(map.RawName))
+        {
+            number++;
+            var ways = map.IsOutdoor ? Array.Empty<int>() : map.WalkThroughSides(landmark.X, landmark.Y).ToArray();
+            string wayIn = ways.Length == 0
+                ? ""
+                : "The wall on its " + string.Join(" and ", ways.Select(MazeMap.DirectionName)) +
+                  " side is not really there — that is the way in.";
+
+            Landmarks.Add(new MapLandmarkViewModel(number, landmark,
+                (landmark.X + 0.5) * CellPx,
+                (MazeMap.Size - 1 - landmark.Y + 0.5) * CellPx,   // y=0 at the bottom
+                wayIn));
+        }
+
+        int secrets = map.SecretPassages().Count;
+        SecretsText = secrets == 0
+            ? "No walls here can be walked through."
+            : map.IsOutdoor
+                ? $"{secrets} drawn edges here can be walked through — outdoors that is terrain, not secrets."
+                : $"{secrets} of the walls here are not really there — the thin dashed ones. Click a square to " +
+                  "be told which of its sides you can walk through.";
     }
 
     private void TeleportToInput()

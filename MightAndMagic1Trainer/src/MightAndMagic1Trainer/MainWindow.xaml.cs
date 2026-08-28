@@ -250,6 +250,30 @@ public partial class MainWindow : Window
         if ((sender as FrameworkElement)?.DataContext is PairSearchViewModel vm) vm.EndGridEdit();
     }
 
+    // --- Cluebook -----------------------------------------------------------------
+    // Both boxes are folders, not files: the cluebook reads a whole installation (Mazedata.dta
+    // plus the 55 .ovr overlays) and writes two files side by side.
+
+    private void OnBrowseCluebookGameFolderClicked(object sender, RoutedEventArgs e)
+    {
+        if (PickFolder("Where is Might & Magic 1 installed?", _vm.Cluebook.GameFolder) is not { } folder) return;
+        _vm.Cluebook.GameFolder = folder;
+        _vm.Cluebook.Inspect();
+    }
+
+    private void OnBrowseCluebookOutputClicked(object sender, RoutedEventArgs e)
+    {
+        if (PickFolder("Where should the cluebook go?", _vm.Cluebook.OutputFolder) is { } folder)
+            _vm.Cluebook.OutputFolder = folder;
+    }
+
+    private string? PickFolder(string title, string current)
+    {
+        var dlg = new OpenFolderDialog { Title = title, Multiselect = false };
+        if (Directory.Exists(current)) dlg.InitialDirectory = current;
+        return dlg.ShowDialog(this) == true ? dlg.FolderName : null;
+    }
+
     // Start the browse dialog somewhere useful: the user's game folder if present,
     // then the bundled sample roster under docs\, otherwise the app's own folder.
     private static string DefaultRosterDir()

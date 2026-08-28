@@ -33,6 +33,16 @@
     <!-- The 55 mazes: the bundled wall grids, their decoder, and the live-maze fingerprint -->
     <Compile Include="..\..\src\MightAndMagic1Trainer\Game\MazeData.cs" />
     <Compile Include="..\..\src\MightAndMagic1Trainer\Game\BuiltInMazes.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\MazeFeatures.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\LandmarkBook.cs" />
     <Compile Include="..\..\src\MightAndMagic1Trainer\Game\MonsterBook.cs" />
+    <!-- The cluebook: the .ovr overlay reader, the rules reference, and the document itself -->
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\OverlayReader.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Game\RulesBook.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Cluebooks\PlaceBook.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Cluebooks\MazePlan.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Cluebooks\Cluebook.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Cluebooks\HtmlCluebookWriter.cs" />
+    <Compile Include="..\..\src\MightAndMagic1Trainer\Cluebooks\TextCluebookWriter.cs" />
   </ItemGroup>
 </Project>
