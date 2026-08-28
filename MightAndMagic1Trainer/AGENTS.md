@@ -16,7 +16,15 @@ It also carries a small **reverse-engineering toolkit** built from a Ghidra stud
 the game's **LFSR RNG** driving a live **roll predictor**, a **maze decoder** that
 renders all 55 of the game's mazes as a vector auto-map (bundled, so no game file is needed)
 with live current-map detection, and
-an **auto-fight** loop. The methods behind these — the DS offset map, combat/HP/XP
+an **auto-fight** loop.
+
+On top of that decode sits the trainer's one **offline** half: a **cluebook generator**
+(`Cluebooks/`) that writes a full strategy guide as one self-contained HTML page plus a
+plain-text copy -- a walkthrough, a plan of all 55 places with their secret walls marked,
+both spell lists, every item, the whole bestiary and the rules the game actually runs on.
+Nothing in it touches the game process, so the tab works with nothing attached. Pointing it
+at an installation adds the two things the trainer cannot carry: the exact maze bytes, and
+the game's own words, read out of the player's own 55 `.ovr` overlays by `OverlayReader`. The methods behind these — the DS offset map, combat/HP/XP
 formulas, the `Mazedata.dta` and `.ovr` formats, and a remaster design — are written
 up under `docs/` (each claim tagged Confirmed / Inferred / Candidate).
 
@@ -68,17 +76,27 @@ src/MightAndMagic1Trainer/
                                   DumpComparer, BytePatternScanner, GlobalHotkeys — now in
                                   GameTrainers.Common.Memory (imported via a global using)
   (Mvvm/       ObservableObject, RelayCommand now live in GameTrainers.Common.Mvvm)
-  ViewModels/  MainViewModel (attach/scan/freeze timer), CharacterViewModel,
+  ViewModels/  CluebookViewModel (game folder -> sources -> Cluebook -> two files; no process),
+               MainViewModel (attach/scan/freeze timer), CharacterViewModel,
                StatViewModel, ItemSlotViewModel (one inventory slot: item id + charges + charge freeze),
                HexByteViewModel,
                DrawnMapViewModel (renders a decoded maze + live party cell + click/typed teleport;
-                                  fingerprints the live map; self-learns the party-position DS offset),
+                                  fingerprints the live map; self-learns the party-position DS offset;
+                                  marks the landmarks and answers "what is on this square"),
                AutoCombatViewModel (auto-fight: replays a key sequence while DataSegment.InCombat),
                RollPredictorViewModel (live LFSR state -> predicted next rolls per die),
                SpellMacrosViewModel (spellbook "Cast a spell" picker + quick-cast macros, persisted to %APPDATA%),
                MemorySearchViewModel (drives MemorySearcher; off-roster edits e.g. position),
                CharacterRollerViewModel (auto re-rolls a new character: locks the create-screen
                                   roll buffer via RollScanner, taps Enter, reads each roll, stops on target)
+  Cluebooks/   what the document says; how it is written is GameTrainers.Common.Documents
+               PlaceBook.cs    which of the 55 records is which place, its confidence, its blurb;
+                               plus PuzzleTrail, where each gold/silver cipher fragment lives
+               MazePlan.cs     one maze as an SVG plan or the atlas's 33x33 characters, with the
+                               marked squares on it -- drawing only; the facts are MazeMap's
+               Cluebook.cs     the model: sources, one chapter per place, and the notes
+               HtmlCluebookWriter.cs  the section structure, over an HtmlPage
+               TextCluebookWriter.cs  the same sections, over a TextDocument
   Game/Spellbook.cs  MM1 spell tables (level/number/SP/gem/description) + class→school map
   Game/ItemBook.cs   curated item reference list + the game's 255-entry id→name table
                      (extracted from MM.EXE; slot bytes are 1-based indices into it)
@@ -88,6 +106,15 @@ src/MightAndMagic1Trainer/
   Game/Lfsr.cs       byte-exact 32-bit LFSR rand(n) (taps 27/30, rejection sampling -> [1,n]); SelfTest vectors
   Game/BuiltInMazes.cs the 55 bundled wall grids (33 lines x 33 chars, north-up) so the map tab
                      works with no game file; generated from docs/maze-atlas.md
+  Game/MazeFeatures.cs   the other half of MazeMap: what a decoded maze means rather than how it
+                     is stored -- an edge's face (EdgeFace, which adds "drawn but walkable" to
+                     EdgeKind), SecretPassages, Counts, IsOutdoor. Shared by the cluebook's plans
+                     and the Map (drawn) tab so the two cannot disagree
+  Game/LandmarkBook.cs   the marked squares, each with the guide its coordinate came from
+  Game/OverlayReader.cs  decodes one *.ovr (docs/ovr-format.md) into the messages its handlers
+                     print; OverlaySet reads a whole installation and lines it up with the mazes
+  Game/RulesBook.cs  the levelling/combat/RNG rules from docs/formulas.md, each carrying its own
+                     confidence and the routine it was read out of
   Game/MazeData.cs   decodes Mazedata.dta (55×512: two co-registered 16×16 wall planes) -> MazeMap;
                      plane-1 fingerprinting identifies the live map
   App.xaml, MainWindow.xaml(.cs)  dark two-pane UI: party list + Characters/Spells/Memory tabs
@@ -95,6 +122,8 @@ src/MightAndMagic1Trainer/
                                   (SpellReferenceViewModel; opened from the Spells tab button)
   Assets/app.ico                  application + window icon (gold gem on a dark tile)
 test/FormatCheck/                 headless assertions against docs/Roster.dta & MM.CEM
+       CluebookChecks.cs          the overlay reader, the plans and both writers, against
+                                  overlays built byte by byte to the documented format
 tools/IconGen/                    dev-only WPF tool that regenerates Assets/app.ico (not in the .sln)
 docs/  (named .docs/ on disk)     sample Roster.dta + MM.CEM (Cheat Engine memory dump), plus the
                                   reverse-engineering references: offset-map.md (+ offset-map-globals.txt),
@@ -204,6 +233,69 @@ README.md                         user-facing docs + full format table
   through the token's `WaitHandle` (the CTS is cancelled but not disposed under the waiter). The
   combat gate is **reverse-engineered but not yet confirmed live** — the UI says so; don't trust
   auto-fight unattended without watching the readout flip.
+- **The cluebook is the trainer's offline half.** `Cluebooks/` reads nothing from the game
+  process and is built with the window rather than on attach, so the tab works with nothing
+  running: a cluebook is read before playing. These rules hold it together.
+  - **Nothing from the game is redistributed.** The 55 wall layouts, the item and monster
+    tables, the spells and the walkthrough are all this project's own decode and ship with the
+    trainer. The game's *words* do not: they are read out of the player's own `.ovr` overlays
+    when they point at an installation, exactly as the drawn map reads their `Mazedata.dta`.
+    Do not bake extracted game text (e.g. the content in `docs/ovr-events.md`) into the app.
+  - **The markup is not this trainer's to write.** `GameTrainers.Common.Documents` holds the
+    SVG, HTML and plain-text builders; `Cluebooks/` holds only the section structure. The
+    escaping, the invariant number formatting and the self-contained rule were got wrong by
+    hand twice in two other trainers and are now got right in one place. Do not hand-roll
+    `<svg`, `<!DOCTYPE` or a wrap loop here — including a bare `int.ToString()` for a number
+    that goes into markup, which is the one way a current-culture value still gets through.
+  - **The reader has never met a real overlay.** There are no game files in this repo, so
+    `OverlayReader` is written to `docs/ovr-format.md` and verified against overlays the harness
+    builds byte by byte to that spec. The format's own claims are tagged Confirmed there, and
+    the shipped 55 were the evidence for them -- but the first run against an actual
+    installation is still ahead of us. Treat a bug report about real files as likely, and fix
+    it in the reader rather than by loosening what the cluebook claims.
+  - **The overlay header is a check, not decoration.** `Overlay.TryRead` verifies both
+    signature words, that `code_size + data_size` accounts for the whole file, and that
+    nothing but zeroes follows; a file that fails is refused, because reading its data section
+    as text would produce confident rubbish. A wrong `data_addr` is a *note*, not a refusal —
+    it means another build, not another format.
+  - **Where the text starts is computed, then checked, then fallen back on — out loud.** The
+    dispatch table's shape (`1 + 4 x count` bytes before the first string) is recovered from
+    one disassembled file, so the reader validates the computed offset lands on a phrase and
+    otherwise goes looking for one, records which happened in `Overlay.TextStart`, and the
+    cluebook's notes say so. Do not quietly drop the fallback or quietly trust the arithmetic.
+  - **The marks are on both surfaces, from one table.** `Game/LandmarkBook.cs` backs the
+    cluebook's plans and the Map (drawn) tab alike, and the maze facts they both need —
+    `EdgeFace`, `SecretPassages`, `Counts`, `IsOutdoor` — are `MazeMap`'s own, in
+    `Game/MazeFeatures.cs`, not the document layer's. That is not tidiness: when the tab and the
+    book disagree about how many secret passages a place has, one of them is wrong, and the way
+    to make that impossible is to have them count in the same place. `Cluebooks/` may depend on
+    `Game/`; nothing in `Game/` or `ViewModels/` may depend on `Cluebooks/`.
+  - **Marks are quoted; passages are computed; where they agree, say so.** The numbered landmarks
+    on a plan are coordinates out of `Game/Walkthrough.cs`, tagged with that fact, and there are
+    only thirteen because inventing more would be inventing. The walk-through walls under each
+    plan are computed from the maze planes and are exact. `LocationChapter.WayInAt` is where the
+    two check each other: both landmarks whose description implies a secret wall -- Sorpigal's
+    leprechaun and Portsmith's secret room -- land on a square the maze data finds one on, and
+    neither does when the published coordinate is mirrored top to bottom. That is the only
+    evidence this project has about which end the game counts y from, it is two data points
+    against one (Algary's Zom goes the other way), and it is pinned in `FormatCheck` so that a
+    future change to either half has to face it. It does not settle the question; the notes still
+    say the question is open.
+  - **Outdoors a walk-through wall is scenery, not a secret.** A surface area has between 89 and
+    257 of them (they are scrub, trees and the edge of a wood) against a town's thirty, so
+    `PassagesAreTerrain` counts and explains them there instead of listing them. Listing them
+    would bury the real ones and teach the reader to skip the list.
+  - **The book says what it does not know, on its own first page.** `Cluebook.BuildNotes` lists
+    every limit: which records are only inferred to be which place, that a message's order is
+    file order and says nothing about which square triggers it, that the walkthrough is
+    community-sourced, that two of this project's own references disagree about Sorpigal's
+    surface cell. If one of those becomes established, the notes are the first thing to change.
+- **The plan round-trip is the coordinate-system test.** `MazePlan.RenderAscii` re-renders a
+  `MazeMap` into the 33x33 grid `BuiltInMazes` stores, and `FormatCheck` requires all 55 to come
+  back character for character. That one assertion pins north-up, y counting from the south, and
+  a shared edge belonging to both squares — which are otherwise wrong by one row and look
+  plausible. An edge the two squares disagree about is drawn as the more solid of the two and
+  counted as one-way, never silently resolved.
 - **Reverse-engineering docs.** `docs/` holds the decoded references the toolkit is built on:
   `offset-map.md` (+ the machine-generated `offset-map-globals.txt`), `formulas.md` (XP/HP/combat
   math), `maze-atlas.md` (every decoded maze), `ovr-format.md`/`ovr-events.md` (the `.ovr`

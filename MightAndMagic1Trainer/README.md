@@ -9,8 +9,9 @@ freeze ("god mode") toggles and one-click "max everything" buttons.
 Around that core it adds tools built from reverse-engineering `Mm.exe`: a vector
 **auto-map** drawn from the game's own maze data with exact teleport, an **auto-fight**
 loop, a **roll predictor** that reads the game's RNG and forecasts upcoming rolls, plus
-reference tabs (spells, items, monsters, classes, walkthrough). The decode work behind
-them is written up under [`docs/`](docs/).
+reference tabs (spells, items, monsters, classes, walkthrough). It also has an offline
+half: a **cluebook generator** that turns all of that decode into a strategy guide you can
+read away from the machine. The work behind them is written up under [`docs/`](docs/).
 
 > Single-player cheat tool for your own save. Nothing here touches other
 > machines or online services.
@@ -193,6 +194,15 @@ byte-for-byte match.
 - **Teleport to an exact cell.** Type a destination **X / Y** (each 0–15) and **🚀 Teleport**,
   or tick **🚀 Teleport on click** and click any cell. Both write the exact cell, so unlike
   the image map there's nothing to calibrate.
+- **Landmarks, marked on the map.** Green numbered discs sit on the squares worth walking to —
+  the leprechaun who moves you between towns, the astral brothers, the druid with the King's
+  Pass. Hover one for what's there and which guide the coordinate came from. They are the same
+  thirteen the cluebook prints, from the same table, so the two can't drift apart.
+- **Ask a square what it hides.** With **Teleport on click** off, clicking a cell reports it —
+  any landmark on it, and, indoors, which of its sides you can walk straight through. A line
+  under the legend sums the map up ("31 of the walls here are not really there"). Outdoors it
+  says so instead of listing: a drawn edge you can walk through is scrub or the edge of a wood,
+  and a surface area has up to 257 of them.
 
 ### Auto-fight (Auto-fight tab)
 
@@ -266,6 +276,58 @@ method). **🗑 Clear statistics** resets the tally. *Note:* the check assumes t
 itself the answer.
 
 The lock and the statistics are dropped on **Detach** (they belong to that game session).
+
+### Cluebook (Cluebook tab)
+
+Writes a complete strategy guide to disk: one **self-contained HTML page** (no scripts, no
+network, no files beside it — mail it, archive it, open it in ten years) plus a **plain-text
+copy** that greps and reads in a terminal beside DOSBox. Both hold:
+
+- **A walkthrough**, broadly ordered from party creation to the Inner Sanctum.
+- **A gazetteer of all 55 places** — the five towns, the twenty surface areas, the nine caves,
+  the castles, the lairs and the two planes — each with a **plan of its 16 × 16 grid** showing
+  walls, doors, the edges the game has flagged, and, in their own faint dotted style, **the
+  walls you can walk straight through**. MM1 draws its walls from one plane and decides
+  passability from another; where they disagree you can walk through what you can see. Sorpigal
+  alone has 31 of them.
+- **Marked squares.** Each plan carries numbered landmarks — the leprechaun who moves you between
+  towns, the astral brothers and their two halves of one clue, the druid with the King's Pass, the
+  corner of Castle Dragadune that turns gold into experience — listed under the map with what they
+  do. There are thirteen of them, and the book says why there are not more: the coordinates come
+  from the walkthrough, because the square each of a location's events fires on is in its overlay
+  but is not yet decoded.
+- **Every wall that is not a wall**, listed by the square to stand on and the way to walk. That
+  half *is* decoded, from the two maze planes disagreeing, so it is exact. Where a landmark and a
+  secret passage land on the same square — Sorpigal's leprechaun, Portsmith's secret room — the
+  book says so and tells you which side to walk through. Outdoors, where a walk-through wall is
+  scrub rather than a secret, they are counted and explained instead of listed.
+- **The two ciphers**: which overlay holds each of the nine "etched in gold" fragments and the
+  six "etched in silver" ones, with the fragments themselves collected onto one page in reading
+  order when your own files are to hand.
+- **The reference tables** — both spell lists, all 255 items with their effects, all 195
+  monsters — and **the rules the game actually runs on**: the hit die per class and the
+  Endurance bonus that dwarfs it, the d20 that always hits on 20 and always misses on 1, the
+  two experience curves, and the shift register the dice come out of.
+
+It needs **neither the game running nor the game installed** — everything above ships with the
+trainer, so the tab works on its own. Pointing it at your game folder adds the two things the
+trainer cannot carry:
+
+- the **exact maze bytes** from your `Mazedata.dta`, instead of this project's transcription
+  of them, and
+- **the game's own words** — every sign, hint, offer, riddle and trap message — decoded from
+  the 55 `.ovr` overlay files of *your* installation. None of that text is shipped with the
+  trainer; the overlays are opened read-only and nothing but the cluebook is ever written.
+
+One caveat worth stating plainly: the `.ovr` decoding is built from this project's own
+[format write-up](docs/ovr-format.md) and is verified against overlays the test harness builds byte
+by byte to that spec — but no game files live in this repo, so it has not yet been run against a
+real installation's 55. If your files produce something odd, that is a bug in the reader.
+
+The book's first page is a list of what it does **not** know: which records are only *inferred*
+to be a given place, that a location's messages are listed in file order and say nothing about
+which square triggers them, that the walkthrough is community-sourced, and that two of this
+project's own references disagree about which surface cell Sorpigal sits on.
 
 ---
 
@@ -397,8 +459,19 @@ src/MightAndMagic1Trainer/
                DataSegment.cs       fixed DS-offset reader for the game's globals (offset-map.md)
                (shared)             NativeMethods, ProcessMemory, MemoryDumper, DumpComparer,
                                     GlobalHotkeys, KeyboardSender, MemorySearcher — see GameTrainers.Common
+  Game/MazeFeatures.cs   what a decoded maze means: an edge's face, the secret passages,
+                         the counts, indoors-or-out (shared by the map tab and the cluebook)
+  Game/LandmarkBook.cs   the marked squares, each with the guide its coordinate came from
+  Cluebooks/   PlaceBook.cs         which of the 55 records is which place, and how firmly
+               MazePlan.cs          one maze as an SVG plan or as the atlas's own characters,
+                                    with the marked squares on it
+               Cluebook.cs          the model: sources, a chapter per place, and the notes
+               Html/TextCluebookWriter.cs  the two renderings of that model
+  Game/OverlayReader.cs  decodes a .ovr overlay into the messages its handlers print
+  Game/RulesBook.cs      the levelling and combat rules, each with its confidence
   ViewModels/  MainViewModel, CharacterViewModel, StatViewModel, HexByteViewModel,
-               DrawnMapViewModel, AutoCombatViewModel, RollPredictorViewModel, …
+               DrawnMapViewModel, AutoCombatViewModel, RollPredictorViewModel,
+               CluebookViewModel, …
   App.xaml, MainWindow.xaml         dark, two-pane UI (party list + editor/hex tabs)
 test/FormatCheck/                   headless verification against docs/Roster.dta & MM.CEM
 docs/                               sample Roster.dta + MM.CEM, plus reverse-engineering write-ups:

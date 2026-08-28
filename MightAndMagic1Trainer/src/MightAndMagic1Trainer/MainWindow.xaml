@@ -1009,7 +1009,9 @@
                                 </ComboBox.ItemTemplate>
                             </ComboBox>
                             <TextBlock Margin="0,4,0,0" FontSize="11" Foreground="{StaticResource FgDim}" TextWrapping="Wrap"
-                                       Text="Legend:  grey = wall   ·   gold = door   ·   teal dashed = special edge   ·   thin dashed = secret / illusory wall"/>
+                                       Text="Legend:  grey = wall   ·   gold = door   ·   teal dashed = special edge   ·   thin dashed = secret / illusory wall   ·   green disc = a known landmark (hover it)"/>
+                            <TextBlock Margin="0,2,0,0" FontSize="11" Foreground="{StaticResource Accent}" TextWrapping="Wrap"
+                                       Text="{Binding SecretsText}"/>
                             <WrapPanel Margin="0,6,0,0">
                                 <CheckBox Content="🧭 Follow current map automatically" IsChecked="{Binding AutoFollowCurrentMap}"
                                           VerticalAlignment="Center"
@@ -1053,6 +1055,35 @@
                                       MouseLeftButtonDown="OnDrawnMapClicked" Background="Transparent">
                                     <Image Source="{Binding Board}" Stretch="Fill"
                                            Width="{Binding BoardSize}" Height="{Binding BoardSize}"/>
+                                    <!-- Landmarks. Hit-testable so each disc can carry its own tooltip;
+                                         the click still reaches the board because the event bubbles. -->
+                                    <ItemsControl ItemsSource="{Binding Landmarks}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><Canvas/></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemContainerStyle>
+                                            <Style TargetType="ContentPresenter">
+                                                <Setter Property="Canvas.Left" Value="{Binding Left}"/>
+                                                <Setter Property="Canvas.Top" Value="{Binding Top}"/>
+                                            </Style>
+                                        </ItemsControl.ItemContainerStyle>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type vm:MapLandmarkViewModel}">
+                                                <Grid Margin="-11,-11,0,0" Width="22" Height="22"
+                                                      ToolTipService.ShowDuration="30000">
+                                                    <Grid.ToolTip>
+                                                        <ToolTip MaxWidth="360">
+                                                            <TextBlock Text="{Binding Tip}" TextWrapping="Wrap"/>
+                                                        </ToolTip>
+                                                    </Grid.ToolTip>
+                                                    <Ellipse Fill="#E62F6B4F" Stroke="#161821" StrokeThickness="1.5"/>
+                                                    <TextBlock Text="{Binding Number}" Foreground="White"
+                                                               FontWeight="Bold" FontSize="11"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                     <Canvas IsHitTestVisible="False">
                                         <Grid Canvas.Left="{Binding MarkerX}" Canvas.Top="{Binding MarkerY}"
                                               Visibility="{Binding MarkerVisible, Converter={StaticResource BoolVis}}">
@@ -1321,6 +1352,78 @@
                             </ItemsControl>
                         </ScrollViewer>
                     </DockPanel>
+                </TabItem>
+
+                <!-- ============ Cluebook (offline; writes a strategy guide to disk) ============ -->
+                <TabItem Header="&#x1F4D4; Cluebook"
+                         DataContext="{Binding DataContext.Cluebook, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+                        <StackPanel IsEnabled="{Binding IsIdle}">
+                            <TextBlock Style="{StaticResource Section}" Text="Write a cluebook"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,8"
+                                       Text="Writes a full strategy guide as one self-contained HTML page (plus a plain-text copy): a walkthrough, a plan of all 55 places with their doors and their walk-through-able secret walls marked, both spell lists, every item, the whole bestiary, and the rules the game actually runs on. Nothing here touches the running game, so it works with nothing attached &#x2014; a cluebook is something you read before you play."/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,8"
+                                       Text="Point it at your game folder to add the two things the trainer cannot carry: the exact maze bytes from your Mazedata.dta, and the game&#x2019;s own words &#x2014; every sign, riddle, offer and trap message, read out of the 55 .ovr overlay files of your own copy. Optional: without a folder the book is written from the bundled data alone."/>
+
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition/><RowDefinition/>
+                                </Grid.RowDefinitions>
+                                <Label Grid.Row="0" Grid.Column="0" Content="Game folder (optional)" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" Margin="6,1" VerticalAlignment="Center"
+                                         Text="{Binding GameFolder, UpdateSourceTrigger=PropertyChanged}"
+                                         ToolTip="The folder holding MM.EXE, Mazedata.dta and the .ovr overlays."/>
+                                <Button Grid.Row="0" Grid.Column="2" Content="&#x1F4C2;" Margin="0,0,0,2" Padding="8,3"
+                                        Click="OnBrowseCluebookGameFolderClicked"/>
+                                <Label Grid.Row="1" Grid.Column="0" Content="Write to" VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" Margin="6,1" VerticalAlignment="Center"
+                                         Text="{Binding OutputFolder, UpdateSourceTrigger=PropertyChanged}"/>
+                                <Button Grid.Row="1" Grid.Column="2" Content="&#x1F4C2;" Margin="0,0,0,2" Padding="8,3"
+                                        Click="OnBrowseCluebookOutputClicked"/>
+                            </Grid>
+
+                            <WrapPanel Margin="0,2,0,2">
+                                <Button Content="&#x1F50E; Inspect game folder" Command="{Binding InspectCommand}"
+                                        ToolTip="Reads Mazedata.dta and the .ovr overlays from that folder and reports what was found."/>
+                                <Button Content="&#x1F4D4; Write cluebook" Command="{Binding WriteCommand}"
+                                        Background="{StaticResource AccentDim}"
+                                        ToolTip="Writes the HTML page and the plain-text copy into the output folder."/>
+                                <Button Content="&#x1F4C2; Open folder" Command="{Binding OpenOutputCommand}"
+                                        ToolTip="Shows the written cluebook in File Explorer."/>
+                            </WrapPanel>
+
+                            <TextBlock Text="{Binding Found}" Foreground="{StaticResource FgDim}" TextWrapping="Wrap"
+                                       Margin="0,0,0,6"/>
+
+                            <TextBlock Text="What to put in it" FontWeight="SemiBold" Margin="0,4,0,2"/>
+                            <WrapPanel>
+                                <CheckBox Content="Maps of all 55 places" IsChecked="{Binding IncludePlans}" Margin="0,0,14,4"
+                                          Foreground="{StaticResource Fg}"
+                                          ToolTip="The plans. Most of the file&#x2019;s size, and most of its use."/>
+                                <CheckBox Content="What each place says" IsChecked="{Binding IncludeEventText}" Margin="0,0,14,4"
+                                          Foreground="{StaticResource Fg}"
+                                          ToolTip="Needs a game folder: the text is read from your own .ovr files."/>
+                                <CheckBox Content="Walkthrough" IsChecked="{Binding IncludeWalkthrough}" Margin="0,0,14,4"
+                                          Foreground="{StaticResource Fg}"/>
+                                <CheckBox Content="Classes &amp; rules" IsChecked="{Binding IncludeRules}" Margin="0,0,14,4"
+                                          Foreground="{StaticResource Fg}"/>
+                                <CheckBox Content="Spells" IsChecked="{Binding IncludeSpells}" Margin="0,0,14,4"
+                                          Foreground="{StaticResource Fg}"/>
+                                <CheckBox Content="Items" IsChecked="{Binding IncludeItems}" Margin="0,0,14,4"
+                                          Foreground="{StaticResource Fg}"/>
+                                <CheckBox Content="Bestiary" IsChecked="{Binding IncludeBestiary}" Margin="0,0,14,4"
+                                          Foreground="{StaticResource Fg}"/>
+                            </WrapPanel>
+
+                            <TextBlock Text="{Binding Status}" Foreground="{StaticResource FgDim}" TextWrapping="Wrap"
+                                       Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </ScrollViewer>
                 </TabItem>
 
                 <!-- ============ Roll a Hero (auto re-roll on the create screen) ============ -->
