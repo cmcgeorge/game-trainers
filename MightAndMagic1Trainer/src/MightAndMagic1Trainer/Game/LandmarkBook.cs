@@ -45,7 +45,6 @@ public static class LandmarkBook
 
     private static Landmark G(string raw, int x, int y, string name, string description) =>
         new(raw, x, y, name, description, FromGameText);
-
     /// <summary>Every marked square, grouped into places by <see cref="For"/>.</summary>
     public static readonly IReadOnlyList<Landmark> Landmarks = new[]
     {
