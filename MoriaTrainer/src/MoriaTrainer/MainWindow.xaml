@@ -372,6 +372,28 @@
                 </DockPanel>
             </TabItem>
 
+            <TabItem Header="Cluebook">
+                <StackPanel Margin="12">
+                    <TextBlock Style="{StaticResource Header}" Text="Generate a self-contained HTML guide from the trainer's built-in Moria reference data."/>
+                    <TextBlock Foreground="#555" TextWrapping="Wrap" Margin="0,0,0,10"
+                               Text="Dungeon layouts are procedural, so the cluebook includes a depth reference rather than fixed maps. No game installation or attached process is needed."/>
+                    <WrapPanel Margin="0,0,0,10">
+                        <CheckBox Content="Level reference" IsChecked="{Binding Cluebook.IncludeLevels}" Margin="0,2,14,2"/>
+                        <CheckBox Content="Races and classes" IsChecked="{Binding Cluebook.IncludeRacesAndClasses}" Margin="0,2,14,2"/>
+                        <CheckBox Content="Spells and prayers" IsChecked="{Binding Cluebook.IncludeSpells}" Margin="0,2,14,2"/>
+                        <CheckBox Content="Item reference" IsChecked="{Binding Cluebook.IncludeItems}" Margin="0,2,14,2"/>
+                        <CheckBox Content="Monster bestiary" IsChecked="{Binding Cluebook.IncludeBestiary}" Margin="0,2,14,2"/>
+                        <CheckBox Content="Walkthrough" IsChecked="{Binding Cluebook.IncludeWalkthrough}" Margin="0,2,14,2"/>
+                        <CheckBox Content="Strategy notes" IsChecked="{Binding Cluebook.IncludeStrategy}" Margin="0,2,14,2"/>
+                    </WrapPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Save cluebook" Command="{Binding Cluebook.SaveCommand}"/>
+                        <Button Content="Open last saved" Command="{Binding Cluebook.OpenCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Cluebook.Status}" TextWrapping="Wrap" Margin="0,10,0,0" Foreground="#555"/>
+                </StackPanel>
+            </TabItem>
+
             <!-- Paragraphs (monster memory reference) -->
             <TabItem Header="Paragraphs">
                 <DockPanel>

@@ -300,6 +300,58 @@
                     </TabItem>
                 </TabControl>
             </TabItem>
+
+            <TabItem Header="Maps" DataContext="{Binding Maps}">
+                <Grid Margin="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <GroupBox Grid.Column="0" Header="Areas">
+                        <ListBox ItemsSource="{Binding Areas}" SelectedItem="{Binding Selected}"
+                                 DisplayMemberPath="Name"/>
+                    </GroupBox>
+                    <ScrollViewer Grid.Column="1" Margin="6,0,0,0" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="{Binding SelectedDescription}" Style="{StaticResource RefHeader}"
+                                       TextWrapping="Wrap"/>
+                            <Image Source="{Binding SelectedImage}" Stretch="None" Margin="0,4,0,12"
+                                   RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                            <TextBlock Text="Points of Interest" Style="{StaticResource RefHeader}"/>
+                            <ListView ItemsSource="{Binding Pois}" Margin="0,0,0,8">
+                                <ListView.View>
+                                    <GridView>
+                                        <GridViewColumn Header="Pos" Width="60" DisplayMemberBinding="{Binding Position}"/>
+                                        <GridViewColumn Header="Name" Width="140" DisplayMemberBinding="{Binding Name}"/>
+                                        <GridViewColumn Header="Description" Width="400" DisplayMemberBinding="{Binding Description}"/>
+                                    </GridView>
+                                </ListView.View>
+                            </ListView>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Cluebook" DataContext="{Binding Cluebook}">
+                <StackPanel Margin="12">
+                    <TextBlock Text="Fountain of Dreams Cluebook" Style="{StaticResource RefHeader}" FontSize="16"/>
+                    <TextBlock Text="Generate a self-contained HTML strategy guide with area maps, attribute and profession references, a walkthrough, and strategy notes."
+                               TextWrapping="Wrap" Margin="0,0,0,12" MaxWidth="600" Foreground="#555"/>
+                    <TextBlock Text="Include" Style="{StaticResource RefHeader}"/>
+                    <WrapPanel Margin="8,0,0,8">
+                        <CheckBox Content="Area maps" IsChecked="{Binding IncludeMaps}" Margin="8,4"/>
+                        <CheckBox Content="Professions" IsChecked="{Binding IncludeProfessions}" Margin="8,4"/>
+                        <CheckBox Content="Walkthrough" IsChecked="{Binding IncludeWalkthrough}" Margin="8,4"/>
+                        <CheckBox Content="Strategy notes" IsChecked="{Binding IncludeStrategy}" Margin="8,4"/>
+                    </WrapPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,8">
+                        <Button Content="Save cluebook" Command="{Binding SaveCommand}"/>
+                        <Button Content="Open in browser" Command="{Binding OpenCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Status}" Foreground="#555" TextWrapping="Wrap"/>
+                </StackPanel>
+            </TabItem>
         </TabControl>
     </DockPanel>
 </Window>

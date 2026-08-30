@@ -56,6 +56,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public SaveEditorViewModel SaveEditor { get; } = new();
     public LiveInventoryViewModel LiveInventory { get; } = new();
     public MapsViewModel Maps { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
 
     /// <summary>Auto-re-rolls a new character on the create-a-character screen until a target roll is hit.</summary>
     public CharacterRollerViewModel Roller { get; }

@@ -36,6 +36,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
         Map = new MapViewModel(this);
         SaveEditor = new SaveEditorViewModel(this);
         Reference = new ReferenceViewModel();
+        Cluebook = new CluebookViewModel();
 
         RefreshEmulatorsCommand = new RelayCommand(RefreshEmulators);
         AttachCommand = new RelayCommand(Attach, () => SelectedEmulator is not null && !IsAttached);
@@ -56,6 +57,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable
     public MapViewModel Map { get; }
     public SaveEditorViewModel SaveEditor { get; }
     public ReferenceViewModel Reference { get; }
+    public CluebookViewModel Cluebook { get; }
 
     // ---- attach state --------------------------------------------------------
 

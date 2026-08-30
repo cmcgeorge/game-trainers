@@ -519,6 +519,39 @@
                 </ScrollViewer>
             </TabItem>
 
+            <TabItem Header="Cluebook" Foreground="#FFCCCCCC">
+                <Grid Margin="16" DataContext="{Binding Cluebook}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" Text="Bard's Tale Trilogy cluebook" Foreground="White"
+                               FontWeight="Bold" FontSize="16" Margin="0,0,0,8"/>
+                    <StackPanel Grid.Row="1">
+                        <TextBlock Text="Create a self-contained HTML reference using the trainer's game knowledge. No attached game or installation is required."
+                                   Style="{StaticResource Note}" Margin="0,0,0,10"/>
+                        <WrapPanel>
+                            <CheckBox Content="Spell reference" IsChecked="{Binding IncludeSpells}"
+                                      Foreground="#FFCCCCCC" Margin="0,0,16,8"/>
+                            <CheckBox Content="Classes and races" IsChecked="{Binding IncludeClasses}"
+                                      Foreground="#FFCCCCCC" Margin="0,0,16,8"/>
+                            <CheckBox Content="Item catalogue" IsChecked="{Binding IncludeItems}"
+                                      Foreground="#FFCCCCCC" Margin="0,0,16,8"/>
+                            <CheckBox Content="Walkthrough" IsChecked="{Binding IncludeWalkthrough}"
+                                      Foreground="#FFCCCCCC" Margin="0,0,16,8"/>
+                            <CheckBox Content="Strategy notes" IsChecked="{Binding IncludeStrategy}"
+                                      Foreground="#FFCCCCCC" Margin="0,0,16,8"/>
+                        </WrapPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Save cluebook" Command="{Binding SaveCommand}" Style="{StaticResource Primary}"/>
+                            <Button Content="Open cluebook" Command="{Binding OpenCommand}" Style="{StaticResource Chip}"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock Grid.Row="2" Text="{Binding Status}" Style="{StaticResource Note}" Margin="0,12,0,0"/>
+                </Grid>
+            </TabItem>
+
         </TabControl>
     </DockPanel>
 </Window>

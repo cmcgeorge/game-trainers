@@ -27,6 +27,7 @@
     <!-- The create-screen roller taps the 'n' key to re-roll via Common's scancode-based SendInput
          wrapper; it works with DOSBox/SDL emulators where PostMessage can't. -->
     <Using Include="GameTrainers.Common.Memory.KeyboardSender" Alias="KeyboardSender" />
+    <Using Include="GameTrainers.Common.Documents" />
   </ItemGroup>
 
   <ItemGroup>

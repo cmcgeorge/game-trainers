@@ -42,6 +42,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     private const int ReadFailuresBeforeReporting = 5;
 
     public ObservableCollection<ProcessEntry> Processes { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
     public ReferenceViewModel Reference { get; } = new();
 
     public MainViewModel()

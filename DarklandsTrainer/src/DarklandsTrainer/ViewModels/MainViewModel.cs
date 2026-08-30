@@ -60,6 +60,8 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     public ObservableCollection<SkillInfo> Skills { get; } = new(SkillBook.Skills);
     public ObservableCollection<CurrencyInfo> Currency { get; } = new(GameFacts.Currency);
     public ObservableCollection<string> FameTiers { get; } = new(GameFacts.FameTiers);
+    public MapsViewModel Maps { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
 
     /// <summary>The scan widths offered in the UI.</summary>
     public IReadOnlyList<ScanWidth> Widths { get; } = new[] { ScanWidth.Byte, ScanWidth.Int16, ScanWidth.Int32 };

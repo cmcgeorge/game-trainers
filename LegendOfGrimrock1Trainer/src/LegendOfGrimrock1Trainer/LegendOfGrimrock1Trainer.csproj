@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Using Include="GameTrainers.Common.Documents" />
     <Using Include="GameTrainers.Common.Memory" />
     <Using Include="GameTrainers.Common.Mvvm" />
   </ItemGroup>

@@ -53,7 +53,9 @@
         </Border>
 
         <!-- Party + character editor -->
-        <Grid Margin="6">
+        <TabControl Margin="6">
+            <TabItem Header="Party">
+                <Grid Margin="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="200"/>
                 <ColumnDefinition Width="*"/>
@@ -146,6 +148,54 @@
                     </StackPanel>
                 </ScrollViewer>
             </GroupBox>
-        </Grid>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Maps" DataContext="{Binding Maps}">
+                <Grid Margin="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <DockPanel Grid.Column="0" Margin="4">
+                        <TextBlock DockPanel.Dock="Top" Text="Titan Areas" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <ListBox ItemsSource="{Binding Areas}" SelectedItem="{Binding Selected}" DisplayMemberPath="Name"/>
+                    </DockPanel>
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Padding="4">
+                        <StackPanel>
+                            <TextBlock Text="{Binding SelectedDescription}" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                            <Image Source="{Binding SelectedImage}" Stretch="None" Margin="0,4,0,12" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                            <TextBlock Text="Points of Interest" FontWeight="Bold" Margin="0,0,0,6"/>
+                            <ListView ItemsSource="{Binding Pois}">
+                                <ListView.View>
+                                    <GridView>
+                                        <GridViewColumn Header="Pos" Width="60" DisplayMemberBinding="{Binding Position}"/>
+                                        <GridViewColumn Header="Name" Width="140" DisplayMemberBinding="{Binding Name}"/>
+                                        <GridViewColumn Header="Description" Width="400" DisplayMemberBinding="{Binding Description}"/>
+                                    </GridView>
+                                </ListView.View>
+                            </ListView>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Cluebook" DataContext="{Binding Cluebook}">
+                <StackPanel Margin="12">
+                    <TextBlock Text="Mines of Titan Cluebook" FontWeight="Bold" FontSize="16" Margin="0,0,0,6"/>
+                    <TextBlock Text="Generate a self-contained HTML field guide with area maps, equipment reference, walkthrough, and strategy notes." TextWrapping="Wrap" Margin="0,0,0,12" MaxWidth="600" Foreground="#555"/>
+                    <TextBlock Text="Include" FontWeight="Bold" Margin="0,0,0,4"/>
+                    <WrapPanel Margin="8,0,0,8">
+                        <CheckBox Content="Area maps" IsChecked="{Binding IncludeMaps}" Margin="8,4"/>
+                        <CheckBox Content="Equipment reference" IsChecked="{Binding IncludeItems}" Margin="8,4"/>
+                        <CheckBox Content="Walkthrough" IsChecked="{Binding IncludeWalkthrough}" Margin="8,4"/>
+                        <CheckBox Content="Strategy notes" IsChecked="{Binding IncludeStrategy}" Margin="8,4"/>
+                    </WrapPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,8">
+                        <Button Content="Save cluebook" Command="{Binding SaveCommand}"/>
+                        <Button Content="Open in browser" Command="{Binding OpenCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Status}" Foreground="#555" TextWrapping="Wrap"/>
+                </StackPanel>
+            </TabItem>
+        </TabControl>
     </DockPanel>
 </Window>

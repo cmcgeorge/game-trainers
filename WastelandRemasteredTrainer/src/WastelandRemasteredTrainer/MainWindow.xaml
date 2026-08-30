@@ -87,7 +87,9 @@
                  DisplayMemberPath="ListLabel"/>
 
         <!-- Character editor -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <TabControl>
+            <TabItem Header="Characters">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="4,0" DataContext="{Binding SelectedCharacter}">
 
                 <!-- Identity + write controls -->
@@ -318,6 +320,59 @@
                     </StackPanel>
                 </GroupBox>
             </StackPanel>
-        </ScrollViewer>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Maps" DataContext="{Binding Maps}">
+                <Grid Margin="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="190"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <DockPanel Grid.Column="0" Margin="0,0,8,0">
+                        <TextBlock DockPanel.Dock="Top" Text="Reference Areas" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <ListBox ItemsSource="{Binding Areas}" SelectedItem="{Binding Selected}" DisplayMemberPath="Name"/>
+                    </DockPanel>
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="{Binding SelectedDescription}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <TextBlock Text="Illustrative area reference only — no live position tracking or teleport." Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                            <TextBlock Text="R Ranger Center · T town · D dungeon · I item · N NPC · E enemy · S start · B boss/base" Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <Image Source="{Binding SelectedImage}" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor" Margin="0,0,0,12"/>
+                            <TextBlock Text="Landmarks" FontWeight="Bold" Margin="0,0,0,4"/>
+                            <ListView ItemsSource="{Binding Landmarks}">
+                                <ListView.View>
+                                    <GridView>
+                                        <GridViewColumn Header="Pos" Width="60" DisplayMemberBinding="{Binding Position}"/>
+                                        <GridViewColumn Header="Mark" Width="46" DisplayMemberBinding="{Binding Symbol}"/>
+                                        <GridViewColumn Header="Landmark" Width="150" DisplayMemberBinding="{Binding Name}"/>
+                                        <GridViewColumn Header="Notes" Width="310" DisplayMemberBinding="{Binding Description}"/>
+                                    </GridView>
+                                </ListView.View>
+                            </ListView>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Cluebook" DataContext="{Binding Cluebook}">
+                <StackPanel Margin="12">
+                    <TextBlock Text="Wasteland Remastered Reference Cluebook" FontSize="16" FontWeight="Bold"/>
+                    <TextBlock Text="Generate a self-contained HTML guide with illustrative area plans, reference tables, a campaign route, and strategy notes." TextWrapping="Wrap" Margin="0,4,0,12" MaxWidth="650"/>
+                    <TextBlock Text="Include" FontWeight="Bold"/>
+                    <WrapPanel Margin="4,2,0,8">
+                        <CheckBox Content="Area references" IsChecked="{Binding IncludeMaps}" Margin="6,4"/>
+                        <CheckBox Content="Attributes" IsChecked="{Binding IncludeAttributes}" Margin="6,4"/>
+                        <CheckBox Content="Skills" IsChecked="{Binding IncludeSkills}" Margin="6,4"/>
+                        <CheckBox Content="Items" IsChecked="{Binding IncludeItems}" Margin="6,4"/>
+                        <CheckBox Content="Campaign route" IsChecked="{Binding IncludeWalkthrough}" Margin="6,4"/>
+                        <CheckBox Content="Strategy notes" IsChecked="{Binding IncludeStrategy}" Margin="6,4"/>
+                    </WrapPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,8">
+                        <Button Content="Save cluebook" Command="{Binding SaveCommand}" Style="{StaticResource BtnStyle}"/>
+                        <Button Content="Open in browser" Command="{Binding OpenCommand}" Style="{StaticResource BtnStyle}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Status}" Foreground="Gray" TextWrapping="Wrap"/>
+                </StackPanel>
+            </TabItem>
+        </TabControl>
     </DockPanel>
 </Window>

@@ -91,62 +91,62 @@ var nameBytes = System.Text.Encoding.ASCII.GetBytes("TestHero");
 Array.Copy(nameBytes, 0, rec, CharacterFormat.OffName, nameBytes.Length);
 
 // --- parse and assert -------------------------------------------------------
-var record = new CharacterRecord(rec);
+var character = new CharacterRecord(rec);
 
 Console.WriteLine("=== Amberstar Character Record Parser Tests ===");
 Console.WriteLine();
 
 Console.WriteLine("Identity:");
-Check("magic header", record.Magic, (ushort)0x00FF);
-Check("type", record.Type, 0);
-Check("name", record.Name, "TestHero");
-Check("gender", record.Gender, 0);
-Check("race", record.Race, 0);
-Check("race name", record.RaceName, "Human");
-Check("class", record.Class, 1);
-Check("class name", record.ClassName, "Warrior");
-Check("level", record.Level, 5);
+Check("magic header", character.Magic, (ushort)0x00FF);
+Check("type", character.Type, 0);
+Check("name", character.Name, "TestHero");
+Check("gender", character.Gender, 0);
+Check("race", character.Race, 0);
+Check("race name", character.RaceName, "Human");
+Check("class", character.Class, 1);
+Check("class name", character.ClassName, "Warrior");
+Check("level", character.Level, 5);
 Console.WriteLine();
 
 Console.WriteLine("Attributes (big-endian):");
 for (int i = 0; i < CharacterFormat.AttributeCount; i++)
 {
-    Check($"{CharacterFormat.AttributeNames[i]} cur", record.GetAttrCur(i), attrsCur[i]);
-    Check($"{CharacterFormat.AttributeNames[i]} max", record.GetAttrMax(i), attrsMax[i]);
+    Check($"{CharacterFormat.AttributeNames[i]} cur", character.GetAttrCur(i), attrsCur[i]);
+    Check($"{CharacterFormat.AttributeNames[i]} max", character.GetAttrMax(i), attrsMax[i]);
 }
 Console.WriteLine();
 
 Console.WriteLine("Skills:");
 for (int i = 0; i < CharacterFormat.SkillCount; i++)
 {
-    Check($"{CharacterFormat.SkillNames[i]} cur", record.GetSkillCur(i), skillsCur[i]);
-    Check($"{CharacterFormat.SkillNames[i]} max", record.GetSkillMax(i), skillsMax[i]);
+    Check($"{CharacterFormat.SkillNames[i]} cur", character.GetSkillCur(i), skillsCur[i]);
+    Check($"{CharacterFormat.SkillNames[i]} max", character.GetSkillMax(i), skillsMax[i]);
 }
 Console.WriteLine();
 
 Console.WriteLine("Vitals (big-endian):");
-Check("HP cur", record.HpCur, 40);
-Check("HP max", record.HpMax, 50);
-Check("SP cur", record.SpCur, 15);
-Check("SP max", record.SpMax, 30);
-Check("SLP", record.Slp, 10);
+Check("HP cur", character.HpCur, 40);
+Check("HP max", character.HpMax, 50);
+Check("SP cur", character.SpCur, 15);
+Check("SP max", character.SpMax, 30);
+Check("SLP", character.Slp, 10);
 Console.WriteLine();
 
 Console.WriteLine("Resources (big-endian):");
-Check("gold", record.Gold, 1500);
-Check("food", record.Food, 50);
-Check("experience", record.Experience, 12000L);
+Check("gold", character.Gold, 1500);
+Check("food", character.Food, 50);
+Check("experience", character.Experience, 12000L);
 Console.WriteLine();
 
 Console.WriteLine("Spells (big-endian bitfields):");
-Check("white spells", record.SpellsWhite, 2L);
-Check("grey spells", record.SpellsGrey, 0L);
-Check("black spells", record.SpellsBlack, 0L);
-Check("special spells", record.SpellsSpecial, 0L);
+Check("white spells", character.SpellsWhite, 2L);
+Check("grey spells", character.SpellsGrey, 0L);
+Check("black spells", character.SpellsBlack, 0L);
+Check("special spells", character.SpellsSpecial, 0L);
 Console.WriteLine();
 
 Console.WriteLine("IsOccupied:");
-Check("occupied record", record.IsOccupied, true);
+Check("occupied record", character.IsOccupied, true);
 
 // Empty record (all zeros)
 var empty = new CharacterRecord(new byte[CharacterFormat.RecordSize]);
@@ -191,17 +191,17 @@ Check("class Black Mage", ClassBook.Name(8), "Black Mage");
 Console.WriteLine();
 
 Console.WriteLine("Set operations:");
-record.SetAttribute(0, 999);
-Check("set STR to 999", record.GetAttrCur(0), 999);
-Check("set STR max to 999", record.GetAttrMax(0), 999);
-record.SetSkill(0, 99);
-Check("set ATK cur to 99", record.GetSkillCur(0), 99);
-Check("set ATK max to 99", record.GetSkillMax(0), 99);
-record.LearnAllSpells();
-Check("learn all white", record.SpellsWhite, (long)0xFFFFFFFF);
-Check("learn all grey", record.SpellsGrey, (long)0xFFFFFFFF);
-Check("learn all black", record.SpellsBlack, (long)0xFFFFFFFF);
-Check("learn all special", record.SpellsSpecial, (long)0xFFFFFFFF);
+character.SetAttribute(0, 999);
+Check("set STR to 999", character.GetAttrCur(0), 999);
+Check("set STR max to 999", character.GetAttrMax(0), 999);
+character.SetSkill(0, 99);
+Check("set ATK cur to 99", character.GetSkillCur(0), 99);
+Check("set ATK max to 99", character.GetSkillMax(0), 99);
+character.LearnAllSpells();
+Check("learn all white", character.SpellsWhite, (long)0xFFFFFFFF);
+Check("learn all grey", character.SpellsGrey, (long)0xFFFFFFFF);
+Check("learn all black", character.SpellsBlack, (long)0xFFFFFFFF);
+Check("learn all special", character.SpellsSpecial, (long)0xFFFFFFFF);
 Console.WriteLine();
 
 Console.WriteLine(failures == 0

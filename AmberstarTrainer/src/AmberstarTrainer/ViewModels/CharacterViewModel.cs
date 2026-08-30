@@ -166,6 +166,8 @@ public sealed class CharacterViewModel : ObservableObject
         get => Record.MentalAilments;
         set { Record.MentalAilments = value; Poke(CharacterFormat.OffMentalAilments, 1); OnPropertyChanged(); OnPropertyChanged(nameof(MentalAilmentsName)); RaiseDerived(); }
     }
+    public string PhysicalAilmentsName => Record.PhysicalAilmentsName;
+    public string MentalAilmentsName => Record.MentalAilmentsName;
 
     // --- spells --------------------------------------------------------------
     public long SpellsWhite

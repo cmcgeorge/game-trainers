@@ -62,8 +62,10 @@
         </Border>
 
         <!-- Main content -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <Grid IsEnabled="{Binding Attached}">
+        <TabControl Margin="6,2,6,6">
+            <TabItem Header="Trainer">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <Grid IsEnabled="{Binding Attached}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
@@ -386,7 +388,59 @@
                         </ItemsControl>
                     </StackPanel>
                 </Border>
-            </Grid>
-        </ScrollViewer>
+                    </Grid>
+                </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Maps">
+                <Grid DataContext="{Binding Maps}" Margin="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="230"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="150"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                        <TextBlock Text="AREA MAPS" Style="{StaticResource Header}"/>
+                        <ListBox ItemsSource="{Binding Areas}" SelectedItem="{Binding Selected}" DisplayMemberPath="Name"/>
+                    </StackPanel>
+                    <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="{Binding SelectedDescription}" Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <Image Source="{Binding SelectedImage}" Stretch="None" HorizontalAlignment="Left" SnapsToDevicePixels="True"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,10,0,0">
+                        <TextBlock Text="POINTS OF INTEREST" Style="{StaticResource Header}"/>
+                        <ListView ItemsSource="{Binding Pois}" Height="112">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="Position" DisplayMemberBinding="{Binding Position}" Width="72"/>
+                                    <GridViewColumn Header="Landmark" DisplayMemberBinding="{Binding Name}" Width="160"/>
+                                    <GridViewColumn Header="Notes" DisplayMemberBinding="{Binding Description}" Width="430"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+            <TabItem Header="Cluebook">
+                <StackPanel DataContext="{Binding Cluebook}" Margin="18" MaxWidth="620">
+                    <TextBlock Text="AUTODUEL CLUEBOOK" Style="{StaticResource Header}"/>
+                    <TextBlock Text="Generate a self-contained HTML guide with area maps, vehicle combat references, and career advice." Foreground="{StaticResource TextDim}" TextWrapping="Wrap" Margin="0,0,0,14"/>
+                    <CheckBox Content="Include area maps" IsChecked="{Binding IncludeMaps}" Margin="0,3"/>
+                    <CheckBox Content="Include weapon reference" IsChecked="{Binding IncludeWeapons}" Margin="0,3"/>
+                    <CheckBox Content="Include vehicle reference" IsChecked="{Binding IncludeVehicles}" Margin="0,3"/>
+                    <CheckBox Content="Include career walkthrough" IsChecked="{Binding IncludeWalkthrough}" Margin="0,3"/>
+                    <CheckBox Content="Include strategy notes" IsChecked="{Binding IncludeStrategy}" Margin="0,3"/>
+                    <WrapPanel Margin="0,16,0,8">
+                        <Button Content="Save Cluebook" Style="{StaticResource AccentButton}" Command="{Binding SaveCommand}"/>
+                        <Button Content="Open in Browser" Command="{Binding OpenCommand}"/>
+                    </WrapPanel>
+                    <TextBlock Text="{Binding Status}" Foreground="{StaticResource TextDim}" TextWrapping="Wrap"/>
+                </StackPanel>
+            </TabItem>
+        </TabControl>
     </DockPanel>
 </Window>

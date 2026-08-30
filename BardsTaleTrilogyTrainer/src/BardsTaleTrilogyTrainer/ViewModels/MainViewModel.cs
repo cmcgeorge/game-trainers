@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using BardsTaleTrilogyTrainer.Cluebooks;
 using BardsTaleTrilogyTrainer.Game;
 using BardsTaleTrilogyTrainer.Memory;
 
@@ -39,6 +40,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public MainViewModel()
     {
         Maps = new MapsViewModel(() => _navigator, () => _archive, OnMessage);
+        Cluebook = new CluebookViewModel();
 
         // The map files belong to the installation, not to a running process, so the Maps tab
         // is useful before anything is attached.
@@ -71,6 +73,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
 
     /// <summary>The Maps tab: every area of the trilogy, the live marker, and teleport.</summary>
     public MapsViewModel Maps { get; }
+
+    public CluebookViewModel Cluebook { get; }
 
     public string StatusMessage { get => _statusMessage; set => SetField(ref _statusMessage, value); }
 

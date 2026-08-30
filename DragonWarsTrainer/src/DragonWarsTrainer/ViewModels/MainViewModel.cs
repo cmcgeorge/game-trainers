@@ -39,6 +39,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
 
     public ReferenceViewModel Reference { get; } = new();
     public MapsViewModel Maps { get; }
+    public CluebookViewModel Cluebook { get; } = new();
 
     private ProcessEntry? _selectedProcess;
     public ProcessEntry? SelectedProcess { get => _selectedProcess; set { SetField(ref _selectedProcess, value); RaiseCommands(); } }

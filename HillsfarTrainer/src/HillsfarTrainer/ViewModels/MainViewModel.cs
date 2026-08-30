@@ -60,6 +60,10 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     /// <summary>The offline character-file editor.</summary>
     public FileEditorViewModel Files { get; }
 
+    public MapsViewModel Maps { get; } = new();
+
+    public CluebookViewModel Cluebook { get; } = new();
+
     /// <summary>Race names for combo boxes.</summary>
     public IReadOnlyList<string> Races => RaceBook.Races;
 

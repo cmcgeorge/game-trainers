@@ -298,6 +298,49 @@
                 </DockPanel>
             </TabItem>
 
+            <TabItem Header="Maps">
+                <DockPanel DataContext="{Binding Maps}">
+                    <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="8">
+                        <StackPanel>
+                            <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,6"
+                                       Text="Reference maps for Spielburg Valley. They are not connected to the live room-number editor or teleport feature."/>
+                            <ComboBox Width="420" ItemsSource="{Binding Areas}" DisplayMemberPath="Name"
+                                      SelectedItem="{Binding Selected}"/>
+                            <TextBlock Text="{Binding SelectedDescription}" TextWrapping="Wrap" Margin="0,6,0,0" Foreground="#555"/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid DockPanel.Dock="Right" Width="330" ItemsSource="{Binding Pois}" AutoGenerateColumns="False"
+                              CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True" HeadersVisibility="Column" Margin="6,6,0,0">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Position" Binding="{Binding Position}" Width="75"/>
+                            <DataGridTextColumn Header="Landmark" Binding="{Binding Name}" Width="*"/>
+                            <DataGridTextColumn Header="Notes" Binding="{Binding Description}" Width="180"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Margin="0,6,6,0">
+                        <Image Source="{Binding SelectedImage}" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem Header="Cluebook">
+                <StackPanel DataContext="{Binding Cluebook}" Margin="12">
+                    <TextBlock FontWeight="Bold" FontSize="14" Text="Quest for Glory I cluebook"/>
+                    <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,4,0,12"
+                               Text="Generate a self-contained HTML guide with maps, character reference, walkthrough, and strategy notes. No game installation or attached process is required."/>
+                    <CheckBox Content="Include area maps" IsChecked="{Binding IncludeMaps}" Margin="2"/>
+                    <CheckBox Content="Include skills and spells" IsChecked="{Binding IncludeSkills}" Margin="2"/>
+                    <CheckBox Content="Include class guide" IsChecked="{Binding IncludeClasses}" Margin="2"/>
+                    <CheckBox Content="Include walkthrough" IsChecked="{Binding IncludeWalkthrough}" Margin="2"/>
+                    <CheckBox Content="Include strategy notes" IsChecked="{Binding IncludeStrategy}" Margin="2"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,8">
+                        <Button Content="Save cluebook" Command="{Binding SaveCommand}"/>
+                        <Button Content="Open saved cluebook" Command="{Binding OpenCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Foreground="#555"/>
+                </StackPanel>
+            </TabItem>
+
         </TabControl>
     </DockPanel>
 </Window>

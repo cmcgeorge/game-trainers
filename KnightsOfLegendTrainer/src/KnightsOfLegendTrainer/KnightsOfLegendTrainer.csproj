@@ -22,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Using Include="GameTrainers.Common.Documents" />
     <Using Include="GameTrainers.Common.Memory" />
     <Using Include="GameTrainers.Common.Mvvm" />
     <Using Include="System.Collections.ObjectModel" />

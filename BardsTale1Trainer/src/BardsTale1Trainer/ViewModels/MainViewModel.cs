@@ -4,6 +4,7 @@ using System.IO;
 using System.Windows.Threading;
 using BardsTale1Trainer.Game;
 using BardsTale1Trainer.Memory;
+using BardsTale1Trainer.Cluebooks;
 
 namespace BardsTale1Trainer.ViewModels;
 
@@ -84,6 +85,7 @@ public sealed class MainViewModel : ObservableObject
     public MonsterReferenceViewModel MonsterReference { get; } = new();
 
     public ClassReferenceViewModel ClassReference { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
 
     // --- process list -----------------------------------------------------------
     public ObservableCollection<ProcessInfo> Processes { get; } = new();

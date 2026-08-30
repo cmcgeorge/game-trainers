@@ -323,6 +323,8 @@ public sealed class MainViewModel : ObservableObject, IGameHost, IDisposable
     /// <summary>Levels of the loaded dungeon.</summary>
     public ObservableCollection<MapRowViewModel> Maps { get; } = new();
 
+    public CluebookViewModel Cluebook { get; } = new();
+
     private string _partyPosition = "";
     /// <summary>Where the party is standing, for the header.</summary>
     public string PartyPosition { get => _partyPosition; private set => SetField(ref _partyPosition, value); }

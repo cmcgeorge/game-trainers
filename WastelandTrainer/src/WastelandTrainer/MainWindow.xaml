@@ -504,6 +504,30 @@
                 </Grid>
             </TabItem>
 
+            <TabItem Header="Cluebook" DataContext="{Binding Cluebook}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">
+                    <StackPanel Margin="6" MaxWidth="620" HorizontalAlignment="Left">
+                        <TextBlock Text="Wasteland cluebook" Style="{StaticResource RefHeader}"/>
+                        <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,8"
+                                   Text="Generate a self-contained HTML reference covering the wasteland's areas, skills, items, walkthrough, and strategy notes. No attached game or game installation is needed."/>
+                        <GroupBox Header="Include">
+                            <WrapPanel Margin="6">
+                                <CheckBox Content="Areas" IsChecked="{Binding IncludeAreas}" Margin="0,0,14,4"/>
+                                <CheckBox Content="Skills" IsChecked="{Binding IncludeSkills}" Margin="0,0,14,4"/>
+                                <CheckBox Content="Items" IsChecked="{Binding IncludeItems}" Margin="0,0,14,4"/>
+                                <CheckBox Content="Walkthrough" IsChecked="{Binding IncludeWalkthrough}" Margin="0,0,14,4"/>
+                                <CheckBox Content="Strategy" IsChecked="{Binding IncludeStrategy}" Margin="0,0,14,4"/>
+                            </WrapPanel>
+                        </GroupBox>
+                        <StackPanel Orientation="Horizontal" Margin="0,10,0,6">
+                            <Button Content="Save cluebook" Command="{Binding SaveCommand}" Padding="12,4"/>
+                            <Button Content="Open last saved" Command="{Binding OpenCommand}" Margin="8,0,0,0" Padding="12,4"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Foreground="#555"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- ======================= CREATE (auto re-roll on the Ranger Center create screen) ======================= -->
             <TabItem Header="🎲 Create" DataContext="{Binding Roller}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4">

@@ -1038,6 +1038,32 @@
                     </Border>
                 </TabItem>
 
+                <!-- ===== Cluebook tab ===== -->
+                <TabItem Header="📘 Cluebook" DataContext="{Binding Cluebook}">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel MaxWidth="720" HorizontalAlignment="Left">
+                                <TextBlock Text="Cluebook" Style="{StaticResource Section}"/>
+                                <TextBlock Text="Generate a self-contained HTML reference for Curse of the Azure Bonds. It includes the area's decoded maps, mage and cleric spell tables, class and race references, the bond-breaking walkthrough, and strategy notes."
+                                           TextWrapping="Wrap" Style="{StaticResource Hint}" Margin="0,0,0,10"/>
+                                <WrapPanel>
+                                    <CheckBox Content="Area maps" IsChecked="{Binding IncludeMaps}" Margin="0,0,14,6"/>
+                                    <CheckBox Content="Spells" IsChecked="{Binding IncludeSpells}" Margin="0,0,14,6"/>
+                                    <CheckBox Content="Classes and races" IsChecked="{Binding IncludeClasses}" Margin="0,0,14,6"/>
+                                    <CheckBox Content="Walkthrough" IsChecked="{Binding IncludeWalkthrough}" Margin="0,0,14,6"/>
+                                    <CheckBox Content="Strategy" IsChecked="{Binding IncludeStrategy}" Margin="0,0,14,6"/>
+                                </WrapPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                    <Button Content="Save cluebook" Command="{Binding SaveCommand}" Margin="0,0,6,0"/>
+                                    <Button Content="Open in browser" Command="{Binding OpenCommand}"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding Status}" Style="{StaticResource Hint}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </TabItem>
+
                 <!-- ======================= CREATE (auto re-roll on the create-a-character screen) ======================= -->
                 <TabItem Header="🎲 Create" DataContext="{Binding Roller}">
                     <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"

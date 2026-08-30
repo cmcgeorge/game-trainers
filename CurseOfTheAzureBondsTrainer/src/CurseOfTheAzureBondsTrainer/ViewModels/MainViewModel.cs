@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Windows.Input;
 using System.Windows.Threading;
+using CurseOfTheAzureBondsTrainer.Cluebooks;
 using CurseOfTheAzureBondsTrainer.Game;
 using CurseOfTheAzureBondsTrainer.Memory;
 using CurseOfTheAzureBondsTrainer.Mvvm;
@@ -56,6 +57,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public SaveEditorViewModel SaveEditor { get; } = new();
     public LiveInventoryViewModel LiveInventory { get; } = new();
     public MapsViewModel Maps { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
     public PartyGeneratorViewModel PartyGen { get; }
 
     /// <summary>Auto-re-rolls a new character on the create-a-character screen until a target roll is hit.</summary>

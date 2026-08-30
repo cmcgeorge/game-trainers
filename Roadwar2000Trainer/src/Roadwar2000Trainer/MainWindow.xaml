@@ -452,6 +452,28 @@
                 </Grid>
             </TabItem>
 
+            <TabItem Header="Cluebook">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel DataContext="{Binding Cluebook}" Margin="10" MaxWidth="620">
+                        <TextBlock Text="Roadwar 2000 cluebook" Style="{StaticResource Section}"/>
+                        <TextBlock Style="{StaticResource Hint}" Text="Create a self-contained HTML field guide with reference tables, city highlights, overland-map diagrams, walkthrough, and strategy notes. It does not need an attached game or a game installation."/>
+                        <TextBlock Text="Include" Style="{StaticResource Section}"/>
+                        <WrapPanel>
+                            <CheckBox Content="Vehicle reference" IsChecked="{Binding IncludeVehicles}"/>
+                            <CheckBox Content="City highlights" IsChecked="{Binding IncludeCities}"/>
+                            <CheckBox Content="Overland maps" IsChecked="{Binding IncludeMaps}"/>
+                            <CheckBox Content="Walkthrough" IsChecked="{Binding IncludeWalkthrough}"/>
+                            <CheckBox Content="Strategy notes" IsChecked="{Binding IncludeStrategy}"/>
+                        </WrapPanel>
+                        <WrapPanel Margin="0,8,0,0">
+                            <Button Content="Save cluebook" Command="{Binding SaveCommand}"/>
+                            <Button Content="Open last saved" Command="{Binding OpenCommand}"/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding Status}" Style="{StaticResource Hint}" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- Reference -->
             <TabItem Header="Reference">
                 <TabControl DataContext="{Binding Reference}" Background="Transparent"

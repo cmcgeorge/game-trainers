@@ -34,6 +34,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public ObservableCollection<ProcessEntry> Processes { get; } = new();
     public ObservableCollection<CharacterViewModel> Party { get; } = new();
     public ReferenceViewModel Reference { get; } = new();
+    public MapsViewModel Maps { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
 
     private ProcessEntry? _selectedProcess;
     public ProcessEntry? SelectedProcess

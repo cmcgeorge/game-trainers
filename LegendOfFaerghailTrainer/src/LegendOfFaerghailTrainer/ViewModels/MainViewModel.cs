@@ -29,6 +29,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost
     public ObservableCollection<CharacterViewModel> Party { get; } = new();
     public ObservableCollection<CharacterViewModel> Roster { get; } = new();
     public ReferenceViewModel Reference { get; } = new();
+    public MapsViewModel Maps { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
 
     public RelayCommand RefreshProcessesCommand { get; }
     public RelayCommand AttachCommand { get; }

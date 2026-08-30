@@ -445,6 +445,26 @@
                 </DockPanel>
             </TabItem>
 
+            <TabItem Header="Cluebook" DataContext="{Binding Cluebook}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12" MaxWidth="720">
+                        <TextBlock Text="Alternate Reality: The City cluebook" FontWeight="Bold" FontSize="16"/>
+                        <TextBlock Margin="0,6,0,12" TextWrapping="Wrap" Foreground="#555"
+                                   Text="Create a self-contained HTML guide with the City map, building locations, attribute and potion references, and survival advice. No attached game or installation is needed."/>
+                        <CheckBox Content="Include city map and building locations" IsChecked="{Binding IncludeCityMap}" Margin="2"/>
+                        <CheckBox Content="Include attribute reference" IsChecked="{Binding IncludeAttributes}" Margin="2"/>
+                        <CheckBox Content="Include potion reference" IsChecked="{Binding IncludePotions}" Margin="2"/>
+                        <CheckBox Content="Include survival guide" IsChecked="{Binding IncludeSurvival}" Margin="2"/>
+                        <CheckBox Content="Include strategy notes" IsChecked="{Binding IncludeStrategy}" Margin="2"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,12,0,6">
+                            <Button Content="Save cluebook…" Command="{Binding SaveCommand}"/>
+                            <Button Content="Open cluebook" Command="{Binding OpenCommand}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Foreground="#555"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- ============================ REFERENCE ============================ -->
             <TabItem Header="Reference" DataContext="{Binding Reference}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">

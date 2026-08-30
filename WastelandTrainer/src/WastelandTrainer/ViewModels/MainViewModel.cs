@@ -40,6 +40,7 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     public ObservableCollection<CharacterViewModel> Party { get; } = new();
 
     public ReferenceViewModel Reference { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
     public MapsViewModel Maps { get; }
 
     /// <summary>Offline save-game editor (open a GAME1/GAME2 file to teleport and edit rangers without

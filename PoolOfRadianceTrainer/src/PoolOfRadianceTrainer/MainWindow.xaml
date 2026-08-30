@@ -1022,6 +1022,31 @@
                     </Border>
                 </TabItem>
 
+                <TabItem Header="📖 Cluebook" DataContext="{Binding Cluebook}">
+                    <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"
+                            CornerRadius="6" Padding="12">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel MaxWidth="700" HorizontalAlignment="Left">
+                                <TextBlock Text="Cluebook" Style="{StaticResource Section}"/>
+                                <TextBlock Text="Generate a self-contained HTML reference for Pool of Radiance, including area maps, spells, classes, the campaign walkthrough, and strategy notes." TextWrapping="Wrap" Style="{StaticResource Hint}" Margin="0,0,0,10"/>
+                                <TextBlock Text="Sections" Style="{StaticResource Section}"/>
+                                <WrapPanel Margin="0,0,0,10">
+                                    <CheckBox Content="Maps and areas" IsChecked="{Binding IncludeMaps}" Margin="0,0,14,0"/>
+                                    <CheckBox Content="Spells" IsChecked="{Binding IncludeSpells}" Margin="0,0,14,0"/>
+                                    <CheckBox Content="Classes and races" IsChecked="{Binding IncludeClasses}" Margin="0,0,14,0"/>
+                                    <CheckBox Content="Walkthrough" IsChecked="{Binding IncludeWalkthrough}" Margin="0,0,14,0"/>
+                                    <CheckBox Content="Strategy" IsChecked="{Binding IncludeStrategy}"/>
+                                </WrapPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="Save cluebook" Command="{Binding SaveCommand}" Margin="0,0,8,0"/>
+                                    <Button Content="Open in browser" Command="{Binding OpenCommand}"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Style="{StaticResource Hint}" Margin="0,10,0,0"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+                </TabItem>
+
                 <!-- ===== Strategy tab ===== -->
                 <TabItem Header="🗺 Strategy">
                     <Border Background="{StaticResource Panel}" BorderBrush="{StaticResource Line}" BorderThickness="1"

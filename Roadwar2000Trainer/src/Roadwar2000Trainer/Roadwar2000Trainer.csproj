@@ -23,6 +23,7 @@
        from Common. Both Common namespaces are imported wholesale because nothing here collides
        with them - there is no local MemorySearcher, and the MVVM base is Common's SetField one. -->
   <ItemGroup>
+    <Using Include="GameTrainers.Common.Documents" />
     <Using Include="GameTrainers.Common.Memory" />
     <Using Include="GameTrainers.Common.Mvvm" />
   </ItemGroup>

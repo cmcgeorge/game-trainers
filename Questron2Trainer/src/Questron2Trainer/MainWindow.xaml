@@ -251,6 +251,60 @@
                     </TabItem>
                 </TabControl>
             </TabItem>
+
+            <TabItem Header="Maps">
+                <Grid Margin="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="240"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="280"/>
+                    </Grid.ColumnDefinitions>
+                    <GroupBox Grid.Column="0" Header="Areas">
+                        <ListBox ItemsSource="{Binding Maps.Areas}" SelectedItem="{Binding Maps.Selected}"
+                                 DisplayMemberPath="Name"/>
+                    </GroupBox>
+                    <GroupBox Grid.Column="1" Header="Map" Margin="6,0">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="6">
+                                <TextBlock Text="{Binding Maps.SelectedDescription}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                                <Image Source="{Binding Maps.SelectedImage}" Stretch="None" HorizontalAlignment="Left"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </GroupBox>
+                    <GroupBox Grid.Column="2" Header="Landmarks">
+                        <ListBox ItemsSource="{Binding Maps.Pois}">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="4">
+                                        <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                                        <TextBlock Text="{Binding Position}" Foreground="#555"/>
+                                        <TextBlock Text="{Binding Description}" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </GroupBox>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Cluebook">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12" MaxWidth="720">
+                        <TextBlock Text="Create a self-contained HTML cluebook with maps and reference tables. No running game is required."
+                                   TextWrapping="Wrap" Margin="0,0,0,12"/>
+                        <CheckBox Content="Include area maps" IsChecked="{Binding Cluebook.IncludeMaps}" Margin="2"/>
+                        <CheckBox Content="Include spells" IsChecked="{Binding Cluebook.IncludeSpells}" Margin="2"/>
+                        <CheckBox Content="Include equipment and items" IsChecked="{Binding Cluebook.IncludeEquipment}" Margin="2"/>
+                        <CheckBox Content="Include walkthrough" IsChecked="{Binding Cluebook.IncludeWalkthrough}" Margin="2"/>
+                        <CheckBox Content="Include strategy notes" IsChecked="{Binding Cluebook.IncludeStrategy}" Margin="2"/>
+                        <WrapPanel Margin="0,12,0,8">
+                            <Button Content="Save Cluebook" Command="{Binding Cluebook.SaveCommand}"/>
+                            <Button Content="Open Last Saved" Command="{Binding Cluebook.OpenCommand}"/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding Cluebook.Status}" TextWrapping="Wrap" Foreground="#555"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
     </DockPanel>
 </Window>

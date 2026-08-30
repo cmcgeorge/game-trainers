@@ -56,6 +56,8 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     public ObservableCollection<MagicOrder> MagicOrders { get; } = new(MagicOrderBook.Orders);
 
     public SaveEditorViewModel SaveEditor { get; } = new();
+    public MapsViewModel Maps { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
 
     public IReadOnlyList<ScanWidth> Widths { get; } = new[] { ScanWidth.Byte, ScanWidth.Int16, ScanWidth.Int32 };
 

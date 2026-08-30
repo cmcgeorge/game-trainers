@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Windows.Input;
 using System.Windows.Threading;
+using QuestForGlory1Trainer.Cluebooks;
 using QuestForGlory1Trainer.Game;
 using QuestForGlory1Trainer.Memory;
 
@@ -103,6 +104,8 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     public ObservableCollection<FrozenValueViewModel> Frozen { get; } = new();
     public ObservableCollection<SkillInfo> Stats { get; } = new(SkillBook.Stats);
     public ObservableCollection<RoomEntry> Rooms { get; } = new(RoomBook.Rooms);
+    public MapsViewModel Maps { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
 
     public IReadOnlyList<ScanWidth> Widths { get; } = new[] { ScanWidth.Byte, ScanWidth.Int16, ScanWidth.Int32 };
 

@@ -61,6 +61,8 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     }
 
     public ObservableCollection<CharacterViewModel> Characters { get; } = new();
+    public MapsViewModel Maps { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
 
     private bool HasCharacters => IsAttached && Characters.Count > 0;
 

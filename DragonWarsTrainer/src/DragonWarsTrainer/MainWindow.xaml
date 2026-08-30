@@ -445,6 +445,25 @@
                 </TabControl>
             </TabItem>
 
+            <TabItem Header="Cluebook">
+                <Grid Margin="6">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <WrapPanel Grid.Row="0" Margin="0,0,0,8">
+                        <CheckBox Content="Areas" IsChecked="{Binding Cluebook.IncludeAreas}" VerticalAlignment="Center" Margin="4,0,12,0"/>
+                        <CheckBox Content="Spells" IsChecked="{Binding Cluebook.IncludeSpells}" VerticalAlignment="Center" Margin="4,0,12,0"/>
+                        <CheckBox Content="Skills" IsChecked="{Binding Cluebook.IncludeSkills}" VerticalAlignment="Center" Margin="4,0,12,0"/>
+                        <CheckBox Content="Walkthrough" IsChecked="{Binding Cluebook.IncludeWalkthrough}" VerticalAlignment="Center" Margin="4,0,12,0"/>
+                        <CheckBox Content="Strategy" IsChecked="{Binding Cluebook.IncludeStrategy}" VerticalAlignment="Center" Margin="4,0,12,0"/>
+                        <Button Content="Save HTML" Command="{Binding Cluebook.SaveCommand}"/>
+                        <Button Content="Open HTML" Command="{Binding Cluebook.OpenCommand}"/>
+                    </WrapPanel>
+                    <TextBlock Grid.Row="1" Text="{Binding Cluebook.Status}" Foreground="#555" TextWrapping="Wrap" VerticalAlignment="Top"/>
+                </Grid>
+            </TabItem>
+
             <!-- ======================= MAPS ======================= -->
             <TabItem Header="Maps">
                 <Grid Margin="6" DataContext="{Binding Maps}">

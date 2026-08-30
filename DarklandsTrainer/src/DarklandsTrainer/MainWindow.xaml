@@ -157,6 +157,49 @@
                 </DockPanel>
             </TabItem>
 
+            <TabItem Header="Maps">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="260"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <DockPanel Grid.Column="0" Margin="0,0,6,0">
+                        <TextBlock DockPanel.Dock="Top" Text="Areas" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <ListBox ItemsSource="{Binding Maps.Levels}" SelectedItem="{Binding Maps.Selected}" DisplayMemberPath="Name"/>
+                    </DockPanel>
+                    <DockPanel Grid.Column="1">
+                        <TextBlock DockPanel.Dock="Top" Text="{Binding Maps.SelectedDescription}" TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,6"/>
+                        <DataGrid DockPanel.Dock="Bottom" Height="150" ItemsSource="{Binding Maps.Pois}" AutoGenerateColumns="False"
+                                  CanUserAddRows="False" CanUserDeleteRows="False" IsReadOnly="True" Margin="0,6,0,0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Position" Binding="{Binding Position}" Width="80"/>
+                                <DataGridTextColumn Header="Landmark" Binding="{Binding Name}" Width="150"/>
+                                <DataGridTextColumn Header="Notes" Binding="{Binding Description}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                            <Image Source="{Binding Maps.SelectedImage}" Stretch="None" SnapsToDevicePixels="True"/>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Cluebook">
+                <StackPanel Margin="6">
+                    <TextBlock Text="Generate a self-contained HTML guide with Darklands reference maps and game knowledge." TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,8"/>
+                    <CheckBox Content="Include regional maps" IsChecked="{Binding Cluebook.IncludeMaps}" Margin="2"/>
+                    <CheckBox Content="Include attributes and skills" IsChecked="{Binding Cluebook.IncludeAttributes}" Margin="2"/>
+                    <CheckBox Content="Include saint and potion guide" IsChecked="{Binding Cluebook.IncludeSaintsAndPotions}" Margin="2"/>
+                    <CheckBox Content="Include campaign outline" IsChecked="{Binding Cluebook.IncludeWalkthrough}" Margin="2"/>
+                    <CheckBox Content="Include strategy notes" IsChecked="{Binding Cluebook.IncludeStrategy}" Margin="2"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <Button Content="Save cluebook" Command="{Binding Cluebook.SaveCommand}"/>
+                        <Button Content="Open last saved" Command="{Binding Cluebook.OpenCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Cluebook.Status}" TextWrapping="Wrap" Foreground="#555" Margin="2,8,2,0"/>
+                </StackPanel>
+            </TabItem>
+
             <!-- Reference -->
             <TabItem Header="Reference">
                 <DockPanel>

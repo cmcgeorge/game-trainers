@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <Resource Include="Assets\app.ico" />
+    <ProjectReference Include="..\..\GameTrainers.Common\GameTrainers.Common.csproj" />
   </ItemGroup>
 
 </Project>

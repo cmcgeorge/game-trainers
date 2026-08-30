@@ -291,6 +291,32 @@
                 </DockPanel>
             </TabItem>
 
+            <TabItem Header="Cluebook">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8">
+                    <StackPanel DataContext="{Binding Cluebook}">
+                        <TextBlock Text="Legend of Grimrock cluebook" Style="{StaticResource Head}" Margin="4,2,4,3"/>
+                        <TextBlock Style="{StaticResource Note}"
+                                   Text="Create a self-contained HTML reference with campaign levels, character building, rune spells, skills, equipment, monsters, a walkthrough, and strategy notes. It does not need a game installation or an attached process."/>
+                        <WrapPanel Margin="4,10,4,4">
+                            <CheckBox Content="Overview" IsChecked="{Binding IncludeOverview}" Margin="0,0,12,6"/>
+                            <CheckBox Content="Dungeon" IsChecked="{Binding IncludeDungeon}" Margin="0,0,12,6"/>
+                            <CheckBox Content="Races and classes" IsChecked="{Binding IncludeCharacters}" Margin="0,0,12,6"/>
+                            <CheckBox Content="Spells" IsChecked="{Binding IncludeSpells}" Margin="0,0,12,6"/>
+                            <CheckBox Content="Skills" IsChecked="{Binding IncludeSkills}" Margin="0,0,12,6"/>
+                            <CheckBox Content="Equipment" IsChecked="{Binding IncludeEquipment}" Margin="0,0,12,6"/>
+                            <CheckBox Content="Bestiary" IsChecked="{Binding IncludeBestiary}" Margin="0,0,12,6"/>
+                            <CheckBox Content="Walkthrough" IsChecked="{Binding IncludeWalkthrough}" Margin="0,0,12,6"/>
+                            <CheckBox Content="Strategy" IsChecked="{Binding IncludeStrategy}" Margin="0,0,12,6"/>
+                        </WrapPanel>
+                        <StackPanel Orientation="Horizontal" Margin="2,4">
+                            <Button Content="Save cluebook" FontWeight="Bold" Command="{Binding SaveCommand}"/>
+                            <Button Content="Open last saved" Command="{Binding OpenCommand}"/>
+                        </StackPanel>
+                        <TextBlock Text="{Binding Status}" Style="{StaticResource Note}" Margin="4,8,4,2"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <!-- ============ Reference ============ -->
             <TabItem Header="Reference">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="8">

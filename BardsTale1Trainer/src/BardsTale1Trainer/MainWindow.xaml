@@ -730,6 +730,27 @@
                     </DockPanel>
                 </TabItem>
 
+                <TabItem Header="📚 Cluebook"
+                         DataContext="{Binding DataContext.Cluebook, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="12">
+                            <TextBlock Style="{StaticResource Section}" Text="The Bard's Tale I cluebook"/>
+                            <TextBlock Text="Generate a self-contained HTML guide to Skara Brae, its dungeons, spells, classes, the route to Mangar, and practical party strategy." TextWrapping="Wrap" Foreground="{StaticResource FgDim}" Margin="0,0,0,12"/>
+                            <TextBlock Text="Include sections" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                            <CheckBox Content="Skara Brae and dungeon maps" IsChecked="{Binding IncludeMaps}" Margin="0,2"/>
+                            <CheckBox Content="Mage spells and bard songs" IsChecked="{Binding IncludeSpells}" Margin="0,2"/>
+                            <CheckBox Content="Class and race reference" IsChecked="{Binding IncludeClasses}" Margin="0,2"/>
+                            <CheckBox Content="Walkthrough" IsChecked="{Binding IncludeWalkthrough}" Margin="0,2"/>
+                            <CheckBox Content="Strategy notes" IsChecked="{Binding IncludeStrategy}" Margin="0,2"/>
+                            <WrapPanel Margin="0,14,0,8">
+                                <Button Content="Save cluebook" Command="{Binding SaveCommand}" Padding="14,6" Margin="0,0,8,0"/>
+                                <Button Content="Open in browser" Command="{Binding OpenCommand}" Padding="14,6"/>
+                            </WrapPanel>
+                            <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Foreground="{StaticResource Accent}"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
                 <!-- ============ Spells reference ============ -->
                 <TabItem Header="📖 Spells"
                          DataContext="{Binding DataContext.SpellReference, RelativeSource={RelativeSource AncestorType=Window}}">

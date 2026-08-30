@@ -458,6 +458,56 @@
                     </TabItem>
                 </TabControl>
             </TabItem>
+
+            <TabItem Header="Maps" DataContext="{Binding Maps}">
+                <Grid Margin="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="230"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <DockPanel Grid.Column="0" Margin="0,0,6,0">
+                        <TextBlock DockPanel.Dock="Top" Text="Dungeon Levels" Style="{StaticResource RefHeader}"/>
+                        <ListBox ItemsSource="{Binding Levels}" SelectedItem="{Binding Selected}" DisplayMemberPath="Name"/>
+                    </DockPanel>
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="{Binding SelectedDescription}" Style="{StaticResource RefHeader}" TextWrapping="Wrap"/>
+                            <TextBlock Text="Reference maps only; live position tracking and teleport are not available." TextWrapping="Wrap" Foreground="#555" Margin="2,0,2,6"/>
+                            <Image Source="{Binding SelectedImage}" Stretch="None" Margin="0,4,0,12" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                            <TextBlock Text="Points of Interest" Style="{StaticResource RefHeader}"/>
+                            <ListView ItemsSource="{Binding Pois}" Margin="0,0,0,8">
+                                <ListView.View>
+                                    <GridView>
+                                        <GridViewColumn Header="Pos" Width="65" DisplayMemberBinding="{Binding Position}"/>
+                                        <GridViewColumn Header="Name" Width="150" DisplayMemberBinding="{Binding Name}"/>
+                                        <GridViewColumn Header="Description" Width="400" DisplayMemberBinding="{Binding Description}"/>
+                                    </GridView>
+                                </ListView.View>
+                            </ListView>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Cluebook" DataContext="{Binding Cluebook}">
+                <StackPanel Margin="12">
+                    <TextBlock Text="Eye of the Beholder Cluebook" Style="{StaticResource RefHeader}" FontSize="16"/>
+                    <TextBlock Text="Generate a self-contained HTML strategy guide with all twelve dungeon maps, spell references, character options, a walkthrough, and strategy notes." TextWrapping="Wrap" Margin="0,0,0,12" MaxWidth="650" Foreground="#555"/>
+                    <TextBlock Text="Include" Style="{StaticResource RefHeader}"/>
+                    <WrapPanel Margin="8,0,0,8">
+                        <CheckBox Content="Dungeon maps" IsChecked="{Binding IncludeMaps}" Margin="8,4"/>
+                        <CheckBox Content="Spells" IsChecked="{Binding IncludeSpells}" Margin="8,4"/>
+                        <CheckBox Content="Races &amp; classes" IsChecked="{Binding IncludeClasses}" Margin="8,4"/>
+                        <CheckBox Content="Walkthrough" IsChecked="{Binding IncludeWalkthrough}" Margin="8,4"/>
+                        <CheckBox Content="Strategy notes" IsChecked="{Binding IncludeStrategy}" Margin="8,4"/>
+                    </WrapPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,8">
+                        <Button Content="Save cluebook" Command="{Binding SaveCommand}"/>
+                        <Button Content="Open in browser" Command="{Binding OpenCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding Status}" Foreground="#555" TextWrapping="Wrap"/>
+                </StackPanel>
+            </TabItem>
         </TabControl>
     </DockPanel>
 </Window>

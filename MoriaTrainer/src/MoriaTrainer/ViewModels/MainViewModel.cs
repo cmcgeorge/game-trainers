@@ -58,6 +58,7 @@ public sealed class MainViewModel : ObservableObject, IScanHost, IDisposable
     public LiveInventoryViewModel LiveInventory { get; } = new();
     public DungeonMapViewModel DungeonMap { get; } = new();
     public MapsViewModel Maps { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
     public ParagraphsViewModel Paragraphs { get; } = new();
     public ItemsViewModel Items { get; } = new();
     public ReferenceViewModel Reference { get; } = new();

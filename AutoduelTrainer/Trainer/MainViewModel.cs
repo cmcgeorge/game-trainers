@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Windows.Threading;
 using AutoduelTrainer.Memory;
+using AutoduelTrainer.ViewModels;
 
 namespace AutoduelTrainer;
 
@@ -55,6 +56,8 @@ public sealed class MainViewModel : ViewModelBase, IDisposable
     public ObservableCollection<ComponentInfo> Weapons { get; } = new();
     public ObservableCollection<ComponentInfo> Armor { get; } = new();
     public ObservableCollection<ComponentInfo> Drivetrain { get; } = new();
+    public MapsViewModel Maps { get; } = new();
+    public CluebookViewModel Cluebook { get; } = new();
 
     // Fixed pick-lists for the editable weapon rows.
     public IReadOnlyList<WeaponTypeChoice> WeaponTypes { get; } =

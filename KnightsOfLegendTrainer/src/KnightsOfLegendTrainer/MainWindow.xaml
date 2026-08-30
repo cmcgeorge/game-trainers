@@ -288,6 +288,59 @@
                 </DockPanel>
             </TabItem>
 
+            <TabItem Header="Maps">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="220"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="260"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="6">
+                        <TextBlock Text="Areas" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <ListBox ItemsSource="{Binding Maps.Levels}" SelectedItem="{Binding Maps.Selected}"
+                                 DisplayMemberPath="Name"/>
+                    </StackPanel>
+                    <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Margin="6">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Maps.SelectedDescription}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                            <Image Source="{Binding Maps.SelectedImage}" Stretch="None" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <DockPanel Grid.Column="2" Margin="6">
+                        <TextBlock DockPanel.Dock="Top" Text="Landmarks" FontWeight="Bold" Margin="0,0,0,6"/>
+                        <DataGrid ItemsSource="{Binding Maps.Pois}" AutoGenerateColumns="False" CanUserAddRows="False"
+                                  CanUserDeleteRows="False" IsReadOnly="True" HeadersVisibility="Column">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Position" Binding="{Binding Position}" Width="65"/>
+                                <DataGridTextColumn Header="Landmark" Binding="{Binding Name}" Width="*"/>
+                                <DataGridTextColumn Header="Notes" Binding="{Binding Description}" Width="*"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </DockPanel>
+                </Grid>
+            </TabItem>
+
+            <TabItem Header="Cluebook">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="10">
+                        <TextBlock TextWrapping="Wrap" Foreground="#555" Margin="0,0,0,8"
+                                   Text="Generate a self-contained HTML cluebook with schematic area maps, reference tables, the complete quest list, walkthrough, and strategy notes. No game installation or attached process is required."/>
+                        <WrapPanel Margin="0,0,0,8">
+                            <CheckBox Content="Area maps" IsChecked="{Binding Cluebook.IncludeMaps}" Margin="0,0,14,0"/>
+                            <CheckBox Content="References" IsChecked="{Binding Cluebook.IncludeReferences}" Margin="0,0,14,0"/>
+                            <CheckBox Content="Quests" IsChecked="{Binding Cluebook.IncludeQuests}" Margin="0,0,14,0"/>
+                            <CheckBox Content="Walkthrough" IsChecked="{Binding Cluebook.IncludeWalkthrough}" Margin="0,0,14,0"/>
+                            <CheckBox Content="Strategy" IsChecked="{Binding Cluebook.IncludeStrategy}"/>
+                        </WrapPanel>
+                        <WrapPanel>
+                            <Button Content="Save cluebook" Command="{Binding Cluebook.SaveCommand}"/>
+                            <Button Content="Open cluebook" Command="{Binding Cluebook.OpenCommand}"/>
+                        </WrapPanel>
+                        <TextBlock Text="{Binding Cluebook.Status}" TextWrapping="Wrap" Foreground="#555" Margin="0,8,0,0"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem Header="Quests">
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Background="#F6F6F6" Padding="6">
