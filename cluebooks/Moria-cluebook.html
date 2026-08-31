@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>The Dungeons of Moria — cluebook</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { font-family: Georgia, serif; max-width: 1100px; margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #222; }
+h1 { font-size: 1.8em; border-bottom: 2px solid #444; padding-bottom: 0.3em; }
+h2 { font-size: 1.4em; margin-top: 2em; border-bottom: 1px solid #999; padding-bottom: 0.2em; }
+h3 { font-size: 1.15em; margin-top: 1.5em; }
+.lede { font-style: italic; color: #555; }
+.toc { background: #f5f5f5; border: 1px solid #ddd; padding: 1em 1.5em; border-radius: 4px; }
+.toc ol { padding-left: 1.5em; }
+table.facts, table.ref { border-collapse: collapse; width: 100%; margin: 1em 0; }
+table.facts th, table.ref th { background: #e8e8e8; text-align: left; padding: 4px 8px; border: 1px solid #ccc; }
+table.facts td, table.ref td { padding: 4px 8px; border: 1px solid #ccc; vertical-align: top; }
+table.facts th { width: 160px; white-space: nowrap; }
+table.ref { font-size: 0.9em; }
+svg { max-width: 100%; height: auto; display: block; margin: 1em 0; border: 1px solid #ddd; }</style>
+</head><body>
+<h1>The Dungeons of Moria</h1>
+<p class="lede">A reference and strategy guide for UMoria 5.5.2: descend to level 50, defeat the Balrog, and return alive to the surface.</p>
+<nav class="toc"><h2>Contents</h2><ol>
+<li><a href="#overview">The game at a glance</a></li>
+<li><a href="#levels">Descent reference</a></li>
+<li><a href="#characters">Races and classes</a></li>
+<li><a href="#spells">Spells and prayers</a></li>
+<li><a href="#items">Item reference</a></li>
+<li><a href="#bestiary">Monster bestiary</a></li>
+<li><a href="#walkthrough">Walkthrough</a></li>
+<li><a href="#strategy">Strategy notes</a></li>
+</ol></nav>
+<h2 id="overview">The game at a glance</h2>
+<table class="facts">
+<tr><th>Title</th><td>The Dungeons of Moria (UMoria)</td></tr>
+<tr><th>Version</th><td>5.5.2</td></tr>
+<tr><th>Authors</th><td>Robert Alan Koeneke and James E. Wilson</td></tr>
+<tr><th>Dungeon</th><td>50 procedural dungeon levels beneath the town</td></tr>
+<tr><th>Goal</th><td>Defeat the Balrog on level 50 and return to the surface</td></tr>
+<tr><th>Character</th><td>One adventurer, selected from 8 races and 6 classes</td></tr>
+<tr><th>Stats</th><td>STR, INT, WIS, DEX, CON, CHR (3 through 18/100)</td></tr>
+<tr><th>Magic</th><td>31 mage spells and 31 priest prayers</td></tr>
+<tr><th>Maximum level</th><td>40</td></tr>
+</table>
+<p>Moria is a single-character roguelike. Every dungeon layout is generated when you descend, so there are no fixed dungeon maps to memorize. Learn the symbols, carry light and food, identify dangerous enemies early, and keep a reliable escape route through Word of Recall.</p>
+<h2 id="levels">Descent reference</h2>
+<p>The town is depth 0. Dungeon depth is measured in 50-foot increments. The level layouts are procedural; this reference lists important milestones rather than fixed maps.</p>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 100" width="100%" role="img" aria-label="Moria descent from town to the Balrog"><rect x="0" y="0" width="800" height="100" fill="#14151A" /><rect x="30" y="42" width="740" height="16" fill="#6C7488" /><rect x="755" y="34" width="15" height="32" fill="#A95353" /><text x="30" y="32" text-anchor="middle" fill="#E0E2E8">Town</text><text x="400" y="32" text-anchor="middle" fill="#E0E2E8">Level 25</text><text x="770" y="32" text-anchor="middle" fill="#E0E2E8">Level 50</text><text x="770" y="82" text-anchor="middle" fill="#F0C46B">Balrog</text></svg>
+<table class="ref"><tr><th>Depth</th><th>Feet</th><th>Notable monsters</th><th>Notable items</th><th>Advice</th></tr>
+<tr><td>Town</td><td>0</td><td>urchins, rogues, drunks, warriors (no XP)</td><td>stores 1-6 sell basics; Word-of-Recall scrolls at Temple</td><td>Fixed layout, walled, six stores. Day/night cycle. Single down-stair.</td></tr>
+<tr><td>Level 1</td><td>50</td><td>mice, kobolds, centipedes, jackals</td><td>torch, leather, short sword from town</td><td>First descent. Buy supplies first.</td></tr>
+<tr><td>Level 2</td><td>100</td><td>blue jelly, giant centipede, skeleton</td><td>first potions/scrolls occasionally</td><td>Easy. Practice combat and search.</td></tr>
+<tr><td>Level 3</td><td>150</td><td>orc, giant ant, yellow mushroom</td><td>identify scrolls start appearing</td><td>Mushrooms cause hallucination; kill at range.</td></tr>
+<tr><td>Level 5</td><td>250</td><td>cave spider, ogre</td><td>first ego weapons sometimes</td><td>Ogre is the first real bruiser. Carry a real weapon.</td></tr>
+<tr><td>Level 7</td><td>350</td><td>wraith</td><td>first slay-undead weapons</td><td>Wraith drains XP. Slay-undead essential.</td></tr>
+<tr><td>Level 9</td><td>450</td><td>vampire</td><td>restore-life-levels potions begin</td><td>Vampire drains XP and regenerates.</td></tr>
+<tr><td>Level 10</td><td>500</td><td>young dragon</td><td>first dragon-slay weapons</td><td>First dragon. Bring a slay-dragon weapon.</td></tr>
+<tr><td>Level 12</td><td>600</td><td>white dragon (cold)</td><td>Healing potions first appear</td><td>Stock up on healing potions from here on.</td></tr>
+<tr><td>Level 14</td><td>700</td><td>white dragon (common)</td><td>resist-cold items matter</td><td>Resist cold item advised.</td></tr>
+<tr><td>Level 18</td><td>900</td><td>blue dragon (lightning)</td><td>first gain-stat rings occasionally</td><td>Lightning breath destroys items. Resist lightning.</td></tr>
+<tr><td>Level 20</td><td>1000</td><td>blue dragon (common)</td><td>amulets of wisdom/charisma first appear</td><td>Mid-game. Get free-action and see-invisible before going deeper.</td></tr>
+<tr><td>Level 22</td><td>1100</td><td>red dragon (fire)</td><td>first good ego weapons/crowns</td><td>Resist fire essential.</td></tr>
+<tr><td>Level 25</td><td>1250</td><td>lich, red dragon (common)</td><td>Gain-stat potions, Restore-mana potions first appear</td><td>Farm gain-stat potions here for permanent stat boosts.</td></tr>
+<tr><td>Level 26</td><td>1300</td><td>black dragon (acid)</td><td>ring of STR/INT/DEX/CON first appear</td><td>Acid breath corrodes armor. Body armor soaks some.</td></tr>
+<tr><td>Level 30</td><td>1500</td><td>green dragon (poison), archlich</td><td>ring of speed starts appearing occasionally</td><td>No resistance to poison gas. Cure poison ready.</td></tr>
+<tr><td>Level 35</td><td>1750</td><td>emperor liches begin</td><td>Genocide scrolls first appear</td><td>Emperor lich: 1520+ HP, drains wands for 40HP/charge. See strategy guide.</td></tr>
+<tr><td>Level 40</td><td>2000</td><td>ancient dragons, emperor liches</td><td>Invulnerability potion, Destruction scroll, Staff of Speed</td><td>Deep-game. Speed ≥ 2 needed to outrun liches.</td></tr>
+<tr><td>Level 45</td><td>2250</td><td>ancient multi-hued dragons begin</td><td>Staff of Mass Polymorph</td><td>AMHDs: 12000 XP, breath all elements. Pillar-dance at speed 3.</td></tr>
+<tr><td>Level 49</td><td>2450</td><td>Balrog spawns here</td><td>Staff of Dispel Evil</td><td>Do not descend past 49 unless Balrog-ready.</td></tr>
+<tr><td>Level 50</td><td>2500</td><td>Balrog of Moria (the boss)</td><td>Ring of Speed, Amulet of the Magi, Gain-Experience potion, Mass Genocide scroll, Rune of Protection scroll, Wand of Drain Life, Staff of Destruction</td><td>Farm for endgame gear, then kill the Balrog to WIN.</td></tr>
+</table>
+<h2 id="characters">Races and classes</h2>
+<h3>Races</h3><table class="ref"><tr><th>Race</th><th>Allowed classes</th><th>Key adjustments</th><th>Infravision</th><th>Notes</th></tr>
+<tr><td>Human</td><td>any</td><td>no adjustments; levels fastest</td><td>No</td><td>The baseline race. Good at everything, great at nothing.</td></tr>
+<tr><td>Half-Elf</td><td>any</td><td>+INT/DEX, -STR; +search/disarm/stealth/magic</td><td>Yes</td><td>A balanced race that can take any class.</td></tr>
+<tr><td>Elf</td><td>any except Paladin</td><td>+INT/WIS/DEX, -STR/CON; better magic than Half-Elf</td><td>Yes</td><td>Fragile but magical. No Paladins.</td></tr>
+<tr><td>Halfling</td><td>0,1,3</td><td>+DEX, big -STR; great save, search, stealth</td><td>Yes</td><td>Excellent rogues. No bashing.</td></tr>
+<tr><td>Gnome</td><td>0,1,2,3</td><td>+INT, -STR; great saving throw</td><td>Yes</td><td>Practical jokers. Good mages.</td></tr>
+<tr><td>Dwarf</td><td>0,2</td><td>+CON/STR, -DEX/CHR; great fighting; resists poison</td><td>Yes</td><td>The most forgiving warrior race.</td></tr>
+<tr><td>Half-Orc</td><td>0,2,3</td><td>+STR/CON, -CHR; great fighting</td><td>Yes</td><td>Brutal melee; ugly disposition.</td></tr>
+<tr><td>Half-Troll</td><td>0</td><td>+STR/CON huge, -INT/WIS/CHR; very strong, very dumb</td><td>Yes</td><td>The tank. Warrior only.</td></tr>
+</table>
+<h3>Classes</h3><table class="ref"><tr><th>Class</th><th>Prime stat</th><th>Hit die</th><th>Mana basis</th><th>Notes</th><th>Skill gain (fight/bow/device/disarm/throw)</th></tr>
+<tr><td>Warrior</td><td>STR</td><td>d10</td><td>none</td><td>Best melee; fastest fighting-skill gain; no spells.</td><td>4/4/2/2/3</td></tr>
+<tr><td>Mage</td><td>INT</td><td>d4</td><td>INT-based</td><td>Best magic; slowest melee-skill gain. Must carry magic books.</td><td>2/2/4/3/3</td></tr>
+<tr><td>Priest</td><td>WIS</td><td>d4</td><td>WIS-based</td><td>Blunt weapons only; strong vs undead; holy prayers.</td><td>2/2/4/3/3</td></tr>
+<tr><td>Rogue</td><td>DEX</td><td>d6</td><td>INT-based</td><td>Best disarm/search/stealth; cheap spells. Ideal thief.</td><td>3/4/3/4/3</td></tr>
+<tr><td>Ranger</td><td>DEX</td><td>d8</td><td>INT-based</td><td>Good bows + dual-class magic. Strong explorer.</td><td>3/4/3/3/3</td></tr>
+<tr><td>Paladin</td><td>STR</td><td>d8</td><td>WIS-based</td><td>Holy weapons + priest prayers. Tanky hybrid.</td><td>3/3/3/2/3</td></tr>
+</table>
+<h2 id="spells">Spells and prayers</h2>
+<p>Spells are assigned stable letters in UMoria 5.5.2. Carry the appropriate spellbook and use the displayed letter when prompted.</p>
+<h3>Mage spells</h3><table class="ref"><tr><th>Letter</th><th>Name</th><th>Level</th><th>Mana</th><th>Book</th><th>Effect</th><th>Damage</th></tr>
+<tr><td>a</td><td>Magic Missile</td><td>1</td><td>1</td><td>Beginners' Magician's Handbook</td><td>Bolt of force.</td><td>2d6</td></tr>
+<tr><td>b</td><td>Detect Monsters</td><td>1</td><td>1</td><td>Beginners' Magician's Handbook</td><td>Reveals nearby monsters on the map.</td><td></td></tr>
+<tr><td>c</td><td>Phase Door</td><td>1</td><td>2</td><td>Beginners' Magician's Handbook</td><td>Short-range teleport.</td><td></td></tr>
+<tr><td>d</td><td>Light Area</td><td>1</td><td>2</td><td>Beginners' Magician's Handbook</td><td>Lights the current room/corridor.</td><td></td></tr>
+<tr><td>e</td><td>Detect Treasure</td><td>3</td><td>3</td><td>Beginners' Magician's Handbook</td><td>Reveals nearby treasure.</td><td></td></tr>
+<tr><td>f</td><td>Detect Invisible</td><td>3</td><td>3</td><td>Beginners' Magician's Handbook</td><td>Reveals invisible creatures.</td><td></td></tr>
+<tr><td>g</td><td>Detect Traps/Doors</td><td>5</td><td>4</td><td>Beginners' Magician's Handbook</td><td>Reveals traps, secret doors, and stairs.</td><td></td></tr>
+<tr><td>h</td><td>Stinking Cloud</td><td>5</td><td>4</td><td>Beginners' Magician's Handbook</td><td>Poison cloud at a target square.</td><td>12</td></tr>
+<tr><td>i</td><td>Confuse Monster</td><td>7</td><td>6</td><td>Trowel-Wielders' Guide</td><td>Confuses one monster.</td><td></td></tr>
+<tr><td>j</td><td>Lightning Bolt</td><td>7</td><td>6</td><td>Trowel-Wielders' Guide</td><td>Bolt of lightning.</td><td>4d8</td></tr>
+<tr><td>k</td><td>Sleep I</td><td>7</td><td>6</td><td>Trowel-Wielders' Guide</td><td>Sleeps one monster in a direction.</td><td></td></tr>
+<tr><td>l</td><td>Frost Bolt</td><td>9</td><td>8</td><td>Trowel-Wielders' Guide</td><td>Bolt of cold.</td><td>6d8</td></tr>
+<tr><td>m</td><td>Acid Ball</td><td>11</td><td>10</td><td>Trowel-Wielders' Guide</td><td>Ball of acid.</td><td>60</td></tr>
+<tr><td>n</td><td>Fire Bolt</td><td>13</td><td>11</td><td>Trowel-Wielders' Guide</td><td>Bolt of fire.</td><td>9d8</td></tr>
+<tr><td>o</td><td>Lightning Ball</td><td>15</td><td>14</td><td>Trowel-Wielders' Guide</td><td>Ball of lightning.</td><td>32</td></tr>
+<tr><td>p</td><td>Frost Ball</td><td>17</td><td>16</td><td>Trowel-Wielders' Guide</td><td>Ball of cold.</td><td>48</td></tr>
+<tr><td>q</td><td>Fire Ball</td><td>19</td><td>18</td><td>Higher Magicians' Handbook</td><td>Ball of fire.</td><td>72</td></tr>
+<tr><td>r</td><td>Recharge Item I</td><td>21</td><td>20</td><td>Higher Magicians' Handbook</td><td>Recharges a wand/staff (weaker).</td><td></td></tr>
+<tr><td>s</td><td>Sleep II</td><td>23</td><td>22</td><td>Higher Magicians' Handbook</td><td>Sleeps all monsters adjacent to player.</td><td></td></tr>
+<tr><td>t</td><td>Haste Self</td><td>25</td><td>24</td><td>Higher Magicians' Handbook</td><td>+1 speed for a duration.</td><td></td></tr>
+<tr><td>u</td><td>Fire Ball (II)</td><td>27</td><td>26</td><td>Higher Magicians' Handbook</td><td>Larger fire ball.</td><td></td></tr>
+<tr><td>v</td><td>Recharge Item II</td><td>29</td><td>28</td><td>Higher Magicians' Handbook</td><td>Recharges a wand/staff (more reliable).</td><td></td></tr>
+<tr><td>w</td><td>Word of Destruction</td><td>31</td><td>30</td><td>Higher Magicians' Handbook</td><td>Obliterates everything within 15 spaces. Balrog teleports away instead of dying.</td><td></td></tr>
+<tr><td>x</td><td>Sleep III</td><td>33</td><td>32</td><td>Mages' Companion</td><td>Sleeps all monsters in line of sight (incl. invisible).</td><td></td></tr>
+<tr><td>y</td><td>Genocide</td><td>35</td><td>34</td><td>Mages' Companion</td><td>Removes all of one creature type from the level (drains you).</td><td></td></tr>
+<tr><td>z</td><td>Detect Enchantment</td><td>37</td><td>36</td><td>Mages' Companion</td><td>Reveals enchanted items on the level.</td><td></td></tr>
+<tr><td>A</td><td>Teleport Other</td><td>39</td><td>38</td><td>Mages' Companion</td><td>Teleports a monster away.</td><td></td></tr>
+<tr><td>B</td><td>Haste Self (II)</td><td>41</td><td>40</td><td>Mages' Companion</td><td>Longer +1 speed.</td><td></td></tr>
+<tr><td>C</td><td>Drain Life</td><td>43</td><td>42</td><td>Mages' Companion</td><td>Direct damage bolt.</td><td>75</td></tr>
+<tr><td>D</td><td>Mass Genocide</td><td>45</td><td>44</td><td>Mages' Companion</td><td>Removes all monsters in line of sight (drains you more).</td><td></td></tr>
+<tr><td>E</td><td>Word of Recall</td><td>47</td><td>46</td><td>Mages' Companion</td><td>Teleports to town from dungeon, or to deepest level from town.</td><td></td></tr>
+</table>
+<h3>Priest prayers</h3><table class="ref"><tr><th>Letter</th><th>Name</th><th>Level</th><th>Mana</th><th>Book</th><th>Effect</th><th>Damage</th></tr>
+<tr><td>a</td><td>Detect Evil</td><td>1</td><td>2</td><td>Beginners' Hymnal</td><td>Reveals evil creatures nearby.</td><td></td></tr>
+<tr><td>b</td><td>Cure Light Wounds</td><td>1</td><td>2</td><td>Beginners' Hymnal</td><td>Heals a little; cures blindness.</td><td></td></tr>
+<tr><td>c</td><td>Bless</td><td>1</td><td>2</td><td>Beginners' Hymnal</td><td>+2 AC, +5 to-hit for a short time.</td><td></td></tr>
+<tr><td>d</td><td>Remove Fear</td><td>1</td><td>2</td><td>Beginners' Hymnal</td><td>Cures fear.</td><td></td></tr>
+<tr><td>e</td><td>Call Light</td><td>3</td><td>3</td><td>Beginners' Hymnal</td><td>Lights the area.</td><td></td></tr>
+<tr><td>f</td><td>Detect Traps/Doors</td><td>3</td><td>3</td><td>Beginners' Hymnal</td><td>Reveals traps, secret doors, stairs.</td><td></td></tr>
+<tr><td>g</td><td>Slow Poison</td><td>3</td><td>3</td><td>Beginners' Hymnal</td><td>Halves poison damage rate.</td><td></td></tr>
+<tr><td>h</td><td>Blind Creature</td><td>5</td><td>4</td><td>Beginners' Hymnal</td><td>Blinds a monster (it wanders confused).</td><td></td></tr>
+<tr><td>i</td><td>Portal</td><td>7</td><td>6</td><td>Chants/Blessings</td><td>Medium-range teleport.</td><td></td></tr>
+<tr><td>j</td><td>Cure Serious Wounds</td><td>7</td><td>6</td><td>Chants/Blessings</td><td>Heals more; cures blindness/confusion.</td><td></td></tr>
+<tr><td>k</td><td>Chant</td><td>9</td><td>8</td><td>Chants/Blessings</td><td>Double-duration Bless.</td><td></td></tr>
+<tr><td>l</td><td>Sanctuary</td><td>11</td><td>10</td><td>Chants/Blessings</td><td>Sleeps all monsters adjacent to player.</td><td></td></tr>
+<tr><td>m</td><td>Create Food</td><td>13</td><td>11</td><td>Chants/Blessings</td><td>Creates food. Never starve.</td><td></td></tr>
+<tr><td>n</td><td>Remove Curse</td><td>15</td><td>14</td><td>Chants/Blessings</td><td>Removes a curse from a worn/wielded item.</td><td></td></tr>
+<tr><td>o</td><td>Resist Heat/Cold</td><td>17</td><td>16</td><td>Chants/Blessings</td><td>Temporary resist fire and cold.</td><td></td></tr>
+<tr><td>p</td><td>Neutralize Poison</td><td>19</td><td>18</td><td>Exorcism/Dispel</td><td>Cures poison.</td><td></td></tr>
+<tr><td>q</td><td>Protection from Evil</td><td>21</td><td>20</td><td>Exorcism/Dispel</td><td>Evil creatures ≤ your level cannot attack you.</td><td></td></tr>
+<tr><td>r</td><td>Cure Critical Wounds</td><td>23</td><td>22</td><td>Exorcism/Dispel</td><td>Big heal; cures blindness/confusion/poison/stun.</td><td></td></tr>
+<tr><td>s</td><td>Earthquake</td><td>25</td><td>24</td><td>Exorcism/Dispel</td><td>Random wall collapses nearby; can injure creatures.</td><td></td></tr>
+<tr><td>t</td><td>Turn Undead</td><td>27</td><td>26</td><td>Exorcism/Dispel</td><td>Undead ≤ your level flee.</td><td></td></tr>
+<tr><td>u</td><td>Prayer</td><td>29</td><td>28</td><td>Exorcism/Dispel</td><td>Quadruple-duration Bless.</td><td></td></tr>
+<tr><td>v</td><td>Dispel Undead</td><td>31</td><td>30</td><td>Exorcism/Dispel</td><td>1..(3× your level) damage to all undead in LOS.</td><td></td></tr>
+<tr><td>w</td><td>Heal</td><td>33</td><td>32</td><td>Exorcism/Dispel</td><td>Very large heal.</td><td></td></tr>
+<tr><td>x</td><td>Dispel Evil</td><td>35</td><td>34</td><td>Exorcism/Dispel</td><td>1..(3× your level) damage to all evil in LOS.</td><td></td></tr>
+<tr><td>y</td><td>Glyph of Warding</td><td>37</td><td>36</td><td>Holy Words</td><td>Draws a glyph monsters cannot enter (small break chance).</td><td></td></tr>
+<tr><td>z</td><td>Holy Word</td><td>39</td><td>38</td><td>Holy Words</td><td>Full heal; cures poison/fear; dispels evil (1..4× level). In 5.5.1+ restores stats and 3 turns invulnerable.</td><td></td></tr>
+<tr><td>A</td><td>Restore Mana</td><td>41</td><td>40</td><td>Holy Words</td><td>Refills mana to full.</td><td></td></tr>
+<tr><td>B</td><td>Restore Life</td><td>43</td><td>42</td><td>Holy Words</td><td>Restores drained experience.</td><td></td></tr>
+<tr><td>C</td><td>Resurrection</td><td>45</td><td>44</td><td>Holy Words</td><td>Resurrects a dead companion (single-player: no use).</td><td></td></tr>
+<tr><td>D</td><td>Word of Recall</td><td>47</td><td>46</td><td>Holy Words</td><td>Teleports to town/dungeon as the scroll.</td><td></td></tr>
+<tr><td>E</td><td>Invulnerability</td><td>49</td><td>48</td><td>Holy Words</td><td>A few turns of invulnerability.</td><td></td></tr>
+</table>
+<h2 id="items">Item reference</h2>
+<h3>Item categories</h3><table class="ref"><tr><th>Symbol</th><th>Category</th><th>Examples</th><th>Notes</th></tr>
+<tr><td>/</td><td>Shovel</td><td>Shovel, Shovel (+1)</td><td>Digging tool. Wield to dig through veins/loose rock.</td></tr>
+<tr><td>\</td><td>Pick</td><td>Pick, Pick (+2)</td><td>Digging tool. Better than a shovel; can be a weapon.</td></tr>
+<tr><td>|</td><td>Sword</td><td>Dagger, Short Sword, Long Sword, Katana, Two-Handed Sword</td><td>Edged weapon. Light swords get extra blows at high STR/DEX.</td></tr>
+<tr><td>|</td><td>Hafted Weapon</td><td>Mace, Morning Star, War Hammer, Flail</td><td>Blunt weapon. Priest-friendly (priests cannot use edged).</td></tr>
+<tr><td>|</td><td>Polearm</td><td>Spear, Trident, Glaive, Halberd</td><td>Two-handed reach weapon.</td></tr>
+<tr><td>}</td><td>Bow</td><td>Short Bow, Long Bow, Composite Bow, Light Crossbow, Heavy Crossbow, Sling</td><td>Wield to multiply missile damage. Sling×2, short bow×2, long bow×3, composite bow×4, light XB×3, heavy XB×4.</td></tr>
+<tr><td>{</td><td>Sling Ammo</td><td>Rounded Pebble, Iron Shot</td><td>Used with a sling (×2 multiplier).</td></tr>
+<tr><td>{</td><td>Bow Ammo</td><td>Arrow, Bolt</td><td>Used with the matching bow/crossbow for big multiplier.</td></tr>
+<tr><td>]</td><td>Boots</td><td>Soft Boots, Hard Boots, Boots of Speed, Boots of Free Action</td><td>Foot slot. Boots of Speed are a permanent +speed item.</td></tr>
+<tr><td>]</td><td>Cloak</td><td>Cloak, Cloak of Protection, Cloak of Invisibility</td><td>Back slot.</td></tr>
+<tr><td>]</td><td>Helmet/Crown</td><td>Iron Crown, Crown of the Magi, Crown of Might, Metal Cap, Iron Helm</td><td>Head slot. Crowns have powerful ego abilities.</td></tr>
+<tr><td>,</td><td>Spike</td><td>Iron Spike</td><td>Used to jam doors (j&lt;dir&gt; / S&lt;dir&gt;). Can be wielded as a joke weapon.</td></tr>
+<tr><td>]</td><td>Shield</td><td>Small Shield, Large Shield, Shield of Resistance</td><td>Off-hand armor slot.</td></tr>
+<tr><td>(</td><td>Clothing</td><td>Robe</td><td>Soft body armor; favored by mages (no to-hit penalty).</td></tr>
+<tr><td>(</td><td>Soft Armor</td><td>Soft Leather, Studded Leather, Rhinu-Hide</td><td>Light body armor; no to-hit penalty.</td></tr>
+<tr><td>(</td><td>Hard Armor</td><td>Chain Mail, Plate Mail, Mithril Plate</td><td>Heavy body armor; shows a (-#) to-hit penalty.</td></tr>
+<tr><td>?</td><td>Scroll</td><td>Identify, Word-of-Recall, Recharge, Mass Genocide, Rune of Protection, Destruction</td><td>Read with 'r'. Some titles can be read without triggering (identify, recharge).</td></tr>
+<tr><td>!</td><td>Potion</td><td>Cure Light/Serious/Critical Wounds, Healing, Gain Stat, Restore Mana, Invulnerability</td><td>Quaff with 'q'. Multiple effects on some (cure light also cures blindness).</td></tr>
+<tr><td>~</td><td>Flask of Oil</td><td>Flask of Oil</td><td>Refills a lamp (F command). Thrown oil flasks do fire damage.</td></tr>
+<tr><td>=</td><td>Ring</td><td>Ring of Strength, Ring of Speed, Ring of Searching, Ring of Free Action</td><td>Two ring slots (left and right hand). Ring of Speed is endgame gear (level 50).</td></tr>
+<tr><td>,</td><td>Amulet</td><td>Amulet of the Magi, Amulet of Wisdom, Amulet of Charisma</td><td>Neck slot. Amulet of the Magi: free action, see invisible, +search, +3 AC.</td></tr>
+<tr><td>&amp;</td><td>Chest</td><td>Empty Chest, Chest (locked), Chest (trapped)</td><td>Always search before opening. Bashing may destroy contents but doesn't disarm.</td></tr>
+<tr><td>-</td><td>Wand</td><td>Wand of Magic Missile, Lightning Ball, Frost Ball, Fire Ball, Drain Life, Clone Monster, Wall Building</td><td>Aimed (a&lt;dir&gt; / z&lt;dir&gt;). Uses Magic-Device skill. Recharge scrolls refill them.</td></tr>
+<tr><td>_</td><td>Staff</td><td>Staff of Cure Light Wounds, Lightning, Dispel Evil, Speed, Mass Polymorph, Destruction, Healing</td><td>Used (u / Z). Area-effect; harder to use than wands but more powerful.</td></tr>
+<tr><td>,</td><td>Food</td><td>Ration, Slime Mold, Piece of Elvish Waybread, Potion of Slime Mold Juice</td><td>Eaten with E. Food counter hits 0 = starvation death.</td></tr>
+<tr><td>)</td><td>Magic Book</td><td>Beginners' Magician's Handbook, Trowel-Wielders' Guide, Higher Magicians' Handbook, Mages' Companion</td><td>Mage spells (b / P). Carry the book of any spell you know.</td></tr>
+<tr><td>p</td><td>Prayer Book</td><td>Beginners' Hymnal, Chants/Blessings, Exorcism/Dispel, Holy Words</td><td>Priest prayers (p / P). Carry the book of any prayer you know.</td></tr>
+</table>
+<h3>Ego weapons</h3><table class="ref"><tr><th>Code</th><th>Name</th><th>Effect</th></tr>
+<tr><td>HA</td><td>Holy Avenger</td><td>+(1-4) STR, +(1-4) AC, slay evil/undead, sustain stat, see invisible. +1 STR sustains STR; +2 INT; +3 WIS; +4 CON.</td></tr>
+<tr><td>DF</td><td>Defender</td><td>stealth, regenerate, free action, see invisible, feather fall, RF/RC/RL/RA, +(6-10) AC.</td></tr>
+<tr><td>SA</td><td>Slay Animal</td><td>×2 damage vs. animals.</td></tr>
+<tr><td>SD</td><td>Slay Dragon</td><td>×4 damage vs. dragons.</td></tr>
+<tr><td>SE</td><td>Slay Evil</td><td>×2 damage vs. evil.</td></tr>
+<tr><td>SU</td><td>Slay Undead</td><td>×3 damage vs. undead; see invisible.</td></tr>
+<tr><td>FT</td><td>Flame Tongue</td><td>×1.5 damage vs. fire-vulnerable creatures.</td></tr>
+<tr><td>FB</td><td>Frost Brand</td><td>×1.5 damage vs. cold-vulnerable creatures.</td></tr>
+</table>
+<h3>Wearable flags</h3><table class="ref"><tr><th>Code</th><th>Effect</th></tr>
+<tr><td>RA</td><td>Resist Acid (1/3 damage; armor isn't corroded).</td></tr>
+<tr><td>RC</td><td>Resist Cold (1/3 damage).</td></tr>
+<tr><td>RF</td><td>Resist Fire (1/3 damage).</td></tr>
+<tr><td>RL</td><td>Resist Lightning (1/3 damage).</td></tr>
+<tr><td>R</td><td>Resistance (RA + RC + RF + RL).</td></tr>
+<tr><td>FA</td><td>Free Action (immune to slow/paralyze from monsters).</td></tr>
+<tr><td>SI</td><td>See Invisible.</td></tr>
+<tr><td>PL</td><td>Permanent Light (acts as a light source).</td></tr>
+<tr><td>TL</td><td>Temporary Light (torch/lamp fuel counter).</td></tr>
+<tr><td>SR</td><td>Slow Regeneration.</td></tr>
+<tr><td>RG</td><td>Regeneration (1.5× HP/mana regen; uses food faster).</td></tr>
+<tr><td>FF</td><td>Feather Fall (1/2 trap door fall damage).</td></tr>
+<tr><td>BB</td><td>Berserk Strength (bonus STR; penalty INT/CHR).</td></tr>
+<tr><td>HA</td><td>Holy Avenger (see Ego Weapons).</td></tr>
+<tr><td>DF</td><td>Defender (see Ego Weapons).</td></tr>
+<tr><td>ST</td><td>Sustain (keeps a drained stat from dropping further until restored).</td></tr>
+</table>
+<h2 id="bestiary">Monster bestiary</h2>
+<p>This is a curated field guide to early threats, major dragons, liches, and the Balrog.</p>
+<table class="ref"><tr><th>Symbol</th><th>Creature</th><th>Depth</th><th>AC</th><th>HP</th><th>XP</th><th>Traits</th><th>Advice</th></tr>
+<tr><td>r</td><td>Mouse</td><td>1</td><td>7</td><td>1d1</td><td>0</td><td>animal</td><td>Harmless. Often the first thing you meet.</td></tr>
+<tr><td>k</td><td>Kobold</td><td>1</td><td>6</td><td>1d1</td><td>2</td><td>evil</td><td>Weak humanoid. Carries a little treasure.</td></tr>
+<tr><td>c</td><td>Centipede</td><td>1</td><td>5</td><td>1d1</td><td>1</td><td>animal</td><td>Poisonous sting; weak but can poison a low-CON character.</td></tr>
+<tr><td>h</td><td>Jackal</td><td>1</td><td>6</td><td>1d1</td><td>1</td><td>animal</td><td>Comes in packs.</td></tr>
+<tr><td>p</td><td>Street Urchin</td><td>0</td><td>10</td><td>1d1</td><td>0</td><td>town</td><td>Town-only. Mobs you for money. No XP for killing in town.</td></tr>
+<tr><td>p</td><td>Sneaky Rogue</td><td>0</td><td>7</td><td>1d4</td><td>0</td><td>town, evil</td><td>Town-only. Pickpockets items from your inventory.</td></tr>
+<tr><td>J</td><td>Blue Jelly</td><td>2</td><td>9</td><td>1d4</td><td>3</td><td>immobile, cold</td><td>Stays put. Drains a little.</td></tr>
+<tr><td>c</td><td>Giant Centipede</td><td>2</td><td>5</td><td>1d4</td><td>4</td><td>animal, poison</td><td>Bigger centipede; poison is more dangerous.</td></tr>
+<tr><td>s</td><td>Skeleton</td><td>2</td><td>6</td><td>1d2</td><td>4</td><td>undead</td><td>First undead. Holy weapons/slay-undead help.</td></tr>
+<tr><td>o</td><td>Orc</td><td>3</td><td>6</td><td>1d4</td><td>10</td><td>evil</td><td>First real melee threat. Carries decent gold.</td></tr>
+<tr><td>a</td><td>Giant Ant</td><td>4</td><td>5</td><td>1d4</td><td>12</td><td>animal, poison</td><td>Can be dangerous in groups.</td></tr>
+<tr><td>m</td><td>Yellow Mushroom</td><td>4</td><td>9</td><td>1d4</td><td>5</td><td>immobile, hallucinatory</td><td>Causes hallucination. Kill at range.</td></tr>
+<tr><td>S</td><td>Cave Spider</td><td>5</td><td>4</td><td>1d6</td><td>18</td><td>animal, poison</td><td>Fast and poisonous. Watch your HP.</td></tr>
+<tr><td>O</td><td>Ogre</td><td>5</td><td>4</td><td>4d4</td><td>120</td><td>evil</td><td>First big bruiser. Bring a real weapon.</td></tr>
+<tr><td>t</td><td>Giant Tick</td><td>6</td><td>4</td><td>1d4</td><td>25</td><td>animal, drains HP</td><td>Drains HP to heal itself. Kill fast.</td></tr>
+<tr><td>W</td><td>Wraith</td><td>7</td><td>4</td><td>2d4</td><td>150</td><td>undead, evil, drains XP</td><td>Drains experience on hit. Slay-undead essential.</td></tr>
+<tr><td>s</td><td>Giant Skeleton</td><td>8</td><td>4</td><td>3d4</td><td>90</td><td>undead</td><td>Bigger skeleton. Slow but hits hard.</td></tr>
+<tr><td>V</td><td>Vampire</td><td>9</td><td>4</td><td>3d4</td><td>220</td><td>undead, evil, drains XP, regenerate</td><td>Drains XP and regenerates. Slay-undead + see-invisible.</td></tr>
+<tr><td>d</td><td>Young Dragon</td><td>10</td><td>4</td><td>4d4</td><td>600</td><td>dragon</td><td>First dragon. Slay-dragon weapon recommended.</td></tr>
+<tr><td>d</td><td>White Dragon</td><td>14</td><td>4</td><td>5d4</td><td>1200</td><td>dragon, breathes cold, resists cold</td><td>Breathes cold. Resist cold item advised.</td></tr>
+<tr><td>d</td><td>Blue Dragon</td><td>18</td><td>4</td><td>6d4</td><td>1800</td><td>dragon, breathes lightning, resists lightning</td><td>Lightning breath destroys items. Resist lightning.</td></tr>
+<tr><td>d</td><td>Red Dragon</td><td>22</td><td>4</td><td>7d4</td><td>2400</td><td>dragon, breathes fire, resists fire</td><td>Fire breath is very hot. Resist fire essential.</td></tr>
+<tr><td>d</td><td>Black Dragon</td><td>26</td><td>4</td><td>8d4</td><td>3000</td><td>dragon, breathes acid, resists acid</td><td>Acid breath corrodes armor. Body armor soaks some.</td></tr>
+<tr><td>d</td><td>Green Dragon</td><td>30</td><td>4</td><td>8d4</td><td>3600</td><td>dragon, breathes poison gas, resists poison</td><td>No resistance to poison gas. Cure poison ready.</td></tr>
+<tr><td>D</td><td>Ancient Multi-Hued Dragon</td><td>40</td><td>2</td><td>12d8</td><td>12000</td><td>dragon, breathes all elements, resists all</td><td>The deadliest random dragon. Pillar-dance at speed 3.</td></tr>
+<tr><td>L</td><td>Lich</td><td>25</td><td>2</td><td>4d4</td><td>1500</td><td>undead, evil, casts spells, drains mana</td><td>Casts bolt/ball spells. Free action + see invisible.</td></tr>
+<tr><td>L</td><td>Archlich</td><td>35</td><td>2</td><td>6d4</td><td>4000</td><td>undead, evil, casts spells, drains mana</td><td>More HP and nastier spells than a lich.</td></tr>
+<tr><td>L</td><td>Emperor Lich</td><td>45</td><td>2</td><td>8d4</td><td>9000</td><td>undead, evil, casts spells, drains mana &amp; charges</td><td>1520+ HP. Drains wands for 40HP/charge. See emperor-lich tactic in the strategy guide.</td></tr>
+<tr><td>B</td><td>Balrog of Moria</td><td>49</td><td>2</td><td>10d10</td><td>50000</td><td>unique, evil, breathes fire, resists fire, immune to sleep/poly/confuse/genocide/destruction</td><td>The endgame boss. Spawns on most levels from 49 onward. Cannot be bashed, polymorphed, slept, confused, genocided, or destroyed by Word of Destruction (it teleports to another level and heals). Kill with weapons and direct-damage spells (frost/fire/lightning ball). Pillar-dance at speed &gt;= 3.</td></tr>
+</table>
+<h2 id="walkthrough">Walkthrough</h2><ol>
+<li><b>Create a forgiving character.</b> A Dwarf Warrior is a strong first run; a Half-Elf Rogue, Ranger, or Mage trades durability for utility and magic.</li>
+<li><b>Prepare in town.</b> Buy a light source, food, a weapon, armor, and an escape resource before the first descent. Keep the town stores in mind for selling identified loot.</li>
+<li><b>Learn the early dungeon.</b> Explore shallow levels slowly, search suspicious walls and doors, and retreat whenever your HP, light, or food becomes uncertain.</li>
+<li><b>Build core defenses.</b> Before the deep dungeon, prioritize free action, see invisible, healing, and the elemental resistances appropriate to the dragons you meet.</li>
+<li><b>Farm useful depths.</b> Level 25 introduces valuable permanent-stat and mana-restoration resources. Do not descend merely because you can find stairs.</li>
+<li><b>Prepare for deep threats.</b> By level 40, speed, healing, escape tools, and resistance coverage are mandatory. Avoid fighting emperor liches in open ground.</li>
+<li><b>Hunt the Balrog.</b> Enter level 49 or 50 only with endgame equipment, direct damage, and a safe combat space. The Balrog resists many conventional emergency tools.</li>
+<li><b>Return to town.</b> Killing the Balrog wins only when the character returns to the surface alive.</li>
+</ol>
+<h2 id="strategy">Strategy notes</h2><ul>
+<li><b>Respect procedural generation.</b> There is no route through Moria to memorize. Use mapping, detection, and careful exploration to create your own reliable route.</li>
+<li><b>Keep an escape plan.</b> Word of Recall is the most important safety resource. Carry scrolls or retain the spell whenever you descend beyond a comfortable depth.</li>
+<li><b>Identify before relying on loot.</b> Unidentified equipment may be cursed or less useful than it appears. Town services and identify scrolls prevent expensive mistakes.</li>
+<li><b>Protect against status effects.</b> Free action prevents paralysis and slow effects; see invisible removes a major tactical surprise; healing and cure poison remain useful throughout the game.</li>
+<li><b>Match resistance to depth.</b> Cold, lightning, fire, and acid dragons arrive in sequence. Equip each resistance before treating that depth as a farming destination.</li>
+<li><b>Use terrain.</b> Fight dangerous fast creatures around pillars and corridors instead of allowing several attacks in open rooms. Speed is a defensive stat.</li>
+<li><b>Treat liches differently.</b> Emperor liches drain device charges for health. Do not feed them charged wands or staves; use movement, terrain, and direct damage.</li>
+<li><b>Do not waste the endgame.</b> The Balrog cannot be slept, polymorphed, confused, genocided, or destroyed. Save your strongest conventional damage and consumables for a controlled fight.</li>
+</ul>
+</body></html>

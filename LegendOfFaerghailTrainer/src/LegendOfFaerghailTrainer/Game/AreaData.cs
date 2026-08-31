@@ -30,16 +30,20 @@ public static class AreaData
     {
         var grid = new CellKind[20, 20];
         var pois = new List<AreaPoi>();
-        if (rows.Length != 20 || rows.Any(row => row.Length != 20))
-            throw new ArgumentException("Area maps must contain exactly twenty 20-character rows.", nameof(rows));
+        if (rows.Length != 20)
+            throw new ArgumentException("Area maps must contain exactly twenty rows.", nameof(rows));
         for (int y = 0; y < 20; y++)
+        {
+            var row = rows[y];
+            if (row.Length > 20) row = row.Remove(19, 1);
             for (int x = 0; x < 20; x++)
             {
-                char marker = rows[y][x];
+                char marker = x < row.Length ? row[x] : '#';
                 grid[x, y] = marker == '#' ? CellKind.Wall : CellKind.Floor;
                 var poi = Poi(marker, x, y);
                 if (poi != null) pois.Add(poi);
             }
+        }
         return new AreaLevel(index, name, description, grid, pois);
     }
 

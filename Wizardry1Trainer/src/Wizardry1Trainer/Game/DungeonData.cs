@@ -15,7 +15,8 @@ public static class DungeonData
     private const int N = GameFacts.MazeSize;
 
     /// <summary>All ten dungeon levels, indexed 0..9 (level 1 = index 0).</summary>
-    public static readonly IReadOnlyList<DungeonLevel> Levels = Build();
+    private static IReadOnlyList<DungeonLevel>? _levels;
+    public static IReadOnlyList<DungeonLevel> Levels => _levels ??= Build();
 
     private static IReadOnlyList<DungeonLevel> Build()
     {

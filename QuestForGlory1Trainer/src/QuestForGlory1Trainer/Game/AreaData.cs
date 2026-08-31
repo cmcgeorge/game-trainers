@@ -2,7 +2,8 @@ namespace QuestForGlory1Trainer.Game;
 
 public static class AreaData
 {
-    public static readonly IReadOnlyList<AreaLevel> Levels = Build();
+    private static IReadOnlyList<AreaLevel>? _levels;
+    public static IReadOnlyList<AreaLevel> Levels => _levels ??= Build();
 
     private static IReadOnlyList<AreaLevel> Build() => new List<AreaLevel>
     {

@@ -2,7 +2,8 @@ namespace MinesOfTitanTrainer.Game;
 
 public static class AreaData
 {
-    public static readonly IReadOnlyList<AreaLevel> Areas = Build();
+    private static IReadOnlyList<AreaLevel>? _areas;
+    public static IReadOnlyList<AreaLevel> Areas => _areas ??= Build();
 
     private static IReadOnlyList<AreaLevel> Build() =>
     [

@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<title>The Bard's Tale Trilogy — cluebook</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body { font-family: Georgia, serif; max-width: 1000px; margin: 2em auto; padding: 0 1em; line-height: 1.6; color: #222; }
+h1 { font-size: 1.8em; border-bottom: 2px solid #444; padding-bottom: 0.3em; }
+h2 { font-size: 1.4em; margin-top: 2em; border-bottom: 1px solid #999; padding-bottom: 0.2em; }
+h3 { font-size: 1.15em; margin-top: 1.5em; }
+.lede { font-style: italic; color: #555; }
+.toc { background: #f5f5f5; border: 1px solid #ddd; padding: 1em 1.5em; border-radius: 4px; }
+.toc ol { padding-left: 1.5em; }
+table.facts, table.ref { border-collapse: collapse; width: 100%; margin: 1em 0; }
+table.facts th, table.ref th { background: #e8e8e8; text-align: left; padding: 4px 8px; border: 1px solid #ccc; }
+table.facts td, table.ref td { padding: 4px 8px; border: 1px solid #ccc; }
+table.facts th { width: 180px; white-space: nowrap; }
+table.ref { font-size: 0.92em; }
+table.ref tr:nth-child(even) { background: #f8f8f8; }</style>
+</head><body>
+<h1>The Bard's Tale Trilogy</h1>
+<p class="lede">A reference and strategy guide for the 2018 remaster of Interplay's classic dungeon-crawling trilogy.</p>
+<nav class="toc"><h2>Contents</h2><ol>
+<li><a href="#overview">The trilogy at a glance</a></li>
+<li><a href="#spells">Spell reference</a></li>
+<li><a href="#classes">Classes and races</a></li>
+<li><a href="#items">Item catalogue</a></li>
+<li><a href="#walkthrough">Walkthrough</a></li>
+<li><a href="#strategy">Strategy notes</a></li>
+</ol></nav>
+<h2 id="overview">The trilogy at a glance</h2>
+<table class="facts">
+<tr><th>Edition</th><td>The Bard's Tale Trilogy (2018 remaster)</td></tr>
+<tr><th>Original games</th><td>The Bard's Tale I, II: The Destiny Knight, and III: Thief of Fate</td></tr>
+<tr><th>Party</th><td>Up to 7 characters</td></tr>
+<tr><th>Playable classes</th><td>13</td></tr>
+<tr><th>Spell reference</th><td>155 named spell entries</td></tr>
+<tr><th>Item catalogue</th><td>127 items</td></tr>
+</table>
+<h3>BT1 — Tales of the Unknown</h3>
+<p>Skara Brae has fallen under the spell of Mangar the Dark. Build a party, explore the city and Mangar's Tower, and confront the wizard at its summit.</p>
+<h3>BT2 — The Destiny Knight</h3>
+<p>Travel the realm of Tangramayne to recover the Destiny Stone. The journey spans wilderness, cities, dungeons, and the seven realms of the underworld.</p>
+<h3>BT3 — Thief of Fate</h3>
+<p>Tarjan has stolen the Destiny Wand and shattered time itself. Pursue him through the realms of time, collect the tools to oppose him, and restore the world.</p>
+<p>The trainer's Maps tab provides the complete area catalogue and supports in-game navigation. This cluebook focuses on durable reference material and progression guidance.</p>
+<h2 id="spells">Spell reference</h2>
+<p>The remaster's complete spell descriptions, including four-letter codes, school, spell level, cost, and chapter availability, are loaded from the running game. This offline reference lists the 155 named spell entries carried by the game's spell enum. ZZGO and NUKE are highlighted because they are granted outright rather than earned through a school level.</p>
+<table class="ref"><tr><th>ID</th><th>Code</th><th>Spell</th></tr>
+<tr><td>0</td><td></td><td>Mage Flame</td></tr>
+<tr><td>1</td><td></td><td>Arc Fire</td></tr>
+<tr><td>2</td><td></td><td>Sorcerer Shield</td></tr>
+<tr><td>3</td><td></td><td>Trap Zap</td></tr>
+<tr><td>4</td><td></td><td>Freeze Foes</td></tr>
+<tr><td>5</td><td></td><td>Kiels Compass</td></tr>
+<tr><td>6</td><td></td><td>Battleskill</td></tr>
+<tr><td>7</td><td></td><td>Word Of Healing</td></tr>
+<tr><td>8</td><td></td><td>Magestar</td></tr>
+<tr><td>9</td><td></td><td>Lesser Revelation</td></tr>
+<tr><td>10</td><td></td><td>Levitation</td></tr>
+<tr><td>11</td><td></td><td>Warstrike</td></tr>
+<tr><td>12</td><td></td><td>Instant Wolf</td></tr>
+<tr><td>13</td><td></td><td>Flesh Restore</td></tr>
+<tr><td>14</td><td></td><td>Poison Strike</td></tr>
+<tr><td>15</td><td></td><td>Greater Revelation</td></tr>
+<tr><td>16</td><td></td><td>Wrath Of Valhalla</td></tr>
+<tr><td>17</td><td></td><td>Shock Sphere</td></tr>
+<tr><td>18</td><td></td><td>Instant Ogre</td></tr>
+<tr><td>19</td><td></td><td>Major Levitation</td></tr>
+<tr><td>20</td><td></td><td>Flesh Anew</td></tr>
+<tr><td>21</td><td></td><td>Apport Arcane</td></tr>
+<tr><td>22</td><td></td><td>Far Foe</td></tr>
+<tr><td>23</td><td></td><td>Instant Slayer</td></tr>
+<tr><td>24</td><td></td><td>Regeneration</td></tr>
+<tr><td>25</td><td></td><td>Vorpal Plating</td></tr>
+<tr><td>26</td><td></td><td>Air Armor</td></tr>
+<tr><td>27</td><td></td><td>Steelight</td></tr>
+<tr><td>28</td><td></td><td>Scry Sight</td></tr>
+<tr><td>29</td><td></td><td>Quick Fix</td></tr>
+<tr><td>30</td><td></td><td>Holy Water</td></tr>
+<tr><td>31</td><td></td><td>Wither Strike</td></tr>
+<tr><td>32</td><td></td><td>Mage Gauntlets</td></tr>
+<tr><td>33</td><td></td><td>Area Enchant</td></tr>
+<tr><td>34</td><td></td><td>Mystic Shield</td></tr>
+<tr><td>35</td><td></td><td>Ogre Strength</td></tr>
+<tr><td>36</td><td></td><td>Mithril Might</td></tr>
+<tr><td>37</td><td></td><td>Starflare</td></tr>
+<tr><td>38</td><td></td><td>Spectre Touch</td></tr>
+<tr><td>39</td><td></td><td>Dragon Breath</td></tr>
+<tr><td>40</td><td></td><td>Stonelight</td></tr>
+<tr><td>41</td><td></td><td>Anti Magic</td></tr>
+<tr><td>42</td><td></td><td>Animated Sword</td></tr>
+<tr><td>43</td><td></td><td>Stone Touch</td></tr>
+<tr><td>44</td><td></td><td>Giant Strength</td></tr>
+<tr><td>45</td><td></td><td>Phase Door</td></tr>
+<tr><td>46</td><td></td><td>Mystical Armor</td></tr>
+<tr><td>47</td><td></td><td>Restoration</td></tr>
+<tr><td>48</td><td></td><td>Death Strike</td></tr>
+<tr><td>49</td><td></td><td>Safety Spell</td></tr>
+<tr><td>50</td><td></td><td>Wizard Wall</td></tr>
+<tr><td>51</td><td></td><td>Ice Storm</td></tr>
+<tr><td>52</td><td></td><td>Stone To Flesh</td></tr>
+<tr><td>53</td><td></td><td>Mind Jab</td></tr>
+<tr><td>54</td><td></td><td>Phase Blur</td></tr>
+<tr><td>55</td><td></td><td>Locate Traps</td></tr>
+<tr><td>56</td><td></td><td>Hypnotic Image</td></tr>
+<tr><td>57</td><td></td><td>Disbelieve</td></tr>
+<tr><td>58</td><td></td><td>Target Dummy</td></tr>
+<tr><td>59</td><td></td><td>Mind Fist</td></tr>
+<tr><td>60</td><td></td><td>Word Of Fear</td></tr>
+<tr><td>61</td><td></td><td>Wind Wolf</td></tr>
+<tr><td>62</td><td></td><td>Vanishing Spell</td></tr>
+<tr><td>63</td><td></td><td>Second Sight</td></tr>
+<tr><td>64</td><td></td><td>Curse With Fear</td></tr>
+<tr><td>65</td><td></td><td>Cat Eyes</td></tr>
+<tr><td>66</td><td></td><td>Wind Warrior</td></tr>
+<tr><td>67</td><td></td><td>Invisibility</td></tr>
+<tr><td>68</td><td></td><td>Wind Ogre</td></tr>
+<tr><td>69</td><td></td><td>Disrupt Illusion</td></tr>
+<tr><td>70</td><td></td><td>Mind Blade</td></tr>
+<tr><td>71</td><td></td><td>Wind Dragon</td></tr>
+<tr><td>72</td><td></td><td>Mind Warp</td></tr>
+<tr><td>73</td><td></td><td>Wind Giant</td></tr>
+<tr><td>74</td><td></td><td>Sorcerer Sight</td></tr>
+<tr><td>75</td><td></td><td>Mage Maelstrom</td></tr>
+<tr><td>76</td><td></td><td>Wind Hero</td></tr>
+<tr><td>77</td><td></td><td>Wind Mage</td></tr>
+<tr><td>78</td><td>ZZGO</td><td>Dream Spell</td></tr>
+<tr><td>79</td><td></td><td>Preclusion</td></tr>
+<tr><td>80</td><td></td><td>Rimefang</td></tr>
+<tr><td>81</td><td></td><td>Summon Dead</td></tr>
+<tr><td>82</td><td></td><td>Repel Dead</td></tr>
+<tr><td>83</td><td></td><td>Force Focus</td></tr>
+<tr><td>84</td><td></td><td>Summon Element</td></tr>
+<tr><td>85</td><td></td><td>Demon Bane</td></tr>
+<tr><td>86</td><td></td><td>Lesser Summon</td></tr>
+<tr><td>87</td><td></td><td>Gate Wraith</td></tr>
+<tr><td>88</td><td></td><td>Prime Summoning</td></tr>
+<tr><td>89</td><td></td><td>Dispossess</td></tr>
+<tr><td>90</td><td></td><td>Summon Phantom</td></tr>
+<tr><td>91</td><td></td><td>Flame Column</td></tr>
+<tr><td>92</td><td></td><td>Animate Dead</td></tr>
+<tr><td>93</td><td></td><td>Summon Herb</td></tr>
+<tr><td>94</td><td></td><td>Demon Strike</td></tr>
+<tr><td>95</td><td></td><td>Spell Bind</td></tr>
+<tr><td>96</td><td></td><td>Soul Whip</td></tr>
+<tr><td>97</td><td></td><td>Beyond Death</td></tr>
+<tr><td>98</td><td></td><td>Spell Spirit</td></tr>
+<tr><td>99</td><td></td><td>Wizard War</td></tr>
+<tr><td>100</td><td></td><td>Greater Summon</td></tr>
+<tr><td>101</td><td></td><td>Haltfoe</td></tr>
+<tr><td>102</td><td></td><td>Melee Men</td></tr>
+<tr><td>103</td><td></td><td>Batchspell</td></tr>
+<tr><td>104</td><td></td><td>Camaraderie</td></tr>
+<tr><td>105</td><td></td><td>Night Lance</td></tr>
+<tr><td>106</td><td></td><td>Heal All</td></tr>
+<tr><td>107</td><td></td><td>Brothers Kringle</td></tr>
+<tr><td>108</td><td></td><td>Mangars Mallet</td></tr>
+<tr><td>109</td><td></td><td>Vitality</td></tr>
+<tr><td>110</td><td></td><td>Teleport Arbo</td></tr>
+<tr><td>111</td><td></td><td>Teleport Enik</td></tr>
+<tr><td>112</td><td></td><td>Witherfist</td></tr>
+<tr><td>113</td><td></td><td>Frost Force</td></tr>
+<tr><td>114</td><td></td><td>Teleport Geli</td></tr>
+<tr><td>115</td><td></td><td>Teleport Ecul</td></tr>
+<tr><td>116</td><td></td><td>God Fire</td></tr>
+<tr><td>117</td><td></td><td>Stun</td></tr>
+<tr><td>118</td><td></td><td>Teleport Luce</td></tr>
+<tr><td>119</td><td></td><td>Teleport Ileg</td></tr>
+<tr><td>120</td><td></td><td>Luck Chant</td></tr>
+<tr><td>121</td><td></td><td>Far Death</td></tr>
+<tr><td>122</td><td></td><td>Teleport Kine</td></tr>
+<tr><td>123</td><td></td><td>Teleport Obra</td></tr>
+<tr><td>124</td><td></td><td>Identify</td></tr>
+<tr><td>125</td><td></td><td>Youth</td></tr>
+<tr><td>126</td><td></td><td>Teleport Oluk</td></tr>
+<tr><td>127</td><td></td><td>Teleport Ecea</td></tr>
+<tr><td>128</td><td></td><td>Grave Robber</td></tr>
+<tr><td>129</td><td></td><td>Force Of Tarjan</td></tr>
+<tr><td>130</td><td></td><td>Teleport Aece</td></tr>
+<tr><td>131</td><td></td><td>Teleport Kulo</td></tr>
+<tr><td>132</td><td></td><td>Shadow Shield</td></tr>
+<tr><td>133</td><td></td><td>Fatal Fist</td></tr>
+<tr><td>134</td><td></td><td>Teleport Evil</td></tr>
+<tr><td>135</td><td></td><td>Teleport Live</td></tr>
+<tr><td>136</td><td></td><td>Earth Dagger</td></tr>
+<tr><td>137</td><td></td><td>Earth Song</td></tr>
+<tr><td>138</td><td></td><td>Earth Ward</td></tr>
+<tr><td>139</td><td></td><td>Trebuchet</td></tr>
+<tr><td>140</td><td></td><td>Earth Elemental</td></tr>
+<tr><td>141</td><td></td><td>Wall Warp</td></tr>
+<tr><td>142</td><td></td><td>Petrify</td></tr>
+<tr><td>143</td><td></td><td>Roscoes Alert</td></tr>
+<tr><td>144</td><td></td><td>Succor Song</td></tr>
+<tr><td>145</td><td></td><td>Sandstorm</td></tr>
+<tr><td>146</td><td></td><td>Sanctuary</td></tr>
+<tr><td>147</td><td></td><td>Glacier Strike</td></tr>
+<tr><td>148</td><td></td><td>Pathfinder</td></tr>
+<tr><td>149</td><td></td><td>Magma Blast</td></tr>
+<tr><td>150</td><td></td><td>Jolt Bolt</td></tr>
+<tr><td>151</td><td></td><td>Earth Maw</td></tr>
+<tr><td>152</td><td>GILL</td><td>Gilles Gills</td></tr>
+<tr><td>153</td><td>DIVA</td><td>Divine Intervention</td></tr>
+<tr><td>154</td><td>NUKE</td><td>Gotterdammerung</td></tr>
+</table>
+<h2 id="classes">Classes and races</h2>
+<h3>Races</h3>
+<p>Human, Elf, Dwarf, Hobbit, Half-Elf, Half-Orc, and Gnome are available throughout the remaster. Select a race that supports the class and party role you want to develop.</p>
+<h3>Classes</h3>
+<table class="ref"><tr><th>Class</th><th>Role</th><th>First game</th><th>Notes</th></tr>
+<tr><td>Warrior</td><td>Fighter</td><td>BT1</td><td>The basic fighter, able to use nearly every weapon in the game. Gains an extra attack for every 4 levels after the 1st.</td></tr>
+<tr><td>Paladin</td><td>Fighter</td><td>BT1</td><td>A holy warrior. Gains multiple attacks like a Warrior, wields weapons others cannot, and has greatly increased resistance to evil magic.</td></tr>
+<tr><td>Rogue</td><td>Stealth</td><td>BT1</td><td>A professional thief with moderate combat ability. Hides in shadows, identifies items, and searches for and disarms traps — the only safe way to open a trapped chest.</td></tr>
+<tr><td>Bard</td><td>Hybrid</td><td>BT1</td><td>A warrior who turned to music. Uses most warrior weapons and plays magical tunes, one per experience level before his throat runs dry. Needs an instrument equipped.</td></tr>
+<tr><td>Hunter</td><td>Fighter</td><td>BT1</td><td>An assassin who strikes at vital areas. Has a chance — growing with experience — to score a critical hit and kill a foe outright.</td></tr>
+<tr><td>Monk</td><td>Fighter</td><td>BT1</td><td>A martial artist. Can use weapons but does far better without them at higher levels, and his armour class improves with every level gained.</td></tr>
+<tr><td>Conjurer</td><td>Caster</td><td>BT1</td><td>Creates and manipulates objects and light. One of the two magical schools open at character creation.</td></tr>
+<tr><td>Magician</td><td>Caster</td><td>BT1</td><td>Bestows effects on ordinary objects, increasing their capability or changing their form. The other school open at character creation.</td></tr>
+<tr><td>Sorcerer</td><td>Caster</td><td>BT1</td><td>Illusion and perception. Not available at creation — a magic user must first have learned spell level 3 in one other school.</td></tr>
+<tr><td>Wizard</td><td>Caster</td><td>BT1</td><td>Summons and binds supernatural creatures. Not available at creation — a magic user must first have learned spell level 3 in two other schools.</td></tr>
+<tr><td>Archmage</td><td>Caster</td><td>BT2</td><td>The master of all four basic schools. The promotion itself can only be taken in BT2, even by a character who met the requirements in BT1.</td></tr>
+<tr><td>Chronomancer</td><td>Caster</td><td>BT3</td><td>Bends time itself. Requires mastery of three magical schools — and gives up every spell learned in them on promotion.</td></tr>
+<tr><td>Geomancer</td><td>Caster</td><td>BT3</td><td>The fighter's road into magic, drawing power from the earth. Open only to fighting classes, and only once unlocked during BT3's story.</td></tr>
+</table>
+<h3>Bard songs</h3><ul>
+<li>Falkentyne's Fury</li>
+<li>Seeker's Ballad</li>
+<li>Wayland's Watch</li>
+<li>Badh'r Kilnfest</li>
+<li>The Traveller's Tune</li>
+<li>Lucklaran</li>
+</ul>
+<h2 id="items">Item catalogue</h2>
+<p>Items with charges are never consumed when their live charge value is zero. The trainer can set this value for carried items; use the in-game item descriptions to confirm an item's effects.</p>
+<table class="ref"><tr><th>ID</th><th>Item</th><th>Category</th><th>Garth's basic stock</th></tr>
+<tr><td>1</td><td>Torch</td><td>Other</td><td>Yes</td></tr>
+<tr><td>2</td><td>Lamp</td><td>Other</td><td>Yes</td></tr>
+<tr><td>3</td><td>Broadsword</td><td>Weapons</td><td>Yes</td></tr>
+<tr><td>4</td><td>Short Sword</td><td>Weapons</td><td>Yes</td></tr>
+<tr><td>5</td><td>Dagger</td><td>Weapons</td><td>Yes</td></tr>
+<tr><td>6</td><td>War Axe</td><td>Weapons</td><td>Yes</td></tr>
+<tr><td>7</td><td>Halberd</td><td>Weapons</td><td>Yes</td></tr>
+<tr><td>8</td><td>Mace</td><td>Weapons</td><td>Yes</td></tr>
+<tr><td>9</td><td>Staff</td><td>Staves &amp; Wands</td><td>Yes</td></tr>
+<tr><td>10</td><td>Buckler</td><td>Shields</td><td>Yes</td></tr>
+<tr><td>11</td><td>Tower Shield</td><td>Shields</td><td>Yes</td></tr>
+<tr><td>12</td><td>Leather Armor</td><td>Armor</td><td>Yes</td></tr>
+<tr><td>13</td><td>Chain Mail</td><td>Armor</td><td>Yes</td></tr>
+<tr><td>14</td><td>Scale Armor</td><td>Armor</td><td>Yes</td></tr>
+<tr><td>15</td><td>Plate Armor</td><td>Armor</td><td>Yes</td></tr>
+<tr><td>16</td><td>Robes</td><td>Armor</td><td>Yes</td></tr>
+<tr><td>17</td><td>Helm</td><td>Helmets</td><td>Yes</td></tr>
+<tr><td>18</td><td>Leather Glvs.</td><td>Gloves</td><td>Yes</td></tr>
+<tr><td>19</td><td>Gauntlets</td><td>Gloves</td><td>Yes</td></tr>
+<tr><td>20</td><td>Mandolin</td><td>Instruments</td><td>Yes</td></tr>
+<tr><td>21</td><td>Harp</td><td>Instruments</td><td>Yes</td></tr>
+<tr><td>22</td><td>Flute</td><td>Instruments</td><td>Yes</td></tr>
+<tr><td>23</td><td>Mthr Sword</td><td>Weapons</td><td></td></tr>
+<tr><td>24</td><td>Mthr Shield</td><td>Shields</td><td></td></tr>
+<tr><td>25</td><td>Mthr Chain</td><td>Armor</td><td></td></tr>
+<tr><td>26</td><td>Mthr Scale</td><td>Armor</td><td></td></tr>
+<tr><td>27</td><td>Samurai Fgn</td><td>Figurines</td><td></td></tr>
+<tr><td>28</td><td>Bracers [6]</td><td>Armor</td><td></td></tr>
+<tr><td>29</td><td>Bardsword</td><td>Weapons</td><td></td></tr>
+<tr><td>30</td><td>Fire Horn</td><td>Instruments</td><td></td></tr>
+<tr><td>31</td><td>Lightwand</td><td>Staves &amp; Wands</td><td></td></tr>
+<tr><td>32</td><td>Mthr Dagger</td><td>Weapons</td><td></td></tr>
+<tr><td>33</td><td>Mthr Helm</td><td>Helmets</td><td></td></tr>
+<tr><td>34</td><td>Mthr Gloves</td><td>Gloves</td><td></td></tr>
+<tr><td>35</td><td>Mthr Axe</td><td>Weapons</td><td></td></tr>
+<tr><td>36</td><td>Mthr Mace</td><td>Weapons</td><td></td></tr>
+<tr><td>37</td><td>Mthr Plate</td><td>Armor</td><td></td></tr>
+<tr><td>38</td><td>Ogre Fgn</td><td>Figurines</td><td></td></tr>
+<tr><td>39</td><td>Lak's Lyre</td><td>Instruments</td><td></td></tr>
+<tr><td>40</td><td>Shield Ring</td><td>Shields</td><td></td></tr>
+<tr><td>41</td><td>Dork Ring</td><td>Rings</td><td></td></tr>
+<tr><td>42</td><td>Fin's Flute</td><td>Instruments</td><td></td></tr>
+<tr><td>43</td><td>Kael's Axe</td><td>Weapons</td><td></td></tr>
+<tr><td>44</td><td>Blood Axe</td><td>Weapons</td><td></td></tr>
+<tr><td>45</td><td>Dayblade</td><td>Weapons</td><td></td></tr>
+<tr><td>46</td><td>Shield Staff</td><td>Staves &amp; Wands</td><td></td></tr>
+<tr><td>47</td><td>Elf Cloak</td><td>Armor</td><td></td></tr>
+<tr><td>48</td><td>Hawkblade</td><td>Weapons</td><td></td></tr>
+<tr><td>49</td><td>Admt Sword</td><td>Weapons</td><td></td></tr>
+<tr><td>50</td><td>Admt Shield</td><td>Shields</td><td></td></tr>
+<tr><td>51</td><td>Admt Dagger</td><td>Weapons</td><td></td></tr>
+<tr><td>52</td><td>Admt Helm</td><td>Helmets</td><td></td></tr>
+<tr><td>53</td><td>Admt Gloves</td><td>Gloves</td><td></td></tr>
+<tr><td>54</td><td>Admt Mace</td><td>Weapons</td><td></td></tr>
+<tr><td>55</td><td>Broom</td><td>Other</td><td></td></tr>
+<tr><td>56</td><td>Pureblade</td><td>Weapons</td><td></td></tr>
+<tr><td>57</td><td>Exorwand</td><td>Staves &amp; Wands</td><td></td></tr>
+<tr><td>58</td><td>Ali's Carpet</td><td>Other</td><td></td></tr>
+<tr><td>59</td><td>Magic Mouth</td><td>Other</td><td></td></tr>
+<tr><td>60</td><td>Luckshield</td><td>Other</td><td></td></tr>
+<tr><td>61</td><td>Giant Fgn</td><td>Figurines</td><td></td></tr>
+<tr><td>62</td><td>Admt Chain</td><td>Armor</td><td></td></tr>
+<tr><td>63</td><td>Admt Scale</td><td>Armor</td><td></td></tr>
+<tr><td>64</td><td>Admt Plate</td><td>Armor</td><td></td></tr>
+<tr><td>65</td><td>Bracers [4]</td><td>Armor</td><td></td></tr>
+<tr><td>66</td><td>Arcshield</td><td>Other</td><td></td></tr>
+<tr><td>67</td><td>Pure Shield</td><td>Shields</td><td></td></tr>
+<tr><td>68</td><td>Mage Staff</td><td>Staves &amp; Wands</td><td></td></tr>
+<tr><td>69</td><td>War Staff</td><td>Staves &amp; Wands</td><td></td></tr>
+<tr><td>70</td><td>Thief Dagger</td><td>Weapons</td><td></td></tr>
+<tr><td>71</td><td>Soul Mace</td><td>Weapons</td><td></td></tr>
+<tr><td>72</td><td>Wither Staff</td><td>Staves &amp; Wands</td><td></td></tr>
+<tr><td>73</td><td>Sorcerstaff</td><td>Other</td><td></td></tr>
+<tr><td>74</td><td>Sword of Pak</td><td>Weapons</td><td></td></tr>
+<tr><td>75</td><td>Heal Harp</td><td>Instruments</td><td></td></tr>
+<tr><td>76</td><td>Galt's Flute</td><td>Instruments</td><td></td></tr>
+<tr><td>77</td><td>Frost Horn</td><td>Instruments</td><td></td></tr>
+<tr><td>78</td><td>Dmnd Sword</td><td>Weapons</td><td></td></tr>
+<tr><td>79</td><td>Dmnd Shield</td><td>Shields</td><td></td></tr>
+<tr><td>80</td><td>Dmnd Dagger</td><td>Weapons</td><td></td></tr>
+<tr><td>81</td><td>Dmnd Helm</td><td>Helmets</td><td></td></tr>
+<tr><td>82</td><td>Golem Fgn</td><td>Figurines</td><td></td></tr>
+<tr><td>83</td><td>Titan Fgn</td><td>Figurines</td><td></td></tr>
+<tr><td>84</td><td>Conjurstaff</td><td>Other</td><td></td></tr>
+<tr><td>85</td><td>Arc's Hammer</td><td>Weapons</td><td></td></tr>
+<tr><td>86</td><td>Staff of Lor</td><td>Staves &amp; Wands</td><td></td></tr>
+<tr><td>87</td><td>Powerstaff</td><td>Other</td><td></td></tr>
+<tr><td>88</td><td>Mournblade</td><td>Weapons</td><td></td></tr>
+<tr><td>89</td><td>Dragonshield</td><td>Other</td><td></td></tr>
+<tr><td>90</td><td>Dmnd Plate</td><td>Armor</td><td></td></tr>
+<tr><td>91</td><td>Wargloves</td><td>Gloves</td><td></td></tr>
+<tr><td>92</td><td>Lorehelm</td><td>Other</td><td></td></tr>
+<tr><td>93</td><td>Dragonwand</td><td>Staves &amp; Wands</td><td></td></tr>
+<tr><td>94</td><td>Kiel's Compass</td><td>Other</td><td></td></tr>
+<tr><td>95</td><td>Speedboots</td><td>Other</td><td></td></tr>
+<tr><td>96</td><td>Flame Horn</td><td>Instruments</td><td></td></tr>
+<tr><td>97</td><td>Truthdrum</td><td>Instruments</td><td></td></tr>
+<tr><td>98</td><td>Spiritdrum</td><td>Instruments</td><td></td></tr>
+<tr><td>99</td><td>Pipes of Pan</td><td>Instruments</td><td></td></tr>
+<tr><td>100</td><td>Ring of Power</td><td>Rings</td><td></td></tr>
+<tr><td>101</td><td>Deathring</td><td>Other</td><td></td></tr>
+<tr><td>102</td><td>Ybarrashield</td><td>Other</td><td></td></tr>
+<tr><td>103</td><td>Spectre Mace</td><td>Weapons</td><td></td></tr>
+<tr><td>104</td><td>Dag Stone</td><td>Other</td><td></td></tr>
+<tr><td>105</td><td>Arc's Eye</td><td>Other</td><td></td></tr>
+<tr><td>106</td><td>Ogrewand</td><td>Staves &amp; Wands</td><td></td></tr>
+<tr><td>107</td><td>Spirithelm</td><td>Other</td><td></td></tr>
+<tr><td>108</td><td>Dragon Fgn</td><td>Figurines</td><td></td></tr>
+<tr><td>109</td><td>Mage Fgn</td><td>Figurines</td><td></td></tr>
+<tr><td>110</td><td>Troll Ring</td><td>Rings</td><td></td></tr>
+<tr><td>111</td><td>Troll Staff</td><td>Staves &amp; Wands</td><td></td></tr>
+<tr><td>112</td><td>Onyx Key</td><td>Other</td><td></td></tr>
+<tr><td>113</td><td>Crystal Sword</td><td>Weapons</td><td></td></tr>
+<tr><td>114</td><td>Stoneblade</td><td>Weapons</td><td></td></tr>
+<tr><td>115</td><td>Travelhelm</td><td>Other</td><td></td></tr>
+<tr><td>116</td><td>Death Dagger</td><td>Weapons</td><td></td></tr>
+<tr><td>117</td><td>Mongo Fgn</td><td>Figurines</td><td></td></tr>
+<tr><td>118</td><td>Lich Fgn</td><td>Figurines</td><td></td></tr>
+<tr><td>119</td><td>Eye</td><td>Other</td><td></td></tr>
+<tr><td>120</td><td>Master Key</td><td>Other</td><td></td></tr>
+<tr><td>121</td><td>WizWand</td><td>Staves &amp; Wands</td><td></td></tr>
+<tr><td>122</td><td>Silvr Square</td><td>Other</td><td></td></tr>
+<tr><td>123</td><td>Silvr Circle</td><td>Other</td><td></td></tr>
+<tr><td>124</td><td>Silvr Triang</td><td>Other</td><td></td></tr>
+<tr><td>125</td><td>Thor Fgn</td><td>Figurines</td><td></td></tr>
+<tr><td>126</td><td>Old Man Fgn</td><td>Figurines</td><td></td></tr>
+<tr><td>127</td><td>Spectre Snare</td><td>Other</td><td></td></tr>
+</table>
+<h2 id="walkthrough">Walkthrough</h2>
+<h3>BT1 — Skara Brae and Mangar's Tower</h3><ol>
+<li>Create a balanced group with front-line fighters, a Rogue, a Bard, and at least two spellcasters.</li>
+<li>Explore Skara Brae methodically, buy equipment from Garth, and use the Review Board and inn between expeditions.</li>
+<li>Learn the tower's routes, conserve spell points for dangerous encounters, and climb Mangar's Tower only after the party can recover from attrition.</li>
+<li>Defeat Mangar at the top of the tower to free Skara Brae.</li>
+</ol>
+<h3>BT2 — The Destiny Stone</h3><ol>
+<li>Carry forward a seasoned BT1 party or establish a new balanced party in Tangramayne.</li>
+<li>Use wilderness towns as safe resupply points while collecting the clues and artifacts that open the underworld realms.</li>
+<li>Recruit an Archmage once the four basic magic schools have been developed; the promotion is available only in BT2.</li>
+<li>Recover the Destiny Stone and complete the final confrontation to secure Tangramayne.</li>
+</ol>
+<h3>BT3 — Thief of Fate</h3><ol>
+<li>Begin with a capable mixed party and keep a reliable supply of healing, light, detection, and escape magic.</li>
+<li>Use time-travel destinations to collect the tools and knowledge required to pursue Tarjan.</li>
+<li>Chronomancers and Geomancers become available in this chapter; plan class changes around their different promotion paths.</li>
+<li>Face Tarjan only after the party has the required quest tools and enough reserves to survive a long final sequence.</li>
+</ol>
+<h2 id="strategy">Strategy notes</h2><ul>
+<li><b>Build for roles.</b> Keep durable fighters in front, bring a Rogue for traps, and carry enough magic to heal, light, detect, and escape.</li>
+<li><b>Map every area.</b> Use the trainer's Maps tab with the game's own map data to keep track of cities, wilderness, and dungeon routes.</li>
+<li><b>Manage spell progression.</b> School levels grant spells in bulk. Record which schools a character has left: the Review Board does not permit returning to a departed magic school.</li>
+<li><b>Use ZZGO carefully.</b> The Dream Spell is a BT2 travel tool. Its destination must be valid for the chapter currently loaded by the game.</li>
+<li><b>Save before commitments.</b> Class changes, deep-dungeon expeditions, and major quest hand-ins are all safer with a current save.</li>
+<li><b>Protect vital items.</b> Identify and preserve quest items. A party with strong equipment but without a required plot item can still be blocked.</li>
+<li><b>Treat NUKE as a reserve.</b> Gotterdammerung is exceptionally destructive; keep it for encounters where ending the fight immediately is worth the cost.</li>
+</ul>
+</body></html>
