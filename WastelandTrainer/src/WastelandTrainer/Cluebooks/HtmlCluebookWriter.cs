@@ -62,7 +62,7 @@ public static class HtmlCluebookWriter
         {
             s.AppendLine($"<h3>{E(area.Name)}</h3>");
             s.AppendLine($"<p>{E(area.Notes)}</p>");
-            s.AppendLine("<table class=\"ref\"><tr><th>Landmark</th><th>Notes</th></tr>");
+            s.AppendLine("<table class=\"ref\"><tr><th scope=\"col\">Landmark</th><th scope=\"col\">Notes</th></tr>");
             foreach (var landmark in area.Landmarks)
                 s.AppendLine($"<tr><td>{E(landmark.Name)}</td><td>{E(landmark.Notes)}</td></tr>");
             s.AppendLine("</table>");
@@ -72,7 +72,7 @@ public static class HtmlCluebookWriter
     private static void Skills(StringBuilder s)
     {
         s.AppendLine("<h2 id=\"skills\">Skill reference</h2>");
-        s.AppendLine("<table class=\"ref\"><tr><th>#</th><th>Skill</th><th>Minimum IQ</th><th>Use</th><th>Where used</th></tr>");
+        s.AppendLine("<table class=\"ref\"><tr><th scope=\"col\">#</th><th scope=\"col\">Skill</th><th scope=\"col\">Minimum IQ</th><th scope=\"col\">Use</th><th scope=\"col\">Where used</th></tr>");
         foreach (var skill in SkillBook.Skills)
             s.AppendLine($"<tr><td>{skill.Id}</td><td>{E(skill.Name)}</td><td>{skill.MinIq}</td><td>{E(skill.Use)}</td><td>{E(skill.Where)}</td></tr>");
         s.AppendLine("</table>");
@@ -81,7 +81,7 @@ public static class HtmlCluebookWriter
     private static void Items(StringBuilder s)
     {
         s.AppendLine("<h2 id=\"items\">Item reference</h2>");
-        s.AppendLine("<table class=\"ref\"><tr><th>#</th><th>Item</th><th>Category</th><th>Description</th><th>Damage / use</th></tr>");
+        s.AppendLine("<table class=\"ref\"><tr><th scope=\"col\">#</th><th scope=\"col\">Item</th><th scope=\"col\">Category</th><th scope=\"col\">Description</th><th scope=\"col\">Damage / use</th></tr>");
         foreach (var item in ItemCatalog.Items.Where(item => item.Id != 0))
             s.AppendLine($"<tr><td>{item.Id}</td><td>{E(item.Name)}</td><td>{E(item.Category)}</td><td>{E(item.Description)}</td><td>{E(item.Damage)}</td></tr>");
         s.AppendLine("</table>");
@@ -109,7 +109,7 @@ public static class HtmlCluebookWriter
     }
 
     private static void Row(StringBuilder s, string label, string value) =>
-        s.AppendLine($"<tr><th>{E(label)}</th><td>{E(value)}</td></tr>");
+        s.AppendLine($"<tr><th scope=\"row\">{E(label)}</th><td>{E(value)}</td></tr>");
 
     private static string E(string text) => HtmlPage.Escape(text);
 

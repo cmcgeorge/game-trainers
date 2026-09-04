@@ -75,7 +75,8 @@ public sealed class CluebookViewModel : ObservableObject
         var html = HtmlCluebookWriter.Write(Cluebook.Build(options));
         var docs = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         var path = Path.Combine(docs, "DragonWars-cluebook.html");
-        File.WriteAllText(path, html);
+        try { File.WriteAllText(path, html); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Could not save: {e.Message}"; return; }
         _lastSaved = path;
         Status = $"Saved to {path}";
         _openCommand.RaiseCanExecuteChanged();

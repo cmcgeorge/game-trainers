@@ -65,7 +65,7 @@ public static class HtmlCluebookWriter
         s.AppendLine("<h2 id=\"levels\">Descent reference</h2>");
         s.AppendLine("<p>The town is depth 0. Dungeon depth is measured in 50-foot increments. The level layouts are procedural; this reference lists important milestones rather than fixed maps.</p>");
         s.AppendLine(DescentSvg());
-        s.AppendLine("<table class=\"ref\"><tr><th>Depth</th><th>Feet</th><th>Notable monsters</th><th>Notable items</th><th>Advice</th></tr>");
+        s.AppendLine("<table class=\"ref\"><tr><th scope=\"col\">Depth</th><th scope=\"col\">Feet</th><th scope=\"col\">Notable monsters</th><th scope=\"col\">Notable items</th><th scope=\"col\">Advice</th></tr>");
         foreach (var level in levels)
             s.AppendLine($"<tr><td>{E(level.Name)}</td><td>{level.Feet}</td><td>{E(level.NotableMonsters)}</td><td>{E(level.NotableItems)}</td><td>{E(level.Notes)}</td></tr>");
         s.AppendLine("</table>");
@@ -89,11 +89,11 @@ public static class HtmlCluebookWriter
     private static void RacesAndClasses(StringBuilder s)
     {
         s.AppendLine("<h2 id=\"characters\">Races and classes</h2>");
-        s.AppendLine("<h3>Races</h3><table class=\"ref\"><tr><th>Race</th><th>Allowed classes</th><th>Key adjustments</th><th>Infravision</th><th>Notes</th></tr>");
+        s.AppendLine("<h3>Races</h3><table class=\"ref\"><tr><th scope=\"col\">Race</th><th scope=\"col\">Allowed classes</th><th scope=\"col\">Key adjustments</th><th scope=\"col\">Infravision</th><th scope=\"col\">Notes</th></tr>");
         foreach (var race in RaceBook.Races)
             s.AppendLine($"<tr><td>{E(race.Name)}</td><td>{E(race.AllowedClasses)}</td><td>{E(race.KeyAdjustments)}</td><td>{(race.Infravision ? "Yes" : "No")}</td><td>{E(race.Notes)}</td></tr>");
         s.AppendLine("</table>");
-        s.AppendLine("<h3>Classes</h3><table class=\"ref\"><tr><th>Class</th><th>Prime stat</th><th>Hit die</th><th>Mana basis</th><th>Notes</th><th>Skill gain (fight/bow/device/disarm/throw)</th></tr>");
+        s.AppendLine("<h3>Classes</h3><table class=\"ref\"><tr><th scope=\"col\">Class</th><th scope=\"col\">Prime stat</th><th scope=\"col\">Hit die</th><th scope=\"col\">Mana basis</th><th scope=\"col\">Notes</th><th scope=\"col\">Skill gain (fight/bow/device/disarm/throw)</th></tr>");
         foreach (var characterClass in ClassBook.Classes)
             s.AppendLine($"<tr><td>{E(characterClass.Name)}</td><td>{E(characterClass.PrimeStat)}</td><td>{E(characterClass.HitDie)}</td><td>{E(characterClass.ManaBasis)}</td><td>{E(characterClass.Notes)}</td><td>{E(characterClass.SkillRow)}</td></tr>");
         s.AppendLine("</table>");
@@ -109,7 +109,7 @@ public static class HtmlCluebookWriter
 
     private static void SpellTable(StringBuilder s, string heading, IReadOnlyList<SpellInfo> spells)
     {
-        s.AppendLine($"<h3>{E(heading)}</h3><table class=\"ref\"><tr><th>Letter</th><th>Name</th><th>Level</th><th>Mana</th><th>Book</th><th>Effect</th><th>Damage</th></tr>");
+        s.AppendLine($"<h3>{E(heading)}</h3><table class=\"ref\"><tr><th scope=\"col\">Letter</th><th scope=\"col\">Name</th><th scope=\"col\">Level</th><th scope=\"col\">Mana</th><th scope=\"col\">Book</th><th scope=\"col\">Effect</th><th scope=\"col\">Damage</th></tr>");
         foreach (var spell in spells)
             s.AppendLine($"<tr><td>{E(spell.Letter)}</td><td>{E(spell.Name)}</td><td>{spell.MinLevel}</td><td>{spell.ManaCost}</td><td>{E(spell.Book)}</td><td>{E(spell.Effect)}</td><td>{E(spell.Damage)}</td></tr>");
         s.AppendLine("</table>");
@@ -118,15 +118,15 @@ public static class HtmlCluebookWriter
     private static void Items(StringBuilder s)
     {
         s.AppendLine("<h2 id=\"items\">Item reference</h2>");
-        s.AppendLine("<h3>Item categories</h3><table class=\"ref\"><tr><th>Symbol</th><th>Category</th><th>Examples</th><th>Notes</th></tr>");
+        s.AppendLine("<h3>Item categories</h3><table class=\"ref\"><tr><th scope=\"col\">Symbol</th><th scope=\"col\">Category</th><th scope=\"col\">Examples</th><th scope=\"col\">Notes</th></tr>");
         foreach (var item in ItemBook.Items)
             s.AppendLine($"<tr><td>{E(item.DisplayChar)}</td><td>{E(item.Category)}</td><td>{E(item.Examples)}</td><td>{E(item.Notes)}</td></tr>");
         s.AppendLine("</table>");
-        s.AppendLine("<h3>Ego weapons</h3><table class=\"ref\"><tr><th>Code</th><th>Name</th><th>Effect</th></tr>");
+        s.AppendLine("<h3>Ego weapons</h3><table class=\"ref\"><tr><th scope=\"col\">Code</th><th scope=\"col\">Name</th><th scope=\"col\">Effect</th></tr>");
         foreach (var weapon in ItemBook.EgoWeapons)
             s.AppendLine($"<tr><td>{E(weapon.Code)}</td><td>{E(weapon.Name)}</td><td>{E(weapon.Effect)}</td></tr>");
         s.AppendLine("</table>");
-        s.AppendLine("<h3>Wearable flags</h3><table class=\"ref\"><tr><th>Code</th><th>Effect</th></tr>");
+        s.AppendLine("<h3>Wearable flags</h3><table class=\"ref\"><tr><th scope=\"col\">Code</th><th scope=\"col\">Effect</th></tr>");
         foreach (var flag in ItemBook.WearableFlags)
             s.AppendLine($"<tr><td>{E(flag.Code)}</td><td>{E(flag.Effect)}</td></tr>");
         s.AppendLine("</table>");
@@ -136,7 +136,7 @@ public static class HtmlCluebookWriter
     {
         s.AppendLine("<h2 id=\"bestiary\">Monster bestiary</h2>");
         s.AppendLine("<p>This is a curated field guide to early threats, major dragons, liches, and the Balrog.</p>");
-        s.AppendLine("<table class=\"ref\"><tr><th>Symbol</th><th>Creature</th><th>Depth</th><th>AC</th><th>HP</th><th>XP</th><th>Traits</th><th>Advice</th></tr>");
+        s.AppendLine("<table class=\"ref\"><tr><th scope=\"col\">Symbol</th><th scope=\"col\">Creature</th><th scope=\"col\">Depth</th><th scope=\"col\">AC</th><th scope=\"col\">HP</th><th scope=\"col\">XP</th><th scope=\"col\">Traits</th><th scope=\"col\">Advice</th></tr>");
         foreach (var creature in MonsterBook.Creatures)
             s.AppendLine($"<tr><td>{E(creature.Symbol)}</td><td>{E(creature.Name)}</td><td>{creature.Level}</td><td>{creature.ArmorClass}</td><td>{E(creature.HitDice)}</td><td>{creature.Exp}</td><td>{E(creature.Flags)}</td><td>{E(creature.Recall)}</td></tr>");
         s.AppendLine("</table>");
@@ -171,7 +171,7 @@ public static class HtmlCluebookWriter
     }
 
     private static void Row(StringBuilder s, string label, string value) =>
-        s.AppendLine($"<tr><th>{E(label)}</th><td>{E(value)}</td></tr>");
+        s.AppendLine($"<tr><th scope=\"row\">{E(label)}</th><td>{E(value)}</td></tr>");
 
     private static string E(string text) => HtmlPage.Escape(text);
 

@@ -32,6 +32,8 @@ public static class MapRenderer
 
     private static readonly Typeface Mono = new("Consolas");
 
+    private static readonly double PixelsPerDip = 1.0;
+
     public static int PixelWidth(int width) => Border * 2 + Cell * width;
     public static int PixelHeight(int height) => Border * 2 + Cell * height;
 
@@ -107,14 +109,15 @@ public static class MapRenderer
 
     private static FormattedText Ruler(int value) =>
         new(value.ToString(CultureInfo.InvariantCulture),
-            CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Mono, 10, RulerBrush);
+            CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Mono, 10, RulerBrush,
+            PixelsPerDip);
 
     private static void DrawLabel(DrawingContext dc, Rect rect, string label)
     {
         if (string.IsNullOrEmpty(label)) return;
         var ft = new FormattedText(label, CultureInfo.InvariantCulture,
             FlowDirection.LeftToRight, Mono, 12, BgBrush,
-            VisualTreeHelper.GetDpi(new DrawingVisual()).PixelsPerDip);
+            PixelsPerDip);
         dc.DrawText(ft, new Point(rect.X + (Cell - ft.Width) / 2, rect.Y + (Cell - ft.Height) / 2));
     }
 

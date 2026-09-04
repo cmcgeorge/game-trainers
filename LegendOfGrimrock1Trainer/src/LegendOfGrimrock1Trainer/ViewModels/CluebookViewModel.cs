@@ -52,7 +52,8 @@ public sealed class CluebookViewModel : ObservableObject
             IncludeStrategy = IncludeStrategy,
         };
         var path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Legend-of-Grimrock-cluebook.html");
-        File.WriteAllText(path, HtmlCluebookWriter.Write(Cluebook.Build(options)));
+        try { File.WriteAllText(path, HtmlCluebookWriter.Write(Cluebook.Build(options))); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Could not save: {e.Message}"; return; }
         _lastSaved = path;
         Status = $"Saved to {path}";
         _openCommand.RaiseCanExecuteChanged();

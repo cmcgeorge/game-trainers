@@ -1410,13 +1410,16 @@ if (loc != null)
     Equal("after clear, the sweep stops immediately (0 written, 0 skipped)", afterResult, (0, 0));
     Equal("and no writes were issued", mapHost.Writes.Count, 0);
 
-    // Cancellation: the token stops the sweep even when the session is still live.
+    // Cancellation: the token throws so RunSweep's catch block fires and reports cancellation
+    // (a break would return (0,0) and the caller would falsely report "no tile validated").
     mapVm.Adopt(loc, GameTables.Empty);
     mapVm.ConfirmedRisk = true;
     using var cts = new System.Threading.CancellationTokenSource();
     cts.Cancel();
-    var cancelledResult = mapVm.Sweep(loc, 0x100000, cts.Token, true);
-    Equal("a cancelled token stops the sweep immediately", cancelledResult, (0, 0));
+    bool cancelled = false;
+    try { mapVm.Sweep(loc, 0x100000, cts.Token, true); }
+    catch (OperationCanceledException) { cancelled = true; }
+    Equal("a cancelled token throws OperationCanceledException", cancelled, true);
 }
 
 static string? FindUp(string relativePath)

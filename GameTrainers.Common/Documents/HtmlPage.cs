@@ -89,7 +89,21 @@ public sealed class HtmlPage
     public static string Escape(string value)
     {
         ArgumentNullException.ThrowIfNull(value);
-        return value.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
+        var sb = new StringBuilder(value.Length);
+        foreach (char c in value)
+        {
+            switch (c)
+            {
+                case '&': sb.Append("&amp;"); break;
+                case '<': sb.Append("&lt;"); break;
+                case '>': sb.Append("&gt;"); break;
+                case '"': sb.Append("&quot;"); break;
+                default:
+                    if (c is '\t' or '\n' or '\r' || c >= ' ') sb.Append(c);
+                    break;
+            }
+        }
+        return sb.ToString();
     }
 
     /// <summary>

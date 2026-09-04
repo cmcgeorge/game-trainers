@@ -28,6 +28,8 @@ public static class MapRenderer
     private static readonly Pen ThickPen = Pen(Color.FromRgb(0x4A, 0x4D, 0x5A));
     private static readonly Typeface Mono = new("Consolas");
 
+    private static readonly double PixelsPerDip = 1.0;
+
     public static ImageSource Render(AreaLevel level)
     {
         int width = Border * 2 + Cell * level.Width;
@@ -87,13 +89,13 @@ public static class MapRenderer
     }
 
     private static FormattedText RulerText(int value) => new(value.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture,
-        FlowDirection.LeftToRight, Mono, 10, Ruler, VisualTreeHelper.GetDpi(new DrawingVisual()).PixelsPerDip);
+        FlowDirection.LeftToRight, Mono, 10, Ruler, PixelsPerDip);
 
     private static void DrawLabel(DrawingContext drawing, Rect rect, string label)
     {
         if (label.Length == 0) return;
         var text = new FormattedText(label, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Mono, 13, Background,
-            VisualTreeHelper.GetDpi(new DrawingVisual()).PixelsPerDip);
+            PixelsPerDip);
         drawing.DrawText(text, new Point(rect.X + (Cell - text.Width) / 2, rect.Y + (Cell - text.Height) / 2));
     }
 

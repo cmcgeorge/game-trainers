@@ -76,7 +76,8 @@ public sealed class CluebookViewModel : ObservableObject
         string html = HtmlCluebookWriter.Write(cluebook);
         string documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
         string path = Path.Combine(documents, "AlternateRealityCity-cluebook.html");
-        File.WriteAllText(path, html);
+        try { File.WriteAllText(path, html); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Status = $"Could not save: {e.Message}"; return; }
         _lastSaved = path;
         Status = $"Saved to {path}";
         _openCommand.RaiseCanExecuteChanged();

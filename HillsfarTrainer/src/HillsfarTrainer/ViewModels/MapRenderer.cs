@@ -29,6 +29,8 @@ public static class MapRenderer
     private static readonly Pen ThickPen = FrozenPen(Color.FromRgb(0x4A, 0x4D, 0x5A));
     private static readonly Typeface Mono = new("Consolas");
 
+    private static readonly double PixelsPerDip = 1.0;
+
     public static int PixelWidth(int width) => Border * 2 + Cell * width;
     public static int PixelHeight(int height) => Border * 2 + Cell * height;
 
@@ -107,7 +109,7 @@ public static class MapRenderer
     {
         if (string.IsNullOrEmpty(label)) return;
         var text = new FormattedText(label, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Mono, 12,
-            BackgroundBrush, VisualTreeHelper.GetDpi(new DrawingVisual()).PixelsPerDip);
+            BackgroundBrush, PixelsPerDip);
         context.DrawText(text, new Point(rect.X + (Cell - text.Width) / 2, rect.Y + (Cell - text.Height) / 2));
     }
 

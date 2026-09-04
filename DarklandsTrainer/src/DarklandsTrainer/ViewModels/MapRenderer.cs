@@ -14,9 +14,23 @@ public static class MapRenderer
     private static readonly Brush BackgroundBrush = Frozen(Color.FromRgb(0x14, 0x15, 0x1A));
     private static readonly Brush RulerBrush = Frozen(Color.FromRgb(0x8A, 0x8D, 0x99));
     private static readonly Brush LabelBrush = Frozen(Color.FromRgb(0x14, 0x15, 0x1A));
+    private static readonly Brush FloorBrush = Frozen(Color.FromRgb(0x1E, 0x1F, 0x26));
+    private static readonly Brush WallBrush = Frozen(Color.FromRgb(0x4A, 0x4D, 0x5A));
+    private static readonly Brush ForestBrush = Frozen(Color.FromRgb(0x3E, 0x72, 0x4B));
+    private static readonly Brush CityBrush = Frozen(Color.FromRgb(0xB8, 0x72, 0x48));
+    private static readonly Brush TownBrush = Frozen(Color.FromRgb(0xC8, 0x9B, 0x3C));
+    private static readonly Brush VillageBrush = Frozen(Color.FromRgb(0xB9, 0xA4, 0x6A));
+    private static readonly Brush MonasteryBrush = Frozen(Color.FromRgb(0x95, 0x80, 0xC2));
+    private static readonly Brush InnBrush = Frozen(Color.FromRgb(0xD1, 0x88, 0x6A));
+    private static readonly Brush CastleBrush = Frozen(Color.FromRgb(0x8C, 0x9C, 0xB8));
+    private static readonly Brush DungeonBrush = Frozen(Color.FromRgb(0x90, 0x58, 0x58));
+    private static readonly Brush StartBrush = Frozen(Color.FromRgb(0xB0, 0x70, 0xE0));
+    private static readonly Brush PoiDefaultBrush = Frozen(Color.FromRgb(0xE0, 0xE2, 0xE8));
     private static readonly Pen ThinPen = FrozenPen(Color.FromRgb(0x2E, 0x30, 0x38), 1);
     private static readonly Pen ThickPen = FrozenPen(Color.FromRgb(0x4A, 0x4D, 0x5A), 1);
     private static readonly Typeface Mono = new("Consolas");
+
+    private static readonly double PixelsPerDip = 1.0;
 
     public static int PixelWidth(int width) => Border * 2 + Cell * width;
     public static int PixelHeight(int height) => Border * 2 + Cell * height;
@@ -50,29 +64,29 @@ public static class MapRenderer
 
     private static Brush CellBrush(CellKind kind) => kind switch
     {
-        CellKind.Wall => Frozen(Color.FromRgb(0x4A, 0x4D, 0x5A)),
-        CellKind.Forest => Frozen(Color.FromRgb(0x3E, 0x72, 0x4B)),
-        CellKind.City => Frozen(Color.FromRgb(0xB8, 0x72, 0x48)),
-        CellKind.Town => Frozen(Color.FromRgb(0xC8, 0x9B, 0x3C)),
-        CellKind.Village => Frozen(Color.FromRgb(0xB9, 0xA4, 0x6A)),
-        CellKind.Monastery => Frozen(Color.FromRgb(0x95, 0x80, 0xC2)),
-        CellKind.Inn => Frozen(Color.FromRgb(0xD1, 0x88, 0x6A)),
-        CellKind.Castle => Frozen(Color.FromRgb(0x8C, 0x9C, 0xB8)),
-        CellKind.Dungeon => Frozen(Color.FromRgb(0x90, 0x58, 0x58)),
-        CellKind.Start => Frozen(Color.FromRgb(0xB0, 0x70, 0xE0)),
-        _ => Frozen(Color.FromRgb(0x1E, 0x1F, 0x26)),
+        CellKind.Wall => WallBrush,
+        CellKind.Forest => ForestBrush,
+        CellKind.City => CityBrush,
+        CellKind.Town => TownBrush,
+        CellKind.Village => VillageBrush,
+        CellKind.Monastery => MonasteryBrush,
+        CellKind.Inn => InnBrush,
+        CellKind.Castle => CastleBrush,
+        CellKind.Dungeon => DungeonBrush,
+        CellKind.Start => StartBrush,
+        _ => FloorBrush,
     };
 
     private static Brush PoiBrush(string name) => name switch
     {
-        var value when value.Contains("City", StringComparison.Ordinal) || value is "Nuremberg" or "Mainz" or "Cologne" or "Augsburg" or "Regensburg" or "Hamburg" or "Frankfurt" => CellBrush(CellKind.City),
-        var value when value.Contains("Town", StringComparison.Ordinal) => CellBrush(CellKind.Town),
-        var value when value.Contains("Monastery", StringComparison.Ordinal) => CellBrush(CellKind.Monastery),
-        var value when value.Contains("Inn", StringComparison.Ordinal) => CellBrush(CellKind.Inn),
-        var value when value.Contains("Castle", StringComparison.Ordinal) || value.Contains("Fortress", StringComparison.Ordinal) => CellBrush(CellKind.Castle),
-        var value when value.Contains("Cave", StringComparison.Ordinal) || value.Contains("Temple", StringComparison.Ordinal) || value.Contains("Dungeon", StringComparison.Ordinal) => CellBrush(CellKind.Dungeon),
-        var value when value.Contains("Starting", StringComparison.Ordinal) => CellBrush(CellKind.Start),
-        _ => Frozen(Color.FromRgb(0xE0, 0xE2, 0xE8)),
+        var value when value.Contains("City", StringComparison.Ordinal) || value is "Nuremberg" or "Mainz" or "Cologne" or "Augsburg" or "Regensburg" or "Hamburg" or "Frankfurt" => CityBrush,
+        var value when value.Contains("Town", StringComparison.Ordinal) => TownBrush,
+        var value when value.Contains("Monastery", StringComparison.Ordinal) => MonasteryBrush,
+        var value when value.Contains("Inn", StringComparison.Ordinal) => InnBrush,
+        var value when value.Contains("Castle", StringComparison.Ordinal) || value.Contains("Fortress", StringComparison.Ordinal) => CastleBrush,
+        var value when value.Contains("Cave", StringComparison.Ordinal) || value.Contains("Temple", StringComparison.Ordinal) || value.Contains("Dungeon", StringComparison.Ordinal) => DungeonBrush,
+        var value when value.Contains("Starting", StringComparison.Ordinal) => StartBrush,
+        _ => PoiDefaultBrush,
     };
 
     private static string PoiLabel(string name) => name switch
@@ -105,12 +119,12 @@ public static class MapRenderer
     }
 
     private static FormattedText Ruler(int value) => new(value.ToString(CultureInfo.InvariantCulture), CultureInfo.InvariantCulture,
-        FlowDirection.LeftToRight, Mono, 10, RulerBrush, VisualTreeHelper.GetDpi(new DrawingVisual()).PixelsPerDip);
+        FlowDirection.LeftToRight, Mono, 10, RulerBrush, PixelsPerDip);
 
     private static void DrawLabel(DrawingContext context, Rect rect, string label)
     {
         var text = new FormattedText(label, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Mono, 12, LabelBrush,
-            VisualTreeHelper.GetDpi(new DrawingVisual()).PixelsPerDip);
+            PixelsPerDip);
         context.DrawText(text, new Point(rect.X + (Cell - text.Width) / 2, rect.Y + (Cell - text.Height) / 2));
     }
 

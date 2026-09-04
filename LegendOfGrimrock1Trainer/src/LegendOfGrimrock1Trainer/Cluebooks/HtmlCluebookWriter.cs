@@ -106,13 +106,17 @@ public static class HtmlCluebookWriter
             new[] { "Axes", "Chop 10; Cleave 22; Rampage 33", "Axe Master: Attack Power +20" },
             new[] { "Maces", "Bash 10; Crushing Blow 20; Devastating Blow 33", "Mace Master: attacks ignore armour" },
             new[] { "Daggers", "Stab 10; Piercing Strike 22; Flurry 33", "Death Strike" },
+            new[] { "Unarmed Combat", "Fist Fighter 8; Bear Trap 20; Blazing Strike 33", "Unarmed Master: Attack Power +20" },
             new[] { "Assassination", "Backstab 8; Reach Attack 12; Improved Critical 31", "Master Assassin" },
             new[] { "Missile Weapons", "Quick Shot 12; Improved Quick Shot 24; Volley 32", "Master Archer: double critical chance" },
             new[] { "Throwing Weapons", "Quick Throw 12; Improved Quick Throw 24; Double Throw 32", "Throwing Master: double critical chance" },
             new[] { "Dodge", "Stealth 11; Improved Stealth 24", "Ninja Master: Evasion +50" },
             new[] { "Staff Defense", "Light Armor Proficiency 14", "Staff Master: Protection +10, Evasion +30" },
             new[] { "Spellcraft", "Light and Darkness 5; Combat Caster 10; Improved Combat Caster 18", "Archmage: spells cost half energy" },
-            new[] { "Elemental magic", "Circle of Protection 32", "Mastery: +100 matching resistance" },
+            new[] { "Fire Magic", "Fireburst 2; Fireball 13; Fire Shield 16; Circle of Protection 32", "Fire Mastery: +100 Fire resistance" },
+            new[] { "Air Magic", "Shock 4; Lightning Bolt 14; Invisibility 19; Shock Shield 22; Circle of Protection 32", "Air Mastery: +100 Shock resistance" },
+            new[] { "Ice Magic", "Ice Shards 3; Frostbolt 13; Frost Shield 19; Circle of Protection 32", "Ice Mastery: +100 Cold resistance" },
+            new[] { "Earth Magic", "Poison Cloud 3; Poison Bolt 7; Poison Shield 13; Circle of Protection 32", "Earth Mastery: +100 Poison resistance" },
         });
     }
 
@@ -185,7 +189,7 @@ public static class HtmlCluebookWriter
     private static void Table(StringBuilder s, IReadOnlyList<string> headers, IEnumerable<string[]> rows)
     {
         s.AppendLine("<table class=\"ref\"><tr>");
-        foreach (var header in headers) s.Append($"<th>{E(header)}</th>");
+        foreach (var header in headers) s.Append($"<th scope=\"col\">{E(header)}</th>");
         s.AppendLine("</tr>");
         foreach (var row in rows)
         {

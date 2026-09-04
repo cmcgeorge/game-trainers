@@ -378,6 +378,8 @@ public sealed class MapsViewModel : ObservableObject
     private void ResetSearch()
     {
         _scanCts?.Cancel();
+        _scanCts?.Dispose();
+        _scanCts = null;
         _isScanning = false;
         _candidates = new();
         _lockedAddress = null;
@@ -397,6 +399,8 @@ public sealed class MapsViewModel : ObservableObject
     public void OnDetached()
     {
         _scanCts?.Cancel();
+        _scanCts?.Dispose();
+        _scanCts = null;
         _isScanning = false;
         _candidates = new();
         _lockedAddress = null;

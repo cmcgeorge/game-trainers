@@ -118,7 +118,7 @@ public static class HtmlCluebookWriter
 
     private static void Table(StringBuilder markup, string title, IEnumerable<(int Id, string Name, string Type)> values)
     {
-        markup.AppendLine($"<h3>{Escape(title)}</h3><table class=\"ref\"><tr><th>#</th><th>Name</th><th>Type</th></tr>");
+        markup.AppendLine($"<h3>{Escape(title)}</h3><table class=\"ref\"><tr><th scope=\"col\">#</th><th scope=\"col\">Name</th><th scope=\"col\">Type</th></tr>");
         foreach (var value in values)
             markup.AppendLine($"<tr><td>{value.Id}</td><td>{Escape(value.Name)}</td><td>{Escape(value.Type)}</td></tr>");
         markup.AppendLine("</table>");

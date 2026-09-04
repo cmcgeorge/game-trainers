@@ -24,6 +24,8 @@ public static class MapRenderer
     private static readonly Pen GridPen = FrozenPen(Color.FromRgb(0x2E, 0x30, 0x38));
     private static readonly Typeface Mono = new("Consolas");
 
+    private static readonly double PixelsPerDip = 1.0;
+
     public static ImageSource Render(AreaLevel level)
     {
         int width = Border * 2 + Cell * level.Width;
@@ -79,7 +81,7 @@ public static class MapRenderer
     private static void DrawLabel(DrawingContext context, Rect rect, string label)
     {
         var text = new FormattedText(label, CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Mono, 12,
-            Background, VisualTreeHelper.GetDpi(new DrawingVisual()).PixelsPerDip);
+            Background, PixelsPerDip);
         context.DrawText(text, new Point(rect.X + (Cell - text.Width) / 2, rect.Y + (Cell - text.Height) / 2));
     }
 

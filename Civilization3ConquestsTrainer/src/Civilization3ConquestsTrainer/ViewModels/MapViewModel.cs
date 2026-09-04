@@ -184,7 +184,7 @@ public sealed class MapViewModel : ObservableObject
 
         for (int i = 0; i < loc.TileCount; i++)
         {
-            if (ct.IsCancellationRequested) break;
+            ct.ThrowIfCancellationRequested();
             // If the session was torn down or a new one adopted mid-sweep, the loc we captured is
             // stale — its tile addresses belong to the old process. Stop before writing.
             if (!ReferenceEquals(_loc, loc)) break;

@@ -94,8 +94,8 @@ public static class HtmlCluebookWriter
                 svg.Rect(pad + x * cell, pad + y * cell, cell, cell, ("fill", fill));
                 DrawEdge(svg, square.West, pad + x * cell, pad + y * cell, cell, false);
                 DrawEdge(svg, square.North, pad + x * cell, pad + y * cell, cell, true);
-                if (x == map.Width - 1) DrawEdge(svg, square.East, pad + x * cell, pad + y * cell, cell, false);
-                if (y == map.Height - 1) DrawEdge(svg, square.South, pad + x * cell, pad + y * cell, cell, true);
+                if (x == map.Width - 1) DrawEdge(svg, square.East, pad + (x + 1) * cell, pad + y * cell, cell, false);
+                if (y == map.Height - 1) DrawEdge(svg, square.South, pad + x * cell, pad + (y + 1) * cell, cell, true);
                 if (square.Label is { } label)
                     svg.Text(pad + x * cell + cell / 2.0, pad + y * cell + cell * 0.68, label, ("text-anchor", "middle"), ("font-family", "monospace"), ("font-size", Math.Max(7, cell * 0.28).ToString(System.Globalization.CultureInfo.InvariantCulture)), ("fill", "#E0B040"));
             }
