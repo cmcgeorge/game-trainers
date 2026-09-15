@@ -232,6 +232,11 @@ public sealed class SaveGame
         // picks up the copied inventory.
         byte[] head = dst.Items.Count > 0 ? NonNullLink : new byte[4];
         Array.Copy(head, 0, dst.SavBytes, PorFormat.OffItemsPtr, 4);
+        // Both patched bytes lie inside the 285-byte record, which dst.Record also holds as an
+        // independent copy — mirror them there too, or a later WriteRecord (which copies
+        // Record.Bytes back over SavBytes) would silently revert this patch.
+        dst.Record.Bytes[PorFormat.OffNumberOfItems] = dst.SavBytes[PorFormat.OffNumberOfItems];
+        Array.Copy(head, 0, dst.Record.Bytes, PorFormat.OffItemsPtr, 4);
         WriteAtomic(dst.SavPath, dst.SavBytes);
         return dst.Items.Count;
     }
@@ -256,6 +261,9 @@ public sealed class SaveGame
         // (including any bytes past the 285-byte record) so a write-back never truncates the file.
         byte[] head = present ? NonNullLink : new byte[4];
         Array.Copy(head, 0, c.SavBytes, PorFormat.OffEffectsPtr, 4);
+        // OffEffectsPtr lies inside the 285-byte record; mirror the patch into c.Record's
+        // independent copy too, or a later WriteRecord would revert it (see DuplicateInventory).
+        Array.Copy(head, 0, c.Record.Bytes, PorFormat.OffEffectsPtr, 4);
         WriteAtomic(c.SavPath, c.SavBytes);
     }
 

@@ -1,4 +1,5 @@
 using PoolOfRadianceTrainer.Mvvm;
+using PoolOfRadianceTrainer.Game;
 
 namespace PoolOfRadianceTrainer.ViewModels;
 
@@ -9,6 +10,13 @@ public interface ICharacterHost
     /// <summary>Writes <paramref name="length"/> bytes of <paramref name="source"/> (from
     /// <paramref name="offset"/>) to the record's live address + offset. No-op when offline.</summary>
     bool WriteBytes(nuint recordAddress, byte[] source, int offset, int length);
+    /// <summary>Re-reads the full record at <paramref name="recordAddress"/> into
+    /// <paramref name="destination"/> (length &gt;= the record size), validated as still the same
+    /// creature <paramref name="expected"/> describes. Returns false when offline, the address no
+    /// longer holds a valid record, or a different creature now holds it — callers MUST ignore
+    /// <paramref name="destination"/> on a false return, since it may already have been overwritten
+    /// with the unvalidated bytes that failed the check.</summary>
+    bool TryReadFreshBytes(nuint recordAddress, CharacterRecord expected, byte[] destination);
 }
 
 /// <summary>One editable ability score (STR/INT/WIS/DEX/CON/CHA).</summary>

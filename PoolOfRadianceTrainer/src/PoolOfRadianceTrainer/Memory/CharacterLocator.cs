@@ -59,8 +59,13 @@ public static class CharacterLocator
                 int read = mem.Read(region.Base + offset, buf, readWant);
                 if (read < PorFormat.RecordSize)
                 {
+                    // This chunk is unreadable (e.g. a page freed mid-scan), but later chunks in
+                    // the same region may still be committed — skip past just this chunk instead
+                    // of abandoning the rest of the region.
+                    offset += (nuint)want;
                     scanned += (nuint)want;
-                    break;
+                    progress?.Report(totalBytes == 0 ? 0 : Math.Min(1.0, (double)scanned / totalBytes));
+                    continue;
                 }
 
                 for (int i = 0; i + PorFormat.RecordSize <= read; i++)

@@ -26,6 +26,24 @@ public static class PorFormat
     /// <summary>Size of one character/monster record in bytes.</summary>
     public const int RecordSize = 0x11D;   // 285
 
+    /// <summary>Does the byte range [offset, offset+length) touch one of the four identity
+    /// fields (name, race, class, gender)? Those are the fields <see cref="CharacterRecord.IsSameCreatureAs"/>
+    /// compares. Callers writing several ranges in one edit (a class change, a full reroll) should
+    /// write any range this returns true for before any range it returns false for, so that by the
+    /// time a non-identity range is written and re-validated, live memory already carries the new
+    /// identity the local record does — otherwise a live re-read taken mid-sequence still shows the
+    /// old identity while the local record already shows the new one, and a same-creature check
+    /// between them would fail even though nothing is actually wrong.</summary>
+    public static bool TouchesIdentityField(int offset, int length)
+    {
+        int end = offset + length;
+        bool Overlaps(int fieldOffset, int fieldLength) => offset < fieldOffset + fieldLength && end > fieldOffset;
+        return Overlaps(OffNameLength, 1 + NameMaxLength)   // length byte + name bytes are contiguous
+            || Overlaps(OffRace, 1)
+            || Overlaps(OffClass, 1)
+            || Overlaps(OffGender, 1);
+    }
+
     /// <summary>Name field is a Pascal string: length byte + 15 bytes of ASCII.</summary>
     public const int OffNameLength = 0x00;
     public const int OffName = 0x01;

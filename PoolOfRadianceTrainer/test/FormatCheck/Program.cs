@@ -1362,4 +1362,5 @@ file sealed class OfflineHost : ICharacterHost
 {
     public bool IsAttached => false;
     public bool WriteBytes(nuint recordAddress, byte[] source, int offset, int length) => false;
+    public bool TryReadFreshBytes(nuint recordAddress, CharacterRecord expected, byte[] destination) => false;
 }

@@ -541,12 +541,22 @@ public sealed class LiveInventoryViewModel : ObservableObject, ILiveItemHost
         if (_guestBase is not { } b) return false;
         if (!c.RefreshRecord(_mem, _recordBuf)) return false;
 
+        // Matching only by (Type, DisplayName) is ambiguous when a character carries two
+        // identical items — e.g. two Longswords — and one of them moved. Excluding addresses
+        // already claimed by this character's *other* item view-models avoids stealing the slot
+        // of a duplicate that hasn't moved (or was already rebound earlier this pass); it doesn't
+        // fully disambiguate two identical items that both moved in the same tick, since nothing
+        // in the record distinguishes them.
+        var claimed = new HashSet<nuint>();
+        foreach (var other in c.Items) if (!ReferenceEquals(other, it)) claimed.Add(other.Address);
+
         foreach (var li in ItemLocator.FollowChain(_mem, b, c.Record))
-            if (li.Item.Type == it.Item.Type && li.Item.DisplayName == it.Item.DisplayName)
-            {
-                it.Rebind(li.Address, li.Item);
-                return true;
-            }
+        {
+            if (li.Item.Type != it.Item.Type || li.Item.DisplayName != it.Item.DisplayName) continue;
+            if (claimed.Contains(li.Address)) continue;
+            it.Rebind(li.Address, li.Item);
+            return true;
+        }
         return false;
     }
 

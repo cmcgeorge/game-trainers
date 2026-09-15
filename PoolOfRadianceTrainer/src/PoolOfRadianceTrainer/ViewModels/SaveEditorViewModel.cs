@@ -287,13 +287,13 @@ public sealed class SaveEditorViewModel : ObservableObject
         if (_save == null) return false;
         if (!_warnedGameRunning && SaveFolderLocator.EmulatorRunning())
         {
-            _warnedGameRunning = true;   // ask once per session, not once per button
             if (!Confirm("Pool of Radiance looks like it is still running.\n\n" +
                          "Save-file edits are applied to the files on disk, so the running game will " +
                          "overwrite them the next time it saves — and it may already hold the party in " +
                          "memory. Quit the game first, or use the live tabs to edit it as it runs.\n\n" +
                          "Apply the edit anyway?"))
                 return false;
+            _warnedGameRunning = true;   // ask once per session, not once per button — only once accepted
         }
         EnsureBackup();
         return true;
@@ -361,7 +361,18 @@ public sealed class SaveEditorViewModel : ObservableObject
         if (_save == null || owner == null) return;
         try
         {
-            if (!ReadyToWrite()) { Status = "Edit cancelled."; return; }
+            // SaveItemViewModel.Identified already flipped Item.Identified in memory before
+            // calling here (so the checkbox tracks the intent immediately) — if the user backs
+            // out of the "game is running" prompt, that in-memory flip must be undone too, or a
+            // later unrelated persist (e.g. Identify All) would silently write this "cancelled"
+            // edit to disk anyway.
+            if (!ReadyToWrite())
+            {
+                item.Item.SetIdentified(!item.Identified);
+                item.Raise();
+                Status = "Edit cancelled.";
+                return;
+            }
             SaveGame.WriteItems(owner.Model);
             Status = $"{(item.Identified ? "Identified" : "Re-hid")} '{item.DisplayName}' on {owner.Name}. " +
                      $"Backup: {_lastBackup}. Reload the save in the game to see it.";

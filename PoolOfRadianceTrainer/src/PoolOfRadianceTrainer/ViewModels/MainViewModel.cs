@@ -666,8 +666,36 @@ public sealed class MainViewModel : ObservableObject, ICharacterHost, IDisposabl
     }
 
     // --- ICharacterHost ------------------------------------------------------
+    private byte[]? _writeCheckBuf;
+
+    /// <summary>
+    /// Writes to a remembered record address only after re-validating it still holds a
+    /// character-shaped record and — unless the write itself is changing an identity field —
+    /// still holds the *same* creature. Per AGENTS.md's read-validate-write invariant: a
+    /// remembered address can be freed and reused by the emulator between poll ticks, and a
+    /// UI-triggered edit (unlike the poll loop) has no other re-validation in front of it.
+    /// </summary>
     bool ICharacterHost.WriteBytes(nuint recordAddress, byte[] source, int offset, int length)
-        => _mem?.WriteRange(recordAddress, source, offset, length) ?? false;
+    {
+        if (_mem is not { IsOpen: true } mem) return false;
+
+        _writeCheckBuf ??= new byte[PorFormat.RecordSize];
+        int read = mem.Read(recordAddress, _writeCheckBuf, PorFormat.RecordSize);
+        if (read != PorFormat.RecordSize) return false;
+        if (!CharacterSignature.Looks(_writeCheckBuf, 0)) return false;
+
+        if (!PorFormat.TouchesIdentityField(offset, length))
+        {
+            var live = new CharacterRecord(_writeCheckBuf);
+            var expected = new CharacterRecord(source);
+            if (!live.IsSameCreatureAs(expected)) return false;
+        }
+
+        return mem.WriteRange(recordAddress, source, offset, length);
+    }
+
+    bool ICharacterHost.TryReadFreshBytes(nuint recordAddress, CharacterRecord expected, byte[] destination)
+        => _mem is { IsOpen: true } mem && CharacterLocator.Reread(mem, recordAddress, destination, expected);
 
     private void RaiseCommands()
     {

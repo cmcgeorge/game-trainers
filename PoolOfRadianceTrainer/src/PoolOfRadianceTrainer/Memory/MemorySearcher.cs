@@ -188,7 +188,13 @@ public sealed class MemorySearcher
                 int want = (int)Math.Min((nuint)ChunkSize, region.Size - off);
                 int readWant = (int)Math.Min((nuint)(ChunkSize + stride - 1), region.Size - off);
                 int read = _mem.Read(region.Base + off, buf, readWant);
-                if (read < stride) break;
+                if (read < stride)
+                {
+                    // This chunk is unreadable; skip past it rather than abandoning the rest of
+                    // the region, which may still hold readable, un-scanned pages.
+                    off += (nuint)want;
+                    continue;
+                }
 
                 // Emit only offsets that start inside this chunk; the tail belongs to the next one.
                 int last = Math.Min(read - stride, want - 1);

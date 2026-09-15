@@ -75,9 +75,15 @@ public static class PositionLocator
             ct.ThrowIfCancellationRequested();
             for (nuint offset = 0; offset < region.Size;)
             {
+                int want = (int)Math.Min((nuint)ChunkSize, region.Size - offset);
                 int readWant = (int)Math.Min((nuint)(ChunkSize + Overlap), region.Size - offset);
                 int read = mem.Read(region.Base + offset, buf, readWant);
-                if (read < 2) break;
+                if (read < 2)
+                {
+                    // Unreadable chunk — skip past it rather than abandoning the rest of the region.
+                    offset += (nuint)want;
+                    continue;
+                }
 
                 // Chunks overlap by Overlap-1 bytes so a pattern straddling the seam is still seen
                 // whole. Each address must be reported once, though — a duplicated hit would survive

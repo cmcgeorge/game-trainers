@@ -54,8 +54,15 @@ public sealed class CharacterViewModel : ObservableObject
             if (!SetProperty(ref _freezeSpells, value)) return;
             if (value)
             {
+                // Record.Bytes is only as fresh as the last poll tick (up to ~600ms old), so a
+                // snapshot taken right after memorizing spells in-game could still hold the
+                // pre-memorization slots. Re-read live memory first so the snapshot is exact;
+                // fall back to Record.Bytes (offline, or the address no longer validates) rather
+                // than refusing the toggle outright.
+                var fresh = new byte[PorFormat.RecordSize];
+                byte[] source = _host.TryReadFreshBytes(Address, Record, fresh) ? fresh : Record.Bytes;
                 _spellSnapshot = new byte[PorFormat.MemorizedSpellsLen];
-                Array.Copy(Record.Bytes, PorFormat.OffMemorizedSpells, _spellSnapshot, 0, PorFormat.MemorizedSpellsLen);
+                Array.Copy(source, PorFormat.OffMemorizedSpells, _spellSnapshot, 0, PorFormat.MemorizedSpellsLen);
             }
             else _spellSnapshot = null;
         }
@@ -265,7 +272,11 @@ public sealed class CharacterViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(rolled);
         rolled.StampOnto(Record);
-        foreach (var (offset, length) in RolledCharacter.WrittenRanges) Poke(offset, length);
+        // Identity ranges first: the live host's write guard re-validates against the record's
+        // *current* (already-rolled) identity bytes, so until the identity range itself has been
+        // written, live memory must already agree with it or every other range gets rejected.
+        foreach (var (offset, length) in RolledCharacter.WrittenRanges.OrderByDescending(r => PorFormat.TouchesIdentityField(r.Offset, r.Length)))
+            Poke(offset, length);
 
         // A spell freeze holds a snapshot of the memorized-spell block taken from the character who
         // used to be here; re-take it from the new record so the freeze can't restore their spells.
@@ -352,7 +363,9 @@ public sealed class CharacterViewModel : ObservableObject
 
         var plan = ClassChange.Plan(Record, _classChangeTarget);
         ClassChange.Apply(Record, plan);
-        foreach (var (offset, length) in ClassChange.WrittenRanges) Poke(offset, length);
+        // Identity ranges (the class byte) first — see the comment in ApplyGenerated.
+        foreach (var (offset, length) in ClassChange.WrittenRanges.OrderByDescending(r => PorFormat.TouchesIdentityField(r.Offset, r.Length)))
+            Poke(offset, length);
 
         // The freeze holds a snapshot of the old class's memorized spells; retake it from the record
         // the change just cleared, or the next tick would put them back.
