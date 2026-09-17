@@ -40,7 +40,13 @@ public sealed class NamedValueViewModel : ObservableObject
         {
             // Clamp to exactly what the record will store, so the row never shows a value the block does not hold.
             int v = Math.Clamp(value, _min, _max);
-            if (!SetField(ref _value, v) || _loading) return;
+            bool changed = SetField(ref _value, v);
+            if (_loading) return;
+            if (!changed)
+            {
+                if (value != v) OnPropertyChanged(nameof(Value));
+                return;
+            }
             if (!_write(v)) _onFailure(Name);
         }
     }

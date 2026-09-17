@@ -122,7 +122,7 @@ public sealed class CharacterRecord
     /// <summary>Out of action by wounds, or by fatigue reaching STR, AGI or END (M.EXE 1000:094C).</summary>
     public bool IsOutOfAction =>
         Health <= UnconsciousThreshold ||
-        Fatigue == GetAttribute(0) || Fatigue == GetAttribute(1) || Fatigue == GetAttribute(2);
+        Fatigue >= GetAttribute(0) || Fatigue >= GetAttribute(1) || Fatigue >= GetAttribute(2);
 
     // ---- attributes and skills ------------------------------------------------------------------
 

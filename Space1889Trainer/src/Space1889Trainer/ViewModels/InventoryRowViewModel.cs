@@ -72,7 +72,11 @@ public sealed class InventoryRowViewModel : ObservableObject
         set
         {
             int v = Math.Clamp(value, 0, ushort.MaxValue);
-            if (v == _entry.Rounds || _loading || !IsOccupied) return;
+            if (v == _entry.Rounds || _loading || !IsOccupied)
+            {
+                if (!_loading && value != v) OnPropertyChanged(nameof(Rounds));
+                return;
+            }
             Commit(_entry with { Rounds = v });
         }
     }
@@ -83,7 +87,11 @@ public sealed class InventoryRowViewModel : ObservableObject
         set
         {
             int v = Math.Clamp(value, 0, 255);
-            if (v == _entry.InGun || _loading || !IsOccupied) return;
+            if (v == _entry.InGun || _loading || !IsOccupied)
+            {
+                if (!_loading && value != v) OnPropertyChanged(nameof(InGun));
+                return;
+            }
             Commit(_entry with { InGun = v });
         }
     }

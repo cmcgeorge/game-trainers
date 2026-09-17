@@ -224,6 +224,7 @@ internal static partial class Program
         Check(wells.SetHealth(9) && !wells.IsOutOfAction, "healed");
         Check(wells.SetFatigue(5), "fatigue = STR");
         Check(wells.IsOutOfAction, "fatigue equal to STR is out of action");
+        Check(wells.SetFatigue(6) && wells.IsOutOfAction, "fatigue above an attribute is out of action");
         Check(wells.FullHeal(), "full heal");
         Check(wells.Health == 9 && wells.Fatigue == 0 && wells.Mental == 0, "full heal restores health, clears fatigue and mental");
         Check(!wells.SetName("   "), "an empty name is refused");

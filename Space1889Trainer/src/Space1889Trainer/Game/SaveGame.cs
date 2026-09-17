@@ -101,10 +101,10 @@ public sealed class SaveGame
     public bool Save(out string error)
     {
         error = "";
+        string temp = Path + ".tmp";
         try
         {
             if (File.Exists(Path) && !File.Exists(BackupPath)) File.Copy(Path, BackupPath);
-            string temp = Path + ".tmp";
             File.WriteAllBytes(temp, Target.Bytes);
             File.Move(temp, Path, overwrite: true);
             _diskStamp = DiskStamp(Path);
@@ -112,6 +112,8 @@ public sealed class SaveGame
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            try { if (File.Exists(temp)) File.Delete(temp); }
+            catch (Exception cleanupEx) when (cleanupEx is IOException or UnauthorizedAccessException) { }
             error = $"Could not write {Path}: {ex.Message}";
             return false;
         }
