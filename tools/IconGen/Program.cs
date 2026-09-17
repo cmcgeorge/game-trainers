@@ -42,6 +42,7 @@ internal static class Program
         new("Railroad Tycoon",      "RailroadTycoonTrainer",       DrawRailroadTycoon),
         new("Roadwar 2000",         "Roadwar2000Trainer",          DrawRoadwar),
         new("Shogun",               "ShogunTrainer",               DrawShogun),
+        new("Space 1889",           "Space1889Trainer",            DrawSpace1889),
         new("Sword of the Samurai", "SwordOfTheSamuraiTrainer",    DrawSwordOfSamurai),
         new("Syndicate Plus",       "SyndicatePlusTrainer",        DrawSyndicate),
         new("The Perfect General II","ThePerfectGeneral2Trainer",  DrawPerfectGeneral),
@@ -242,6 +243,40 @@ internal static class Program
             double x = 70 + i * 34;
             dc.DrawRectangle(stripe, null, new Rect(x, 116, 20, 10));
         }
+    }
+
+    /// <summary>Mars in a brass orbit with an ether flyer crossing it - Space 1889 is Victorian
+    /// travel between the planets, and the red planet is where most of the adventure happens.</summary>
+    private static void DrawSpace1889(DrawingContext dc)
+    {
+        DrawTile(dc);
+        var mars = Brush(0xC8, 0x5A, 0x32);
+        var marsDk = Brush(0x8E, 0x36, 0x1E);
+        var brass = Brush(0xD9, 0xA9, 0x3E);
+        var brassDk = Brush(0x8A, 0x66, 0x1E);
+        var hull = Brush(0xEC, 0xEA, 0xE2);
+        var emerald = Brush(0x3F, 0xA4, 0x6A);
+        var c = P(118, 140);
+
+        // The planet, with two darker bands for the canals' dry sea beds.
+        dc.DrawEllipse(mars, new Pen(marsDk, 5), c, 64, 64);
+        dc.PushClip(new EllipseGeometry(c, 62, 62));
+        dc.DrawGeometry(marsDk, null, Poly(P(50, 118), P(186, 102), P(186, 116), P(50, 134)));
+        dc.DrawGeometry(marsDk, null, Poly(P(50, 162), P(186, 150), P(186, 160), P(50, 172)));
+        dc.Pop();
+
+        // A tilted brass orbit ring.
+        dc.PushTransform(new RotateTransform(-18, c.X, c.Y));
+        dc.DrawEllipse(null, new Pen(brassDk, 12), c, 104, 30);
+        dc.DrawEllipse(null, new Pen(brass, 7), c, 104, 30);
+        dc.Pop();
+
+        // An ether flyer: a cigar hull, a gondola and a brass propeller, top right.
+        dc.DrawEllipse(hull, new Pen(brassDk, 3), P(186, 62), 42, 14);
+        dc.DrawRectangle(brass, new Pen(brassDk, 2), new Rect(172, 74, 28, 12));
+        dc.DrawLine(new Pen(brassDk, 4), P(144, 62), P(134, 62));
+        dc.DrawEllipse(brass, null, P(130, 62), 4, 14);
+        dc.DrawEllipse(emerald, null, P(214, 62), 5, 5);
     }
 
     /// <summary>Steering wheel — Autoduel is a car-combat RPG.</summary>

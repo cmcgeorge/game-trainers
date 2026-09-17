@@ -186,6 +186,17 @@
     inventory in place, with freeze toggles and quick max buttons.
     'WastelandRemastered' is enough to be unique; note that a bare 'Wasteland'
     also matches WastelandTrainer.
+
+.EXAMPLE
+    .\Run.ps1 -Trainer Space1889
+    Builds and launches the Space: 1889 trainer. Start 1889 in DOSBox and begin or
+    load a game, then Attach -- the trainer finds the game's 20,198-byte state block
+    (the one 1889.COM allocates and every program shares) by its PARTY ACCT. record
+    in well under a second, with no value searching, and confirms it through the
+    running program's own far pointer. A .SAV is a verbatim copy of the same block,
+    so the Save Editor tab edits saves with the game closed, and the Maps tab reads
+    your game folder to draw every map and teleport the party by clicking. Game time
+    runs in real time: use GAME > PAUSE in the game while you edit.
 #>
 [CmdletBinding()]
 param(

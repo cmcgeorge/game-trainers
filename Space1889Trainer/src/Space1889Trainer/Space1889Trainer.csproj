@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Space1889Trainer</AssemblyName>
+    <RootNamespace>Space1889Trainer</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <Platforms>AnyCPU;x64</Platforms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WMI: reads the emulator's command line to find its -conf file, whose mount lines lead to the game folder. -->
+    <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\GameTrainers.Common\GameTrainers.Common.csproj" />
+  </ItemGroup>
+
+  <!-- Like Roadwar 2000, the only game-specific memory code is the locator; the process-memory
+       plumbing (ProcessMemory, MemoryRegion) and the SetField-style MVVM base come from Common. -->
+  <ItemGroup>
+    <Using Include="GameTrainers.Common.Documents" />
+    <Using Include="GameTrainers.Common.Memory" />
+    <Using Include="GameTrainers.Common.Mvvm" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+</Project>
